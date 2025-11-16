@@ -1,0 +1,36 @@
+# Hardware Test Configuration Template
+# Copy this file to hardware_config.yaml and fill in your actual values
+# hardware_config.yaml is git-ignored and won't be checked in
+
+# RTCM Server Configuration
+server:
+  host: "rtcm.example.com"     # Your RTCM server hostname or IP
+  port: 50010
+  username: "your_username"    # Your actual RTCM username
+  password: "your_password"    # Your actual RTCM password
+  connection_timeout: 10
+  read_timeout: 30
+  heartbeat_timeout: 30
+  retry_initial_delay: 15
+  retry_max_delay: 60
+  retry_multiplier: 2.0
+
+# TCP Hardware Input Source
+input:
+  source: "tcp"
+  config:
+    host: "192.168.1.100"      # Your TCP hardware IP address
+    port: 3000                 # Your TCP hardware port
+    timeout: 5.0
+    buffer_size: 4096
+
+# Logging
+logging:
+  level: "INFO"
+  format: "json"
+
+# Metrics (optional)
+metrics:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080

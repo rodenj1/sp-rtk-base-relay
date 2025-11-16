@@ -205,3 +205,8 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local test configurations with credentials
+tests/integration/hardware_config.yaml
+tests/manual/production_config.yaml
+config.yaml

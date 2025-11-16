@@ -1,0 +1,144 @@
+[project]
+name = "sp-base-relay"
+version = "0.1.0"
+description = "RTCM relay service for custom GPS correction servers"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "SP-Base-Relay Contributors"}
+]
+license = {text = "MIT"}
+keywords = ["rtcm", "gps", "gnss", "rtk", "base-station", "corrections"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: System :: Networking",
+]
+
+dependencies = [
+    "pyserial>=3.5",
+    "pyyaml>=6.0",
+    "prometheus-client>=0.17.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.21.0",
+    "mypy>=1.5.0",
+    "types-PyYAML",
+    "black>=23.0.0",
+    "pylint>=2.17.0",
+    "pre-commit>=3.0.0",
+]
+
+[project.scripts]
+sp-base-relay = "sp_base_relay.main:main"
+
+[project.urls]
+Homepage = "https://github.com/rodenj1/sp-base-relay"
+Documentation = "https://github.com/rodenj1/sp-base-relay#readme"
+Repository = "https://github.com/rodenj1/sp-base-relay"
+Issues = "https://github.com/rodenj1/sp-base-relay/issues"
+
+[build-system]
+requires = ["uv_build>=0.9.5,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "--cov=src/sp_base_relay",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--cov-fail-under=70",
+    "--strict-markers",
+    "--strict-config",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+norecursedirs = ["integration", "manual"]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "conftest.py"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "serial.*",
+    "prometheus_client.*",
+]
+ignore_missing_imports = true
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.pyright]
+include = ["src"]
+exclude = ["**/node_modules", "**/__pycache__"]
+typeCheckingMode = "strict"
+deprecateTypingAliases = true
+reportUnusedParameter = "warning"
+reportDeprecated = "warning"
+extraPaths = ["src/"]
+
+[dependency-groups]
+dev = [
+    "pylance>=0.38.3",
+    "pyright>=1.1.407",
+]

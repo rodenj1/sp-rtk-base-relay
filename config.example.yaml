@@ -1,0 +1,72 @@
+# SP-Base-Relay Example Configuration
+# This file demonstrates the new configuration format with single source/destination enforcement
+
+# RTCM Server Configuration (Required - Single Destination)
+server:
+  host: "server.somewhere.com"
+  port: 50010
+  username: "USER01"
+  password: "abc1"
+  connection_timeout: 10
+  read_timeout: 30
+  heartbeat_timeout: 30
+  retry_initial_delay: 1
+  retry_max_delay: 60
+  retry_multiplier: 2.0
+
+# Input Source Configuration (Required - Single Source)
+# Only ONE source type can be active at a time
+# Choose either TCP or Serial configuration below
+
+# Option 1: TCP Input (for RTKBase integration)
+input:
+  source: "tcp"
+  config:
+    host: "192.168.X.X"
+    port: 3000
+    timeout: 5.0
+    buffer_size: 4096
+
+# Option 2: Serial Input (for direct GNSS receiver connection)
+# Uncomment the section below and comment out the TCP section above to use serial
+#input:
+#  source: "serial"
+#  config:
+#    port: "/dev/ttyUSB0"
+#    baudrate: 115200
+#    bytesize: 8
+#    parity: "N"
+#    stopbits: 1
+#    timeout: 1.0
+#    rtscts: false
+#    xonxoff: false
+
+# Connection Monitoring Configuration
+monitoring:
+  heartbeat_timeout: 30
+  reconnect_delay_base: 1
+  reconnect_max_delay: 60
+  max_reconnect_attempts: 0  # 0 = unlimited
+  connection_check_interval: 5
+
+# Prometheus Metrics Configuration
+metrics:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+  path: "/metrics"
+
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "json"  # json or text
+  file: "/var/log/sp-base-relay.log"
+  max_size_mb: 50
+  backup_count: 3
+
+# Service Configuration
+service:
+  daemon: false
+  pid_file: "/var/run/sp-base-relay.pid"
+  user: "sp-base-relay"
+  group: "sp-base-relay"

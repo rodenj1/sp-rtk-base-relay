@@ -32,31 +32,31 @@ class TestSerialConfig:
         """Test SerialConfig with default values."""
         config = SerialConfig()
         assert config.port == "/dev/ttyUSB0"
-        assert config.baud_rate == 115200
-        assert config.data_bits == 8
-        assert config.stop_bits == 1
+        assert config.baudrate == 115200
+        assert config.bytesize == 8
+        assert config.stopbits == 1
         assert config.parity == "none"
         assert config.timeout == 5.0
-        assert config.read_timeout == 1.0
+        assert config.timeout == 1.0
 
     def test_custom_config(self):
         """Test SerialConfig with custom values."""
         config = SerialConfig(
             port="/dev/ttyS0",
-            baud_rate=9600,
-            data_bits=7,
-            stop_bits=2,
+            baudrate=9600,
+            bytesize=7,
+            stopbits=2,
             parity="even",
             timeout=10.0,
-            read_timeout=2.0,
+            timeout=2.0,
         )
         assert config.port == "/dev/ttyS0"
-        assert config.baud_rate == 9600
-        assert config.data_bits == 7
-        assert config.stop_bits == 2
+        assert config.baudrate == 9600
+        assert config.bytesize == 7
+        assert config.stopbits == 2
         assert config.parity == "even"
         assert config.timeout == 10.0
-        assert config.read_timeout == 2.0
+        assert config.timeout == 2.0
 
 
 class TestSerialInputInitialization:
@@ -94,37 +94,37 @@ class TestSerialInputInitialization:
 
     @patch("sp_base_relay.core.input_sources.serial_input._pyserial_available", True)
     @patch("sp_base_relay.core.input_sources.serial_input.serial")
-    def test_invalid_baud_rate_zero(self, mock_serial: Mock) -> None:
+    def test_invalid_baudrate_zero(self, mock_serial: Mock) -> None:
         """Test that zero baud rate raises InputSourceError."""
         mock_serial.PARITY_NONE = PARITY_NONE
-        config = SerialConfig(baud_rate=0)
+        config = SerialConfig(baudrate=0)
         with pytest.raises(InputSourceError, match="Invalid baud rate"):
             SerialInputSource(config)
 
     @patch("sp_base_relay.core.input_sources.serial_input._pyserial_available", True)
     @patch("sp_base_relay.core.input_sources.serial_input.serial")
-    def test_invalid_baud_rate_negative(self, mock_serial: Mock):
+    def test_invalid_baudrate_negative(self, mock_serial: Mock):
         """Test that negative baud rate raises InputSourceError."""
         mock_serial.PARITY_NONE = PARITY_NONE
-        config = SerialConfig(baud_rate=-1)
+        config = SerialConfig(baudrate=-1)
         with pytest.raises(InputSourceError, match="Invalid baud rate"):
             SerialInputSource(config)
 
     @patch("sp_base_relay.core.input_sources.serial_input._pyserial_available", True)
     @patch("sp_base_relay.core.input_sources.serial_input.serial")
-    def test_invalid_data_bits(self, mock_serial: Mock):
+    def test_invalid_bytesize(self, mock_serial: Mock):
         """Test that invalid data bits raises InputSourceError."""
         mock_serial.PARITY_NONE = PARITY_NONE
-        config = SerialConfig(data_bits=9)
+        config = SerialConfig(bytesize=9)
         with pytest.raises(InputSourceError, match="Invalid data bits"):
             SerialInputSource(config)
 
     @patch("sp_base_relay.core.input_sources.serial_input._pyserial_available", True)
     @patch("sp_base_relay.core.input_sources.serial_input.serial")
-    def test_invalid_stop_bits(self, mock_serial: Mock):
+    def test_invalid_stopbits(self, mock_serial: Mock):
         """Test that invalid stop bits raises InputSourceError."""
         mock_serial.PARITY_NONE = PARITY_NONE
-        config = SerialConfig(stop_bits=3)
+        config = SerialConfig(stopbits=3)
         with pytest.raises(InputSourceError, match="Invalid stop bits"):
             SerialInputSource(config)
 
@@ -148,10 +148,10 @@ class TestSerialInputInitialization:
 
     @patch("sp_base_relay.core.input_sources.serial_input._pyserial_available", True)
     @patch("sp_base_relay.core.input_sources.serial_input.serial")
-    def test_invalid_read_timeout(self, mock_serial: Mock):
+    def test_invalid_timeout(self, mock_serial: Mock):
         """Test that invalid read timeout raises InputSourceError."""
         mock_serial.PARITY_NONE = PARITY_NONE
-        config = SerialConfig(read_timeout=-1.0)
+        config = SerialConfig(timeout=-1.0)
         with pytest.raises(InputSourceError, match="Invalid read timeout"):
             SerialInputSource(config)
 
@@ -354,7 +354,7 @@ class TestSerialDataReading:
         mock_port = MockSerialPort()
         mock_serial.Serial = Mock(return_value=mock_port)
 
-        config = SerialConfig(read_timeout=1.0)
+        config = SerialConfig(timeout=1.0)
         serial_input = SerialInputSource(config)
         serial_input.connect()
 
@@ -375,7 +375,7 @@ class TestSerialDataReading:
         mock_serial.PARITY_NONE = PARITY_NONE
         mock_serial.Serial = MockSerialPort
 
-        config = SerialConfig(read_timeout=0.1)
+        config = SerialConfig(timeout=0.1)
         serial_input = SerialInputSource(config)
         serial_input.connect()
 
@@ -397,7 +397,7 @@ class TestSerialDataReading:
     #     mock_port.timeout = 5.0
     #     mock_serial.Serial = Mock(return_value=mock_port)
 
-    #     config = SerialConfig(read_timeout=5.0)
+    #     config = SerialConfig(timeout=5.0)
     #     serial_input = SerialInputSource(config)
     #     serial_input.connect()
 
@@ -675,14 +675,14 @@ class TestSerialHealthMonitoring:
         mock_serial.PARITY_NONE = PARITY_NONE
         mock_serial.Serial = MockSerialPort
 
-        config = SerialConfig(port="/dev/ttyUSB0", baud_rate=115200)
+        config = SerialConfig(port="/dev/ttyUSB0", baudrate=115200)
         serial_input = SerialInputSource(config)
         serial_input.connect()
 
         info = serial_input.get_connection_info()
         assert info["port"] == "/dev/ttyUSB0"
-        assert info["baud_rate"] == 115200
-        assert info["data_bits"] == 8
+        assert info["baudrate"] == 115200
+        assert info["bytesize"] == 8
         assert "is_open" in info
         assert info["is_open"] is True
 
@@ -694,12 +694,12 @@ class TestSerialHealthMonitoring:
         """Test getting connection info when disconnected."""
         mock_serial.PARITY_NONE = PARITY_NONE
 
-        config = SerialConfig(port="/dev/ttyS0", baud_rate=9600)
+        config = SerialConfig(port="/dev/ttyS0", baudrate=9600)
         serial_input = SerialInputSource(config)
 
         info = serial_input.get_connection_info()
         assert info["port"] == "/dev/ttyS0"
-        assert info["baud_rate"] == 9600
+        assert info["baudrate"] == 9600
         assert "is_open" not in info
 
     @patch("sp_base_relay.core.input_sources.serial_input._pyserial_available", True)
@@ -722,7 +722,7 @@ class TestSerialHealthMonitoring:
 
         # Verify config section
         assert stats["config"]["port"] == "/dev/ttyUSB0"
-        assert stats["config"]["baud_rate"] == 115200
+        assert stats["config"]["baudrate"] == 115200
 
         # Verify connection section
         assert stats["connection"]["connected"] is True

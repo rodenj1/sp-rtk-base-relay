@@ -22,7 +22,7 @@ class TestInputSourceFactory:
 
     def test_create_serial_input_source(self):
         """Test creating serial input source."""
-        config = {"port": "/dev/ttyUSB0", "baud_rate": 115200, "timeout": 5.0}
+        config = {"port": "/dev/ttyUSB0", "baudrate": 115200, "timeout": 5.0}
 
         source = InputSourceFactory.create_input_source("serial", config)
 
@@ -44,7 +44,7 @@ class TestInputSourceFactory:
 
     def test_validate_valid_serial_config(self):
         """Test validating valid serial configuration."""
-        config = {"port": "/dev/ttyUSB0", "baud_rate": 115200}
+        config = {"port": "/dev/ttyUSB0", "baudrate": 115200}
 
         result = InputSourceFactory.validate_config("serial", config)
 
@@ -143,7 +143,7 @@ class TestInputSourceFactoryIntegration:
 
     def test_create_and_validate_serial_source(self):
         """Test creating serial source with validated config."""
-        config = {"port": "/dev/ttyUSB0", "baud_rate": 115200, "timeout": 10.0}
+        config = {"port": "/dev/ttyUSB0", "baudrate": 115200, "timeout": 10.0}
 
         # First validate
         is_valid = InputSourceFactory.validate_config("serial", config)

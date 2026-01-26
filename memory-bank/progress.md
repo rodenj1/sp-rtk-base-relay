@@ -171,7 +171,59 @@
 - Systemd service file ready for deployment
 - Installation scripts ready for deployment
 
-### 🔨 Phase 8: Packaging and Distribution (NOT STARTED)
+### ✅ Phase 8: Bluetooth GPS Integration (COMPLETED - January 26, 2026)
+**Status**: Complete Bluetooth GPS support for Raspberry Pi deployment
+
+**Completed Implementation**:
+- ✅ **Bluetooth Connection Scripts**: 4 helper scripts created
+  - `connect-gps.sh` - Manual GPS connection with rfcomm
+  - `test-connection.sh` - 7-step comprehensive diagnostic test
+  - `status.sh` - Quick service status monitoring
+  - `monitor-data.sh` - Real-time RTCM data flow monitoring
+- ✅ **Systemd Service**: `bluetooth-gps.service` for automatic serial port creation
+  - Auto-creates `/dev/rfcomm0` on boot
+  - Fixed `StartLimitIntervalSec` placement error (moved to [Unit] section)
+  - Handles GPS reconnection automatically
+- ✅ **Configuration**: `config.bluetooth-gps.yaml` for RTK_GPS_BASE GPS
+  - Device-specific: RTK_GPS_BASE (MAC: 00:11:22:33:44:55)
+  - Proper PySerial field names throughout
+- ✅ **SerialConfig Standardization**: Fixed field name mismatch
+  - Changed from custom names (`baud_rate`, `data_bits`) to PySerial standard (`baudrate`, `bytesize`)
+  - Updated serial_input.py (71 lines changed)
+  - Aligned config validation with actual implementation
+- ✅ **Comprehensive Documentation**: `docs/bluetooth-gps-setup.md` (500+ lines)
+  - Complete setup guide with step-by-step instructions
+  - Troubleshooting section with common issues
+  - Service management commands
+  - Security considerations
+- ✅ **Service Integration**: Updated sp-base-relay.service dependencies
+  - Added bluetooth-gps.service dependency
+  - Documented systemd security settings for development vs production
+
+**Key Achievements**:
+- rfcomm-based Bluetooth Serial Port Profile (SPP) integration
+- Automatic reconnection on connection loss
+- Complete testing and monitoring toolset
+- Production-ready for Raspberry Pi deployment
+- Zero breaking changes to core functionality
+
+**Files Created**:
+- `tools/bluetooth/connect-gps.sh` - Manual connection script
+- `tools/bluetooth/test-connection.sh` - Diagnostic test script
+- `tools/bluetooth/status.sh` - Status monitoring script
+- `tools/bluetooth/monitor-data.sh` - Data flow monitoring script
+- `tools/systemd/bluetooth-gps.service` - Systemd service for Bluetooth GPS
+- `config.bluetooth-gps.yaml` - Bluetooth GPS configuration template
+- `docs/bluetooth-gps-setup.md` - Complete setup documentation
+
+**Systemd Service Troubleshooting**:
+- Identified and resolved namespace error (226) in sp-base-relay.service
+- Root cause: `ProtectSystem=strict` blocking access to `/opt/sp-base-relay`
+- Solution: Relax security settings for development setup in `/opt`
+- Required changes: `ProtectSystem=false`, `ProtectHome=false`, `PrivateTmp=false`
+- Added `SupplementaryGroups=dialout` for serial port access
+
+### 🔨 Phase 9: PyPI Packaging and Distribution (NOT STARTED)
 - **PyPI Package**: Not implemented
 - **Docker Container**: Not implemented
 - **Installation Documentation**: Not implemented

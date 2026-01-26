@@ -87,6 +87,11 @@ class DataPipelineCoordinator:
         # Thread synchronization
         self._stats_lock = threading.Lock()
 
+        # RTCM frame buffer for accurate metrics decoding
+        # Accumulates partial chunks to extract complete RTCM frames
+        self._frame_buffer = b""
+        self._frame_buffer_lock = threading.Lock()
+
         logger.info(
             f"Initialized data pipeline coordinator: "
             f"{input_source.source_type} -> RTCM Client"
@@ -147,6 +152,10 @@ class DataPipelineCoordinator:
             self.running = True
             self._stop_event.clear()
             self._restart_requested.clear()
+
+            # Clear frame buffer on new start
+            with self._frame_buffer_lock:
+                self._frame_buffer = b""
 
             with self._stats_lock:
                 self.stats.successful_starts += 1
@@ -278,17 +287,32 @@ class DataPipelineCoordinator:
                             relay_latency = send_time - receive_time
                             self.metrics_collector.record_relay_latency(relay_latency)
 
-                        # Decode ALL message IDs for per-ID counters
+                        # Decode message IDs using frame buffer for accurate metrics
                         if self.metrics_collector:
-                            msg_ids = RTCMMessageDecoder.extract_all_message_ids(data)
-                            if msg_ids:
-                                # Count each message ID found
-                                for msg_id in msg_ids:
-                                    self.metrics_collector.increment_message_id_counter(msg_id)
-                                logger.debug(f"Decoded {len(msg_ids)} RTCM message IDs from chunk")
-                            else:
-                                self.metrics_collector.increment_decode_failures()
-                                logger.debug("Failed to decode any RTCM message IDs")
+                            # Add chunk to frame buffer
+                            with self._frame_buffer_lock:
+                                self._frame_buffer += data
+
+                            # Extract complete RTCM frames from buffer
+                            complete_frames = self._extract_complete_rtcm_frames()
+
+                            # Decode each complete frame
+                            for frame in complete_frames:
+                                msg_ids = RTCMMessageDecoder.extract_all_message_ids(frame)
+                                if msg_ids:
+                                    # Count each message ID found
+                                    for msg_id in msg_ids:
+                                        self.metrics_collector.increment_message_id_counter(msg_id)
+                                    logger.debug(
+                                        f"Decoded {len(msg_ids)} RTCM message IDs from "
+                                        f"{len(frame)}-byte frame"
+                                    )
+                                else:
+                                    # Complete frame but decode failed (unusual)
+                                    self.metrics_collector.increment_decode_failures()
+                                    logger.warning(
+                                        f"Failed to decode {len(frame)}-byte complete frame"
+                                    )
 
                         # Update pipeline statistics
                         with self._stats_lock:
@@ -313,6 +337,77 @@ class DataPipelineCoordinator:
             self._handle_coordination_error(f"Critical coordinator error: {e}")
         finally:
             logger.debug("Coordinator loop stopped")
+
+    def _extract_complete_rtcm_frames(self) -> list[bytes]:
+        """Extract complete RTCM frames from the frame buffer.
+
+        This method processes the accumulated frame buffer to find and extract
+        complete RTCM v3 frames. It handles:
+        - Multiple frames in buffer
+        - Partial frames at the end (kept for next chunk)
+        - Invalid data between frames (skipped)
+
+        Returns:
+            List of complete RTCM frames (may be empty)
+
+        Note:
+            This method is called AFTER data has been sent to the RTCM server,
+            so it has zero impact on relay latency. It's purely for metrics.
+        """
+        complete_frames: list[bytes] = []
+
+        with self._frame_buffer_lock:
+            offset = 0
+            buffer_len = len(self._frame_buffer)
+
+            while offset < buffer_len:
+                # Look for RTCM preamble (0xD3)
+                if self._frame_buffer[offset] != 0xD3:
+                    offset += 1
+                    continue
+
+                # Need at least 3 bytes to read length
+                if offset + 3 > buffer_len:
+                    # Not enough data for header, keep for next chunk
+                    break
+
+                # Extract message length (10 bits from bytes 1-2)
+                length = (
+                    (self._frame_buffer[offset + 1] & 0x03) << 8
+                ) | self._frame_buffer[offset + 2]
+
+                # Calculate expected frame length: 3 (header) + length + 3 (CRC)
+                expected_frame_length = 3 + length + 3
+
+                # Validate length (RTCM v3 max is 1023 bytes)
+                if length > 1023:
+                    # Invalid length, skip this byte and continue searching
+                    offset += 1
+                    continue
+
+                # Check if we have the complete frame
+                if offset + expected_frame_length > buffer_len:
+                    # Incomplete frame, keep for next chunk
+                    break
+
+                # Extract complete frame
+                frame = self._frame_buffer[offset : offset + expected_frame_length]
+                complete_frames.append(frame)
+
+                # Move offset past this frame
+                offset += expected_frame_length
+
+            # Keep remaining incomplete data for next chunk
+            self._frame_buffer = self._frame_buffer[offset:]
+
+            # Log buffer statistics if frames were extracted
+            if complete_frames:
+                logger.debug(
+                    f"Extracted {len(complete_frames)} complete RTCM frames, "
+                    f"{len(self._frame_buffer)} bytes remaining in buffer"
+                )
+
+        return complete_frames
 
     def _check_connections_health(self) -> bool:
         """Check health of both connections.
@@ -409,6 +504,14 @@ class DataPipelineCoordinator:
                 self.data_queue.get_nowait()
         except queue.Empty:
             pass
+
+        # Clear frame buffer
+        with self._frame_buffer_lock:
+            if len(self._frame_buffer) > 0:
+                logger.debug(
+                    f"Discarding {len(self._frame_buffer)} bytes from frame buffer"
+                )
+            self._frame_buffer = b""
 
         # Update statistics
         with self._stats_lock:

@@ -29,12 +29,13 @@ class SerialConfig:
     """Serial port configuration parameters."""
 
     port: str = "/dev/ttyUSB0"
-    baud_rate: int = 115200
-    data_bits: int = 8
-    stop_bits: int = 1
-    parity: str = "none"
-    timeout: float = 5.0
-    read_timeout: float = 1.0
+    baudrate: int = 115200  # Changed from baud_rate to match PySerial standard
+    bytesize: int = 8  # Changed from data_bits to match PySerial standard
+    stopbits: float = 1  # Changed from stop_bits to match PySerial standard
+    parity: str = "N"  # Changed from "none" to match PySerial standard
+    timeout: float = 1.0  # This is read timeout
+    rtscts: bool = False  # Hardware flow control
+    xonxoff: bool = False  # Software flow control
 
 
 class SerialInputSource(InputSource):
@@ -67,7 +68,7 @@ class SerialInputSource(InputSource):
         self._validate_config()
 
         logger.info(
-            f"Initialized serial input source: {config.port} @ {config.baud_rate} baud"
+            f"Initialized serial input source: {config.port} @ {config.baudrate} baud"
         )
 
     def connect(self) -> bool:
@@ -89,25 +90,16 @@ class SerialInputSource(InputSource):
         try:
             logger.info(f"Connecting to serial port {self.config.port}")
 
-            # Map parity string to PySerial constants
-            parity_map = {
-                "none": serial.PARITY_NONE,
-                "even": serial.PARITY_EVEN,
-                "odd": serial.PARITY_ODD,
-                "mark": serial.PARITY_MARK,
-                "space": serial.PARITY_SPACE,
-            }
-
-            parity = parity_map.get(self.config.parity.lower(), serial.PARITY_NONE)
-
-            # Create and configure serial port
+            # Create and configure serial port using PySerial standard parameters
             self.serial_port = serial.Serial(
                 port=self.config.port,
-                baudrate=self.config.baud_rate,
-                bytesize=self.config.data_bits,
-                parity=parity,
-                stopbits=self.config.stop_bits,
-                timeout=self.config.read_timeout,
+                baudrate=self.config.baudrate,
+                bytesize=self.config.bytesize,
+                parity=self.config.parity,
+                stopbits=self.config.stopbits,
+                timeout=self.config.timeout,
+                rtscts=self.config.rtscts,
+                xonxoff=self.config.xonxoff,
                 exclusive=True,  # Prevent other processes from accessing the port
             )
 
@@ -154,7 +146,7 @@ class SerialInputSource(InputSource):
 
         try:
             # Use provided timeout or fall back to config timeout
-            read_timeout = timeout if timeout is not None else self.config.read_timeout
+            read_timeout = timeout if timeout is not None else self.config.timeout
 
             # Temporarily adjust serial port timeout if different
             original_timeout = self.serial_port.timeout
@@ -222,9 +214,9 @@ class SerialInputSource(InputSource):
         """
         info = {
             "port": self.config.port,
-            "baud_rate": self.config.baud_rate,
-            "data_bits": self.config.data_bits,
-            "stop_bits": self.config.stop_bits,
+            "baudrate": self.config.baudrate,
+            "bytesize": self.config.bytesize,
+            "stopbits": self.config.stopbits,
             "parity": self.config.parity,
         }
 
@@ -277,26 +269,23 @@ class SerialInputSource(InputSource):
         if not self.config.port:
             raise InputSourceError("Serial port must be specified")
 
-        if self.config.baud_rate <= 0:
-            raise InputSourceError(f"Invalid baud rate: {self.config.baud_rate}")
+        if self.config.baudrate <= 0:
+            raise InputSourceError(f"Invalid baud rate: {self.config.baudrate}")
 
-        if self.config.data_bits not in [5, 6, 7, 8]:
-            raise InputSourceError(f"Invalid data bits: {self.config.data_bits}")
+        if self.config.bytesize not in [5, 6, 7, 8]:
+            raise InputSourceError(f"Invalid data bits: {self.config.bytesize}")
 
-        if self.config.stop_bits not in [1, 1.5, 2]:
-            raise InputSourceError(f"Invalid stop bits: {self.config.stop_bits}")
+        if self.config.stopbits not in [1, 1.5, 2]:
+            raise InputSourceError(f"Invalid stop bits: {self.config.stopbits}")
 
-        valid_parity = ["none", "even", "odd", "mark", "space"]
-        if self.config.parity.lower() not in valid_parity:
+        valid_parity = ["N", "E", "O", "M", "S"]
+        if self.config.parity not in valid_parity:
             raise InputSourceError(
                 f"Invalid parity '{self.config.parity}', must be one of: {valid_parity}"
             )
 
         if self.config.timeout <= 0:
             raise InputSourceError(f"Invalid timeout: {self.config.timeout}")
-
-        if self.config.read_timeout <= 0:
-            raise InputSourceError(f"Invalid read timeout: {self.config.read_timeout}")
 
     def _test_port_health(self) -> bool:
         """Test basic serial port health.
@@ -330,9 +319,9 @@ class SerialInputSource(InputSource):
         stats = {
             "config": {
                 "port": self.config.port,
-                "baud_rate": self.config.baud_rate,
-                "data_bits": self.config.data_bits,
-                "stop_bits": self.config.stop_bits,
+                "baudrate": self.config.baudrate,
+                "bytesize": self.config.bytesize,
+                "stopbits": self.config.stopbits,
                 "parity": self.config.parity,
             },
             "connection": {

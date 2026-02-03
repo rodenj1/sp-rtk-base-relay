@@ -35,8 +35,7 @@ class TestSerialConfig:
         assert config.baudrate == 115200
         assert config.bytesize == 8
         assert config.stopbits == 1
-        assert config.parity == "none"
-        assert config.timeout == 5.0
+        assert config.parity == "N"
         assert config.timeout == 1.0
 
     def test_custom_config(self):
@@ -46,16 +45,14 @@ class TestSerialConfig:
             baudrate=9600,
             bytesize=7,
             stopbits=2,
-            parity="even",
-            timeout=10.0,
+            parity="E",
             timeout=2.0,
         )
         assert config.port == "/dev/ttyS0"
         assert config.baudrate == 9600
         assert config.bytesize == 7
         assert config.stopbits == 2
-        assert config.parity == "even"
-        assert config.timeout == 10.0
+        assert config.parity == "E"
         assert config.timeout == 2.0
 
 
@@ -133,7 +130,7 @@ class TestSerialInputInitialization:
     def test_invalid_parity(self, mock_serial: Mock):
         """Test that invalid parity raises InputSourceError."""
         mock_serial.PARITY_NONE = PARITY_NONE
-        config = SerialConfig(parity="invalid")
+        config = SerialConfig(parity="X")
         with pytest.raises(InputSourceError, match="Invalid parity"):
             SerialInputSource(config)
 
@@ -149,10 +146,10 @@ class TestSerialInputInitialization:
     @patch("sp_base_relay.core.input_sources.serial_input._pyserial_available", True)
     @patch("sp_base_relay.core.input_sources.serial_input.serial")
     def test_invalid_timeout(self, mock_serial: Mock):
-        """Test that invalid read timeout raises InputSourceError."""
+        """Test that invalid timeout raises InputSourceError."""
         mock_serial.PARITY_NONE = PARITY_NONE
         config = SerialConfig(timeout=-1.0)
-        with pytest.raises(InputSourceError, match="Invalid read timeout"):
+        with pytest.raises(InputSourceError, match="Invalid timeout"):
             SerialInputSource(config)
 
 
@@ -328,11 +325,7 @@ class TestSerialConnection:
         mock_serial.PARITY_ODD = PARITY_ODD
         mock_serial.Serial = MockSerialPort
 
-        for parity_str, _ in [
-            ("none", PARITY_NONE),
-            ("even", PARITY_EVEN),
-            ("odd", PARITY_ODD),
-        ]:
+        for parity_str in ["N", "E", "O"]:
             config = SerialConfig(parity=parity_str)
             serial_input = SerialInputSource(config)
             assert serial_input.connect()

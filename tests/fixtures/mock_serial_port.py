@@ -19,6 +19,8 @@ class MockSerialPort:
         parity: str = "N",
         stopbits: int = 1,
         timeout: float | None = None,
+        rtscts: bool = False,
+        xonxoff: bool = False,
         exclusive: bool = False,
     ):
         """Initialize mock serial port.
@@ -30,6 +32,8 @@ class MockSerialPort:
             parity: Parity setting (N/E/O/M/S)
             stopbits: Number of stop bits
             timeout: Read timeout in seconds
+            rtscts: Enable hardware flow control
+            xonxoff: Enable software flow control
             exclusive: Whether to open port exclusively
         """
         self.port = port
@@ -38,6 +42,8 @@ class MockSerialPort:
         self.parity = parity
         self.stopbits = stopbits
         self.timeout = timeout
+        self.rtscts = rtscts
+        self.xonxoff = xonxoff
         self.exclusive = exclusive
 
         self._is_open = False

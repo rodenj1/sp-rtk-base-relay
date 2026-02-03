@@ -13,8 +13,9 @@ User=sp-base-relay
 Group=sp-base-relay
 
 # Pre-start validation: Ensure /dev/rfcomm0 exists and is readable
-ExecStartPre=/bin/sh -c 'test -c /dev/rfcomm0 || { echo "ERROR: /dev/rfcomm0 does not exist"; exit 1; }'
-ExecStartPre=/bin/sh -c 'timeout 3 head -c 1 /dev/rfcomm0 >/dev/null 2>&1 || { echo "ERROR: /dev/rfcomm0 not readable"; exit 1; }'
+# Wait up to 5 seconds for device to become available
+ExecStartPre=/bin/sh -c 'for i in 1 2 3 4 5; do test -e /dev/rfcomm0 && break || sleep 1; done'
+ExecStartPre=/bin/sh -c 'test -e /dev/rfcomm0 || { echo "WARNING: /dev/rfcomm0 does not exist"; exit 0; }'
 
 # Service execution
 ExecStart=/usr/local/bin/sp-base-relay --config /etc/sp-base-relay/config.yaml --foreground

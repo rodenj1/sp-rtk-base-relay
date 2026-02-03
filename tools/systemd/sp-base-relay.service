@@ -12,11 +12,6 @@ Type=simple
 User=sp-base-relay
 Group=sp-base-relay
 
-# Pre-start validation: Ensure /dev/rfcomm0 exists and is readable
-# Wait up to 5 seconds for device to become available
-ExecStartPre=/bin/sh -c 'for i in 1 2 3 4 5; do test -e /dev/rfcomm0 && break || sleep 1; done'
-ExecStartPre=/bin/sh -c 'test -e /dev/rfcomm0 || { echo "WARNING: /dev/rfcomm0 does not exist"; exit 0; }'
-
 # Service execution
 ExecStart=/usr/local/bin/sp-base-relay --config /etc/sp-base-relay/config.yaml --foreground
 ExecReload=/bin/kill -HUP $MAINPID
@@ -45,9 +40,6 @@ Restart=on-failure
 RestartSec=15
 StartLimitInterval=600
 StartLimitBurst=10
-
-# On service stop/failure, trigger bluetooth-gps restart for recovery
-ExecStopPost=/bin/sh -c 'systemctl is-active bluetooth-gps.service >/dev/null && systemctl restart bluetooth-gps.service || true'
 
 # Logging
 StandardOutput=journal

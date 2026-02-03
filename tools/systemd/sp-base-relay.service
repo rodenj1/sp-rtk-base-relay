@@ -13,27 +13,12 @@ User=sp-base-relay
 Group=sp-base-relay
 
 # Service execution
+# Note: Update ExecStart path to match your installation
 ExecStart=/usr/local/bin/sp-base-relay --config /etc/sp-base-relay/config.yaml --foreground
 ExecReload=/bin/kill -HUP $MAINPID
 
 # Working directory
 WorkingDirectory=/var/lib/sp-base-relay
-
-# Security and resource limits
-# Run as dedicated user/group
-NoNewPrivileges=true
-
-# File system access
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/lib/sp-base-relay /var/log/sp-base-relay
-
-# Network access (required for TCP connections)
-PrivateNetwork=false
-
-# Process limits
-LimitNOFILE=65536
 
 # Restart behavior - Faster recovery for Bluetooth failures
 Restart=on-failure

@@ -1,0 +1,53 @@
+[Unit]
+Description=Bluetooth GPS Serial Bridge for RTK_GPS_BASE
+Documentation=https://github.com/rodenj1/sp-base-relay
+After=bluetooth.service
+Requires=bluetooth.service
+Before=sp-base-relay.service
+StartLimitBurst=20
+StartLimitIntervalSec=600
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+# RTK_GPS_BASE GPS Device Configuration
+Environment="GPS_MAC=00:11:22:33:44:55"
+Environment="GPS_NAME=RTK_GPS_BASE"
+Environment="RFCOMM_DEVICE=0"
+Environment="RFCOMM_CHANNEL=1"
+
+# Pre-start: Ensure device is connected via bluetoothctl
+ExecStartPre=/bin/sh -c 'bluetoothctl connect ${GPS_MAC} || true'
+ExecStartPre=/bin/sleep 2
+
+# Pre-start: Release any existing rfcomm connection
+ExecStartPre=/bin/sh -c 'rfcomm release ${RFCOMM_DEVICE} 2>/dev/null || true'
+
+# Main service: Create rfcomm serial port using bind (active mode)
+# rfcomm bind returns immediately, so we use sleep infinity to keep the service running
+ExecStart=/bin/sh -c 'rfcomm bind ${RFCOMM_DEVICE} ${GPS_MAC} ${RFCOMM_CHANNEL} && sleep infinity'
+
+# Post-start: Wait briefly for device creation, then set permissions
+ExecStartPost=/bin/sleep 1
+ExecStartPost=/bin/chmod 666 /dev/rfcomm${RFCOMM_DEVICE}
+
+# Post-start: Health check - verify device is readable (not just created)
+ExecStartPost=/bin/sh -c 'timeout 5 head -c 1 /dev/rfcomm${RFCOMM_DEVICE} >/dev/null 2>&1 || echo "Warning: rfcomm device may not be fully ready"'
+
+# Cleanup on stop - run recovery script to properly reset Bluetooth connection
+ExecStopPost=/opt/sp-base-relay/tools/bluetooth/reset-connection.sh || true
+ExecStopPost=/usr/bin/rfcomm release ${RFCOMM_DEVICE} || true
+
+# Restart configuration - More aggressive for Bluetooth recovery
+Restart=always
+RestartSec=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bluetooth-gps
+
+[Install]
+WantedBy=multi-user.target

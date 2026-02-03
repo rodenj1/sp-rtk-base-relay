@@ -392,10 +392,16 @@ class DataPipelineCoordinator:
 
                 # Extract complete frame
                 frame = self._frame_buffer[offset : offset + expected_frame_length]
-                complete_frames.append(frame)
-
-                # Move offset past this frame
-                offset += expected_frame_length
+                
+                # Validate frame before adding to results
+                if RTCMMessageDecoder.is_valid_rtcm_frame(frame):
+                    complete_frames.append(frame)
+                    # Move offset past this valid frame
+                    offset += expected_frame_length
+                else:
+                    # Invalid frame - skip this byte and keep searching
+                    logger.debug(f"Invalid RTCM frame at offset {offset}, skipping")
+                    offset += 1
 
             # Keep remaining incomplete data for next chunk
             self._frame_buffer = self._frame_buffer[offset:]

@@ -1,13 +1,20 @@
 [Unit]
 Description=SP-Base-Relay - RTCM Correction Data Relay Service
 Documentation=https://github.com/rodenj1/sp-base-relay
-After=network-online.target
+After=network-online.target bluetooth-gps.service
 Wants=network-online.target
+# Tight coupling: If bluetooth-gps stops/restarts, we stop/restart too
+BindsTo=bluetooth-gps.service
+PartOf=bluetooth-gps.service
 
 [Service]
 Type=simple
 User=sp-base-relay
 Group=sp-base-relay
+
+# Pre-start validation: Ensure /dev/rfcomm0 exists and is readable
+ExecStartPre=/bin/sh -c 'test -c /dev/rfcomm0 || { echo "ERROR: /dev/rfcomm0 does not exist"; exit 1; }'
+ExecStartPre=/bin/sh -c 'timeout 3 head -c 1 /dev/rfcomm0 >/dev/null 2>&1 || { echo "ERROR: /dev/rfcomm0 not readable"; exit 1; }'
 
 # Service execution
 ExecStart=/usr/local/bin/sp-base-relay --config /etc/sp-base-relay/config.yaml --foreground
@@ -32,11 +39,14 @@ PrivateNetwork=false
 # Process limits
 LimitNOFILE=65536
 
-# Restart behavior
-Restart=always
-RestartSec=60
+# Restart behavior - Faster recovery for Bluetooth failures
+Restart=on-failure
+RestartSec=15
 StartLimitInterval=600
 StartLimitBurst=10
+
+# On service stop/failure, trigger bluetooth-gps restart for recovery
+ExecStopPost=/bin/sh -c 'systemctl is-active bluetooth-gps.service >/dev/null && systemctl restart bluetooth-gps.service || true'
 
 # Logging
 StandardOutput=journal

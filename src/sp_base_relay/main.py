@@ -302,12 +302,26 @@ class SPBaseRelayService:
         )
         self._pipeline_thread.start()
 
-        # Wait a moment for pipeline to start
-        time.sleep(0.5)
-
-        # Verify pipeline started successfully
-        if not self.pipeline.is_running:
-            raise ServiceError("Pipeline failed to start")
+        # Wait for pipeline to start (longer timeout for Bluetooth)
+        # Bluetooth connections need 10+ seconds for device scanning
+        max_wait = 15.0  # Maximum wait time in seconds
+        check_interval = 0.5  # Check every 0.5 seconds
+        elapsed = 0.0
+        
+        while elapsed < max_wait:
+            time.sleep(check_interval)
+            elapsed += check_interval
+            
+            if self.pipeline.is_running:
+                self.logger.debug(f"Pipeline started successfully after {elapsed:.1f}s")
+                break
+                
+            # Check if thread died unexpectedly
+            if not self._pipeline_thread.is_alive():
+                raise ServiceError("Pipeline thread terminated unexpectedly")
+        else:
+            # Timeout reached without pipeline starting
+            raise ServiceError(f"Pipeline failed to start within {max_wait}s")
 
     def _check_health(self) -> bool:
         """Check service health.

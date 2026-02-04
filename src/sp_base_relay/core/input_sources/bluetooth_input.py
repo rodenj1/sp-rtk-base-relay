@@ -2,25 +2,25 @@
 
 This module provides a Bluetooth input source implementation for reading
 RTCM correction data from GNSS receivers via Bluetooth SPP (Serial Port Profile).
-Uses native BlueZ D-Bus API via pydbus and AF_BLUETOOTH sockets.
+Uses native BlueZ D-Bus API via pydbus and BlueDot for Bluetooth sockets.
 """
 
 import logging
-import socket
 from typing import Any
 from dataclasses import dataclass
+
+try:
+    from bluedot.btcomm import BluetoothSocket
+    _bluedot_available = True
+except ImportError:
+    _bluedot_available = False
+    BluetoothSocket = None
 
 from .base_input import InputSource
 from ..bluetooth_manager import BluetoothManager, BluetoothError
 from ...exceptions import InputSourceError
 
 logger = logging.getLogger(__name__)
-
-# Bluetooth socket constants
-# AF_BLUETOOTH is not always available in Python's socket module
-# Define it manually (standard value on Linux)
-AF_BLUETOOTH = getattr(socket, 'AF_BLUETOOTH', 31)
-BTPROTO_RFCOMM = 3
 
 
 @dataclass
@@ -53,12 +53,17 @@ class BluetoothInputSource(InputSource):
             config: Bluetooth configuration
 
         Raises:
-            InputSourceError: If configuration is invalid or pydbus not available
+            InputSourceError: If configuration is invalid or BlueDot not available
         """
+        if not _bluedot_available or BluetoothSocket is None:
+            raise InputSourceError(
+                "BlueDot library not available. Install with: uv add bluedot"
+            )
+        
         super().__init__("Bluetooth")
         self.config = config
         self.bt_manager: BluetoothManager | None = None
-        self.bt_socket: socket.socket | None = None
+        self.bt_socket: BluetoothSocket | None = None
         self.connected_mac: str | None = None
         self.rfcomm_channel: int | None = None
 
@@ -111,29 +116,14 @@ class BluetoothInputSource(InputSource):
             except BluetoothError as e:
                 raise InputSourceError(f"Failed to prepare Bluetooth device: {e}")
 
-            # Create AF_BLUETOOTH socket for data transfer
+            # Create BlueDot Bluetooth socket for data transfer
             try:
-                self.bt_socket = socket.socket(
-                    AF_BLUETOOTH,
-                    socket.SOCK_STREAM,
-                    BTPROTO_RFCOMM
-                )
-                
-                # Set socket timeout
-                self.bt_socket.settimeout(self.config.connect_timeout)
-                
-                # Connect socket to device
-                logger.info(f"Connecting socket to {self.connected_mac}:{self.rfcomm_channel}")
-                self.bt_socket.connect((self.connected_mac, self.rfcomm_channel))
-                
-                # Set read timeout for data operations
-                self.bt_socket.settimeout(self.config.read_timeout)
-                
-                logger.info("Bluetooth socket connected successfully")
-            except socket.error as e:
-                raise InputSourceError(f"Bluetooth socket connection failed: {e}")
+                logger.info(f"Creating BlueDot socket for {self.connected_mac}:{self.rfcomm_channel}")
+                # BlueDot's BluetoothSocket connects automatically on creation
+                self.bt_socket = BluetoothSocket(self.connected_mac, port=self.rfcomm_channel)
+                logger.info("Bluetooth socket connected successfully via BlueDot")
             except Exception as e:
-                raise InputSourceError(f"Unexpected Bluetooth connection error: {e}")
+                raise InputSourceError(f"BlueDot socket connection failed: {e}")
 
             self._update_connection_stats(True)
             return True
@@ -162,21 +152,9 @@ class BluetoothInputSource(InputSource):
             return None
 
         try:
-            # Use provided timeout or fall back to config timeout
-            read_timeout = timeout if timeout is not None else self.config.read_timeout
-
-            # Temporarily adjust socket timeout if different
-            original_timeout = self.bt_socket.gettimeout()
-            if read_timeout != original_timeout:
-                self.bt_socket.settimeout(read_timeout)
-
+            # BlueDot's recv() handles timeouts internally
             # Try to receive data (up to 8KB)
-            try:
-                data = self.bt_socket.recv(8192)
-            finally:
-                # Restore original timeout if we changed it
-                if read_timeout != original_timeout:
-                    self.bt_socket.settimeout(original_timeout)
+            data = self.bt_socket.recv(8192)
 
             if data:
                 self._update_read_stats(data)
@@ -188,11 +166,11 @@ class BluetoothInputSource(InputSource):
                 self._set_error_state(InputSourceError("Connection closed by device"))
                 return None
 
-        except socket.timeout:
+        except TimeoutError:
             # Timeout is normal - no data available
             self._update_read_stats(None)
             return None
-        except socket.error as e:
+        except OSError as e:
             error = InputSourceError(f"Bluetooth read error: {e}")
             self._update_read_stats(None, error)
             self._set_error_state(error)

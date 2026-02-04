@@ -64,6 +64,15 @@ wheels = [
 ]
 
 [[package]]
+name = "bluedot"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/1c/6fbb9e5629bdcfe73eb0d3bee1a98f5836d3b31099d3f74869d332906450/bluedot-2.0.0.tar.gz", hash = "sha256:4bbc45620b36ea26b2f8fb483a4d93f83fa7773d12b17d5f0623712fb225e29b", size = 36249, upload-time = "2020-11-01T12:27:14.675Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f6/4c/dc4d5605cafad4bd2d8ce3bdb251787de5198a81798da0eee76066f9c803/bluedot-2.0.0-py3-none-any.whl", hash = "sha256:fdcb96aa8a1953f24863a370e49ada08e1e29dd3c642507eb128eeecdd1e608b", size = 37423, upload-time = "2020-11-01T12:27:12.533Z" },
+]
+
+[[package]]
 name = "cfgv"
 version = "3.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -839,6 +848,7 @@ name = "sp-base-relay"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
+    { name = "bluedot" },
     { name = "prometheus-client" },
     { name = "pydbus" },
     { name = "pygobject" },
@@ -867,6 +877,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
+    { name = "bluedot", specifier = ">=2.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "prometheus-client", specifier = ">=0.17.0" },

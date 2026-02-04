@@ -319,6 +319,11 @@ class BluetoothManager:
         if not self.trust_device(mac_address):
             raise BluetoothError(f"Failed to trust {mac_address}")
         
+        # Wait for device to be ready after trusting
+        # BlueZ needs time to complete trust operation before device accepts connections
+        logger.info("Waiting 5s for device to be ready after trusting...")
+        time.sleep(5.0)
+        
         # Ensure connected
         if not self.connect_device(mac_address):
             raise BluetoothError(f"Failed to connect to {mac_address}")

@@ -26,6 +26,7 @@ dependencies = [
     "pyyaml>=6.0",
     "prometheus-client>=0.17.0",
     "pydbus>=0.6.0",
+    "pygobject==3.50.2",
 ]
 
 [project.optional-dependencies]

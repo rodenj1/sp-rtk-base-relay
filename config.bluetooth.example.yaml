@@ -1,0 +1,59 @@
+# SP Base Relay Configuration - Bluetooth GPS Example
+# This configuration shows how to use Bluetooth GNSS receivers with native Python
+# No separate bluetooth-gps.service needed - all managed in Python!
+
+# Input source configuration - Bluetooth GPS via native BlueZ
+input:
+  type: bluetooth
+  
+  # Option 1: Auto-discover by device name
+  device_name: "RTK_GPS_BASE"
+  
+  # Option 2: Use MAC address if known (more reliable)
+  # mac_address: "00:11:22:33:44:55"
+  
+  # Bluetooth pairing settings
+  auto_pair: true        # Automatically pair if not paired
+  auto_trust: true       # Automatically trust device
+  pin: "0000"           # PIN code for pairing
+  
+  # Bluetooth adapter settings
+  adapter_name: "hci0"   # Bluetooth adapter (hci0, hci1, etc.)
+  scan_timeout: 10       # Device discovery timeout (seconds)
+  
+  # Connection timeouts
+  read_timeout: 1.0      # Socket read timeout
+  connect_timeout: 10.0  # Connection timeout
+
+# RTCM server configuration
+rtcm_server:
+  host: "rtk2go.com"
+  port: 2101
+  mountpoint: "your_mountpoint"
+  username: "your_email@example.com"
+  password: "none"
+
+# Connection management
+connection:
+  reconnect_delay: 5
+  max_reconnect_attempts: 0  # 0 = infinite
+  connection_timeout: 30
+  read_timeout: 10
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "detailed"
+  
+  # Optional: Log to file
+  # file:
+  #   enabled: true
+  #   path: "/var/log/sp-base-relay/relay.log"
+  #   max_bytes: 10485760  # 10 MB
+  #   backup_count: 5
+
+# Optional: Metrics configuration
+# metrics:
+#   enabled: true
+#   port: 9090
+#   include_system_metrics: true

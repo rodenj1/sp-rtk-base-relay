@@ -247,6 +247,60 @@ class InputSourceFactory:
                     "default": True,
                 },
             }
+        elif source_type == "bluetooth":
+            return {
+                "device_name": {
+                    "type": "string",
+                    "description": "Bluetooth device name for auto-discovery",
+                    "default": None,
+                    "examples": ["RTK_GPS_BASE", "GPS Receiver", "GNSS"],
+                },
+                "mac_address": {
+                    "type": "string",
+                    "description": "Bluetooth MAC address (if known)",
+                    "default": None,
+                    "examples": ["00:11:22:33:44:55", "00:11:22:33:44:55"],
+                },
+                "auto_pair": {
+                    "type": "boolean",
+                    "description": "Automatically pair if not paired",
+                    "default": True,
+                },
+                "auto_trust": {
+                    "type": "boolean",
+                    "description": "Automatically trust device",
+                    "default": True,
+                },
+                "pin": {
+                    "type": "string",
+                    "description": "PIN code for pairing",
+                    "default": "0000",
+                },
+                "adapter_name": {
+                    "type": "string",
+                    "description": "Bluetooth adapter to use",
+                    "default": "hci0",
+                    "examples": ["hci0", "hci1"],
+                },
+                "scan_timeout": {
+                    "type": "integer",
+                    "description": "Device discovery timeout (seconds)",
+                    "default": 10,
+                    "minimum": 1,
+                },
+                "read_timeout": {
+                    "type": "number",
+                    "description": "Socket read timeout (seconds)",
+                    "default": 1.0,
+                    "minimum": 0.1,
+                },
+                "connect_timeout": {
+                    "type": "number",
+                    "description": "Connection timeout (seconds)",
+                    "default": 10.0,
+                    "minimum": 0.1,
+                },
+            }
 
         # For future source types, add their schemas here
         return {}
@@ -343,5 +397,22 @@ def _register_tcp_source() -> None:
         logger.debug("TCP input source not available")
 
 
+# Register Bluetooth input source
+def _register_bluetooth_source() -> None:
+    """Register Bluetooth input source if available."""
+    try:
+        from .bluetooth_input import BluetoothInputSource, BluetoothConfig
+
+        InputSourceFactory.register_source_type(
+            "bluetooth", BluetoothInputSource, lambda cfg: BluetoothConfig(**cfg)
+        )
+
+        logger.debug("Bluetooth input source registered")
+    except ImportError:
+        # Bluetooth source not available (missing pydbus or bluetooth_manager)
+        logger.debug("Bluetooth input source not available")
+
+
 # Try to register additional source types
 _register_tcp_source()
+_register_bluetooth_source()

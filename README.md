@@ -12,9 +12,10 @@ SP-Base-Relay provides a robust, production-ready solution for relaying RTCM cor
 
 ### Key Features
 
-- 🔌 **Multiple Input Sources**: TCP (RTKBase), Serial UART, USB Serial
+- 🔌 **Multiple Input Sources**: TCP (RTKBase), Serial UART, USB Serial, Bluetooth GPS
 - 🔐 **Custom Authentication**: Support for `INIT:username:password*` protocol with `$HB$` heartbeat monitoring
 - 🔄 **Automatic Recovery**: Exponential backoff retry with intelligent connection management
+- 🔧 **Self-Healing**: Automatic Bluetooth GPS recovery without manual intervention
 - 📊 **Prometheus Metrics**: Comprehensive monitoring and observability
 - ⚡ **Low Latency**: Pass-through mode with minimal processing overhead
 - 🛡️ **Production Ready**: Systemd integration, comprehensive logging, and error handling
@@ -165,11 +166,52 @@ input:
 - **Memory Efficient**: ~50MB RAM footprint
 - **Thread-Safe**: Proper concurrent operation without race conditions
 
+## Bluetooth GPS Self-Healing
+
+When using Bluetooth GPS devices, the system includes **automatic recovery** for Bluetooth connection failures:
+
+**Features:**
+- 🔍 Automatic detection of Bluetooth rfcomm driver hangs
+- 🔧 Automatic reset of frozen Bluetooth connections
+- ⚡ Recovery in < 30 seconds (vs. manual reboot)
+- 📝 Comprehensive recovery logging
+- 🔄 No manual intervention required
+
+**How It Works:**
+1. Detects serial I/O errors (`[Errno 5]`)
+2. Triggers automatic Bluetooth reset script
+3. Reconnects and re-binds rfcomm device
+4. Resumes normal operation
+
+**Setup:**
+```bash
+# Install bluetooth-gps.service (if using Bluetooth GPS)
+sudo cp tools/systemd/bluetooth-gps.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable bluetooth-gps.service
+sudo systemctl start bluetooth-gps.service
+```
+
+**Monitoring Recovery:**
+```bash
+# View recovery logs
+sudo tail -f /var/log/sp-base-relay/bluetooth-recovery.log
+
+# Check service status
+sudo systemctl status bluetooth-gps.service sp-base-relay.service
+```
+
+See **[Bluetooth Recovery Guide](docs/bluetooth-recovery.md)** for complete details.
+
+---
+
 ## Documentation
 
 - **[Deployment Guide](docs/deployment-guide.md)**: Complete installation and deployment instructions
 - **[Configuration Reference](configuration-reference.md)**: Detailed configuration options
 - **[Metrics Guide](docs/metrics-guide.md)**: Prometheus metrics documentation
+- **[Bluetooth Recovery](docs/bluetooth-recovery.md)**: Automatic recovery for Bluetooth GPS failures
+- **[Bluetooth GPS Setup](docs/bluetooth-gps-setup.md)**: Bluetooth GPS configuration guide
 - **[RTCM Protocol](RTCM_Connection_Protocol.md)**: Custom server protocol specification
 - **[Development Plan](development-plan.md)**: Project development roadmap
 

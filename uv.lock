@@ -604,6 +604,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pydbus"
+version = "0.6.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/58/56/3e84f2c1f2e39b9ea132460183f123af41e3b9c8befe222a35636baa6a5a/pydbus-0.6.0.tar.gz", hash = "sha256:4207162eff54223822c185da06c1ba8a34137a9602f3da5a528eedf3f78d0f2c", size = 22079, upload-time = "2016-12-18T16:44:31.904Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/56/27148014c2f85ce70332f18612f921f682395c7d4e91ec103783be4fce00/pydbus-0.6.0-py2.py3-none-any.whl", hash = "sha256:66b80106352a718d80d6c681dc2a82588048e30b75aab933e4020eb0660bf85e", size = 19580, upload-time = "2016-12-18T16:44:19.565Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.19.2"
 source = { registry = "https://pypi.org/simple" }
@@ -797,6 +806,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "prometheus-client" },
+    { name = "pydbus" },
     { name = "pyserial" },
     { name = "pyyaml" },
 ]
@@ -825,6 +835,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "prometheus-client", specifier = ">=0.17.0" },
+    { name = "pydbus", specifier = ">=0.6.0" },
     { name = "pylint", marker = "extra == 'dev'", specifier = ">=2.17.0" },
     { name = "pyserial", specifier = ">=3.5" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },

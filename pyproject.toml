@@ -1,6 +1,6 @@
 [project]
 name = "sp-base-relay"
-version = "0.1.0"
+version = "0.2.0"
 description = "RTCM relay service for custom GPS correction servers"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,6 +25,7 @@ dependencies = [
     "pyserial>=3.5",
     "pyyaml>=6.0",
     "prometheus-client>=0.17.0",
+    "pydbus>=0.6.0",
 ]
 
 [project.optional-dependencies]

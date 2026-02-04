@@ -28,6 +28,7 @@ dependencies = [
     "pydbus>=0.6.0",
     "pygobject==3.50.2",
     "bluedot>=2.0.0",
+    "dbus-python>=1.4.0",
 ]
 
 [project.optional-dependencies]

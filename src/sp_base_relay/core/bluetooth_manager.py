@@ -179,17 +179,24 @@ class BluetoothManager:
         except Exception as e:
             raise BluetoothError(f"Trust failed: {e}")
     
-    def connect_device(self, mac_address: str) -> bool:
-        """Connect to a paired Bluetooth device.
+    def connect_device(
+        self, 
+        mac_address: str,
+        max_retries: int = 3,
+        retry_delay: float = 2.0
+    ) -> bool:
+        """Connect to a paired Bluetooth device with retries.
         
         Args:
             mac_address: Device MAC address
+            max_retries: Maximum connection attempts (default: 3)
+            retry_delay: Seconds to wait between retries (default: 2.0)
             
         Returns:
             True if connected successfully
             
         Raises:
-            BluetoothError: If connection fails
+            BluetoothError: If all connection attempts fail
         """
         device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
         
@@ -201,11 +208,36 @@ class BluetoothManager:
                 logger.info(f"Device {mac_address} already connected")
                 return True
             
-            logger.info(f"Connecting to {mac_address}...")
-            device.Connect()
-            logger.info(f"Successfully connected to {mac_address}")
-            return True
+            # Try connecting with retries
+            last_error = None
+            for attempt in range(1, max_retries + 1):
+                try:
+                    logger.info(f"Connecting to {mac_address} (attempt {attempt}/{max_retries})...")
+                    device.Connect()
+                    logger.info(f"Successfully connected to {mac_address}")
+                    return True
+                except Exception as e:
+                    last_error = e
+                    error_str = str(e)
+                    
+                    # Check for "Operation currently not available" error
+                    if "NotAvailable" in error_str or "not available" in error_str.lower():
+                        if attempt < max_retries:
+                            logger.warning(
+                                f"Device not ready (attempt {attempt}/{max_retries}), "
+                                f"waiting {retry_delay}s before retry..."
+                            )
+                            time.sleep(retry_delay)
+                            continue
+                    
+                    # For other errors, don't retry
+                    raise BluetoothError(f"Connection failed: {e}")
             
+            # All retries exhausted
+            raise BluetoothError(f"Connection failed after {max_retries} attempts: {last_error}")
+            
+        except BluetoothError:
+            raise
         except Exception as e:
             raise BluetoothError(f"Connection failed: {e}")
     

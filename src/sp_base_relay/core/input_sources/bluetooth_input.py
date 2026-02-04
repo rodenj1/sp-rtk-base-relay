@@ -17,6 +17,9 @@ from ...exceptions import InputSourceError
 logger = logging.getLogger(__name__)
 
 # Bluetooth socket constants
+# AF_BLUETOOTH is not always available in Python's socket module
+# Define it manually (standard value on Linux)
+AF_BLUETOOTH = getattr(socket, 'AF_BLUETOOTH', 31)
 BTPROTO_RFCOMM = 3
 
 
@@ -111,7 +114,7 @@ class BluetoothInputSource(InputSource):
             # Create AF_BLUETOOTH socket for data transfer
             try:
                 self.bt_socket = socket.socket(
-                    socket.AF_BLUETOOTH,
+                    AF_BLUETOOTH,
                     socket.SOCK_STREAM,
                     BTPROTO_RFCOMM
                 )

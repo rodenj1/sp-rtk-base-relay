@@ -253,6 +253,9 @@ class SPBaseRelayService:
                 "parity": serial_cfg.parity,
                 "stopbits": serial_cfg.stopbits,
             }
+        elif self.config.input.source == "bluetooth":
+            # Bluetooth config is already in the right format
+            input_config = self.config.input.config
         else:
             raise ConfigurationError(
                 f"Unsupported input source: {self.config.input.source}"

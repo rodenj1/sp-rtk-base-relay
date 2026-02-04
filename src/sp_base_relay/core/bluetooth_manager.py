@@ -319,14 +319,11 @@ class BluetoothManager:
         if not self.trust_device(mac_address):
             raise BluetoothError(f"Failed to trust {mac_address}")
         
-        # Wait for device to be ready after trusting
-        # BlueZ needs time to complete trust operation before device accepts connections
-        logger.info("Waiting 5s for device to be ready after trusting...")
-        time.sleep(5.0)
-        
-        # Ensure connected
-        if not self.connect_device(mac_address):
-            raise BluetoothError(f"Failed to connect to {mac_address}")
+        # NOTE: We do NOT call connect_device() for SPP (Serial Port Profile) devices!
+        # SPP devices (like GPS receivers) reject D-Bus Connect() calls with NotAvailable error.
+        # This is normal/expected behavior - the RFCOMM socket connection itself establishes
+        # the Bluetooth connection. This matches how the old rfcomm tool worked.
+        logger.info(f"Device {mac_address} is paired and trusted, ready for RFCOMM socket connection")
         
         # Get RFCOMM channel
         channel = self.discover_rfcomm_channel(mac_address)

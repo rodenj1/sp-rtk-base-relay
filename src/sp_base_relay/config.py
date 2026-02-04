@@ -186,7 +186,7 @@ class InputConfig:
 
     def __post_init__(self) -> None:
         """Validate input configuration."""
-        valid_sources = {"tcp", "serial", "usb_serial"}
+        valid_sources = {"tcp", "serial", "usb_serial", "bluetooth"}
 
         if self.source not in valid_sources:
             raise ConfigurationError(

@@ -4,26 +4,26 @@
 
 # Input source configuration - Bluetooth GPS via native BlueZ
 input:
-  type: bluetooth
-  
-  # Option 1: Auto-discover by device name
-  device_name: "RTK_BASE_ROD"
-  
-  # Option 2: Use MAC address if known (more reliable)
-  # mac_address: "98:D3:51:FE:FE:E4"
-  
-  # Bluetooth pairing settings
-  auto_pair: true        # Automatically pair if not paired
-  auto_trust: true       # Automatically trust device
-  pin: "0000"           # PIN code for pairing
-  
-  # Bluetooth adapter settings
-  adapter_name: "hci0"   # Bluetooth adapter (hci0, hci1, etc.)
-  scan_timeout: 10       # Device discovery timeout (seconds)
-  
-  # Connection timeouts
-  read_timeout: 1.0      # Socket read timeout
-  connect_timeout: 10.0  # Connection timeout
+  source: "bluetooth"
+  config:
+    # Option 1: Auto-discover by device name
+    device_name: "RTK_BASE_ROD"
+    
+    # Option 2: Use MAC address if known (more reliable)
+    # mac_address: "98:D3:51:FE:FE:E4"
+    
+    # Bluetooth pairing settings
+    auto_pair: true        # Automatically pair if not paired
+    auto_trust: true       # Automatically trust device
+    pin: "0000"            # PIN code for pairing
+    
+    # Bluetooth adapter settings
+    adapter_name: "hci0"   # Bluetooth adapter (hci0, hci1, etc.)
+    scan_timeout: 10       # Device discovery timeout (seconds)
+    
+    # Connection timeouts
+    read_timeout: 1.0      # Socket read timeout
+    connect_timeout: 10.0  # Connection timeout
 
 # RTCM server configuration
 rtcm_server:

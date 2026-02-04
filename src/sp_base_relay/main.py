@@ -303,8 +303,8 @@ class SPBaseRelayService:
         self._pipeline_thread.start()
 
         # Wait for pipeline to start (longer timeout for Bluetooth)
-        # Bluetooth connections need 10+ seconds for device scanning
-        max_wait = 15.0  # Maximum wait time in seconds
+        # Bluetooth needs: 10s scan + 5s settle + up to 10s connection attempts = ~25s
+        max_wait = 30.0  # Maximum wait time in seconds
         check_interval = 0.5  # Check every 0.5 seconds
         elapsed = 0.0
         

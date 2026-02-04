@@ -802,7 +802,7 @@ wheels = [
 
 [[package]]
 name = "sp-base-relay"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "prometheus-client" },

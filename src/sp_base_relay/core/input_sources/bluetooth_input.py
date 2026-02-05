@@ -2,19 +2,13 @@
 
 This module provides a Bluetooth input source implementation for reading
 RTCM correction data from GNSS receivers via Bluetooth SPP (Serial Port Profile).
-Uses native BlueZ D-Bus API via pydbus and BlueDot for Bluetooth sockets.
+Uses native BlueZ D-Bus API via pydbus and native Python Bluetooth sockets.
 """
 
 import logging
+import socket
 from typing import Any
 from dataclasses import dataclass
-
-try:
-    from bluedot.btcomm import BluetoothSocket
-    _bluedot_available = True
-except ImportError:
-    _bluedot_available = False
-    BluetoothSocket = None
 
 from .base_input import InputSource
 from ..bluetooth_manager import BluetoothManager, BluetoothError
@@ -53,17 +47,12 @@ class BluetoothInputSource(InputSource):
             config: Bluetooth configuration
 
         Raises:
-            InputSourceError: If configuration is invalid or BlueDot not available
+            InputSourceError: If configuration is invalid
         """
-        if not _bluedot_available or BluetoothSocket is None:
-            raise InputSourceError(
-                "BlueDot library not available. Install with: uv add bluedot"
-            )
-        
         super().__init__("Bluetooth")
         self.config = config
         self.bt_manager: BluetoothManager | None = None
-        self.bt_socket: BluetoothSocket | None = None
+        self.bt_socket: socket.socket | None = None
         self.connected_mac: str | None = None
         self.rfcomm_channel: int | None = None
 
@@ -116,14 +105,29 @@ class BluetoothInputSource(InputSource):
             except BluetoothError as e:
                 raise InputSourceError(f"Failed to prepare Bluetooth device: {e}")
 
-            # Create BlueDot Bluetooth socket for data transfer
+            # Create native Bluetooth socket for data transfer
             try:
-                logger.info(f"Creating BlueDot socket for {self.connected_mac}:{self.rfcomm_channel}")
-                # BlueDot's BluetoothSocket connects automatically on creation
-                self.bt_socket = BluetoothSocket(self.connected_mac, port=self.rfcomm_channel)
-                logger.info("Bluetooth socket connected successfully via BlueDot")
+                logger.info(f"Creating native Bluetooth socket for {self.connected_mac}:{self.rfcomm_channel}")
+                
+                # Create AF_BLUETOOTH socket
+                self.bt_socket = socket.socket(
+                    socket.AF_BLUETOOTH,
+                    socket.SOCK_STREAM,
+                    socket.BTPROTO_RFCOMM
+                )
+                self.bt_socket.settimeout(self.config.connect_timeout)
+                
+                # Connect to device
+                self.bt_socket.connect((self.connected_mac, self.rfcomm_channel))
+                
+                # Set read timeout
+                self.bt_socket.settimeout(self.config.read_timeout)
+                
+                logger.info("Bluetooth socket connected successfully")
+            except socket.error as e:
+                raise InputSourceError(f"Bluetooth socket connection failed: {e}")
             except Exception as e:
-                raise InputSourceError(f"BlueDot socket connection failed: {e}")
+                raise InputSourceError(f"Unexpected socket error: {e}")
 
             self._update_connection_stats(True)
             return True

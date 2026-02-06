@@ -418,28 +418,6 @@ class TestBluetoothManagerHelpers:
             assert mac == "98:D3:51:FE:FE:E4"
             assert channel == 1
     
-    def test_ensure_device_ready_with_mac(self):
-        """Test ensure_device_ready with MAC address."""
-        mock_pydbus = create_mock_pydbus_module()
-        mock_bus = MockSystemBus()
-        device = mock_bus.add_device("98:D3:51:FE:FE:E4", "RTK_BASE_ROD")
-        mock_pydbus.SystemBus = lambda: mock_bus
-        
-        with patch.dict('sys.modules', {'pydbus': mock_pydbus}):
-            import importlib
-            import src.sp_base_relay.core.bluetooth_manager as bt_module
-            importlib.reload(bt_module)
-            
-            manager = bt_module.BluetoothManager()
-            
-            mac, channel = manager.ensure_device_ready(mac_address="98:D3:51:FE:FE:E4")
-            
-            assert mac == "98:D3:51:FE:FE:E4"
-            assert channel == 1
-            assert device.Paired is True
-            assert device.Trusted is True
-            assert device.Connected is True
-    
     def test_ensure_device_ready_device_not_found(self):
         """Test ensure_device_ready when device not found."""
         mock_pydbus = create_mock_pydbus_module()

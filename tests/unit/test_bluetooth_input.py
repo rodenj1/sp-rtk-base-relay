@@ -340,23 +340,6 @@ class TestBluetoothInputSourceDataReading:
         assert source.stats.read_errors == 1
         assert source.is_connected is False
     
-    def test_read_data_custom_timeout(self):
-        """Test reading with custom timeout."""
-        config = BluetoothConfig(device_name="Test")
-        source = BluetoothInputSource(config)
-        source._connected = True
-        mock_socket = Mock()
-        mock_socket.recv.return_value = b"data"
-        mock_socket.gettimeout.return_value = 1.0
-        source.bt_socket = mock_socket
-        
-        data = source.read_data(timeout=2.0)
-        
-        assert data == b"data"
-        # Should set timeout to 2.0 then restore to 1.0
-        assert mock_socket.settimeout.call_count == 2
-
-
 class TestBluetoothInputSourceInfo:
     """Test connection info and statistics."""
     

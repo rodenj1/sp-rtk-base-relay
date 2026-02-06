@@ -862,6 +862,9 @@ dev = [
 dev = [
     { name = "pylance" },
     { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
 ]
 
 [package.metadata]
@@ -886,6 +889,9 @@ provides-extras = ["dev"]
 dev = [
     { name = "pylance", specifier = ">=0.38.3" },
     { name = "pyright", specifier = ">=1.1.407" },
+    { name = "pytest", specifier = ">=8.4.2" },
+    { name = "pytest-asyncio", specifier = ">=1.2.0" },
+    { name = "pytest-cov", specifier = ">=7.0.0" },
 ]
 
 [[package]]

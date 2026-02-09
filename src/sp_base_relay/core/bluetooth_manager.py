@@ -4,10 +4,13 @@ This module provides a Python wrapper around the BlueZ D-Bus API for managing
 Bluetooth device discovery, pairing, trusting, and connection operations.
 
 Uses dbus-fast for modern, type-safe D-Bus communication with full type hints.
+A persistent background event loop thread maintains the D-Bus connection,
+with sync wrappers dispatching coroutines via run_coroutine_threadsafe().
 """
 
 import asyncio
 import logging
+import threading
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -27,6 +30,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Default timeout for async operations dispatched to background loop
+_DEFAULT_ASYNC_TIMEOUT = 60.0
+
 
 class BluetoothError(Exception):
     """Bluetooth-specific errors."""
@@ -40,18 +46,25 @@ class BluetoothManager:
     This class provides methods for device discovery, pairing, trusting,
     and connection management using the BlueZ Bluetooth stack through D-Bus.
 
-    Uses dbus-fast with a sync wrapper pattern for easy integration while
-    maintaining full type safety and performance.
+    Uses a persistent background event loop thread to maintain the D-Bus
+    connection. All async operations are dispatched to this single loop via
+    asyncio.run_coroutine_threadsafe(), ensuring the MessageBus and its
+    Futures always operate on the same event loop.
 
     Attributes:
         adapter_path: D-Bus object path for the adapter (e.g., "/org/bluez/hci0")
         _bus: Async D-Bus system bus connection
         _adapter: Bluetooth adapter proxy interface
         _introspection_cache: Cache of introspection XML by object path
+        _loop: Persistent asyncio event loop running in background thread
+        _thread: Background daemon thread running the event loop
     """
 
     def __init__(self, adapter_name: str = "hci0"):
         """Initialize Bluetooth manager.
+
+        Creates a persistent background event loop thread, connects to the
+        D-Bus system bus, and caches adapter introspection.
 
         Args:
             adapter_name: Name of Bluetooth adapter (default: "hci0")
@@ -71,45 +84,74 @@ class BluetoothManager:
         # Hybrid introspection cache: pre-cache adapter/root, lazy-cache devices
         self._introspection_cache: dict[str, "Node"] = {}
 
-        self._init_bus()
+        # Create persistent event loop in a background daemon thread
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(
+            target=self._run_loop, daemon=True, name="BluetoothDBusLoop"
+        )
+        self._thread.start()
 
-    def _init_bus(self) -> None:
+        # Initialize bus on the persistent loop
+        self._run_async(self._async_init())
+
+    def _run_loop(self) -> None:
+        """Run the event loop forever in the background thread."""
+        asyncio.set_event_loop(self._loop)
+        self._loop.run_forever()
+
+    def _run_async(self, coro: Any, timeout: float = _DEFAULT_ASYNC_TIMEOUT) -> Any:
+        """Dispatch a coroutine to the persistent background loop and block for result.
+
+        Args:
+            coro: Coroutine to execute on the background event loop
+            timeout: Maximum seconds to wait for result (default: 60s)
+
+        Returns:
+            The coroutine's return value
+
+        Raises:
+            BluetoothError: If the coroutine raises or times out
+        """
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        try:
+            return future.result(timeout=timeout)
+        except BluetoothError:
+            raise
+        except TimeoutError:
+            future.cancel()
+            raise BluetoothError(f"Async operation timed out after {timeout}s")
+        except Exception as e:
+            raise BluetoothError(f"Async operation failed: {e}")
+
+    async def _async_init(self) -> None:
         """Initialize D-Bus connection and cache adapter introspection.
 
-        This runs synchronously using asyncio.run() to maintain a simple API.
         Pre-caches introspection for adapter and root paths.
         """
-
-        async def _async_init() -> None:
-            try:
-                # Connect to system bus
-                self._bus = await AioMessageBus(bus_type=BusType.SYSTEM).connect()  # type: ignore[misc]
-
-                # Pre-cache adapter and root introspection (these never change)
-                adapter_intro = await self._get_introspection(self.adapter_path)
-                await self._get_introspection("/")  # Pre-cache root
-
-                # Get adapter proxy interface
-                adapter_proxy = self._bus.get_proxy_object(
-                    "org.bluez", self.adapter_path, adapter_intro
-                )
-                self._adapter = adapter_proxy.get_interface("org.bluez.Adapter1")  # type: ignore[arg-type]
-
-                logger.info(
-                    f"Initialized Bluetooth manager with adapter {self.adapter_path}"
-                )
-
-            except DBusError as e:
-                raise BluetoothError(f"D-Bus error initializing adapter: {e}")
-            except Exception as e:
-                raise BluetoothError(f"Failed to initialize Bluetooth adapter: {e}")
-
         try:
-            asyncio.run(_async_init())
+            # Connect to system bus
+            self._bus = await AioMessageBus(bus_type=BusType.SYSTEM).connect()  # type: ignore[misc]
+
+            # Pre-cache adapter and root introspection (these never change)
+            adapter_intro = await self._get_introspection(self.adapter_path)
+            await self._get_introspection("/")  # Pre-cache root
+
+            # Get adapter proxy interface
+            adapter_proxy = self._bus.get_proxy_object(
+                "org.bluez", self.adapter_path, adapter_intro
+            )
+            self._adapter = adapter_proxy.get_interface("org.bluez.Adapter1")  # type: ignore[arg-type]
+
+            logger.info(
+                f"Initialized Bluetooth manager with adapter {self.adapter_path}"
+            )
+
+        except DBusError as e:
+            raise BluetoothError(f"D-Bus error initializing adapter: {e}")
         except BluetoothError:
             raise
         except Exception as e:
-            raise BluetoothError(f"Failed to initialize async bus: {e}")
+            raise BluetoothError(f"Failed to initialize Bluetooth adapter: {e}")
 
     async def _get_introspection(self, path: str) -> "Node":
         """Get introspection with caching (hybrid approach).
@@ -131,6 +173,8 @@ class BluetoothManager:
                 self._introspection_cache[path] = introspection
             except DBusError as e:
                 raise BluetoothError(f"D-Bus error introspecting {path}: {e}")
+            except BluetoothError:
+                raise
             except Exception as e:
                 raise BluetoothError(f"Failed to introspect {path}: {e}")
 
@@ -151,59 +195,64 @@ class BluetoothManager:
         Raises:
             BluetoothError: If scanning fails
         """
+        return self._run_async(
+            self._async_find_device_by_name(device_name, scan_timeout),
+            timeout=max(scan_timeout + 30, _DEFAULT_ASYNC_TIMEOUT),
+        )
 
-        async def _async_impl() -> str | None:
+    async def _async_find_device_by_name(
+        self, device_name: str, scan_timeout: int
+    ) -> str | None:
+        """Async implementation of find_device_by_name."""
+        try:
+            if self._adapter is None:
+                raise BluetoothError("Adapter not initialized")
+
+            logger.info(f"Scanning for device: {device_name}")
+
+            # Start discovery
+            await self._adapter.call_start_discovery()  # type: ignore[attr-defined]
+
+            # Wait for scan
+            await asyncio.sleep(scan_timeout)
+
+            # Get object manager to enumerate all Bluetooth objects
+            root_intro = await self._get_introspection("/")
+            manager_proxy = self._bus.get_proxy_object("org.bluez", "/", root_intro)  # type: ignore[union-attr]
+            manager = manager_proxy.get_interface("org.freedesktop.DBus.ObjectManager")
+
+            objects: dict[str, dict[str, Any]] = await manager.call_get_managed_objects()  # type: ignore[attr-defined]
+
+            # Search through discovered devices
+            for _path, interfaces in objects.items():
+                if "org.bluez.Device1" in interfaces:
+                    device_props = interfaces["org.bluez.Device1"]
+                    if device_props.get("Name") == device_name:
+                        mac_address = device_props.get("Address")
+                        logger.info(f"Found {device_name} at {mac_address}")
+                        await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
+                        return mac_address
+
+            await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
+            logger.warning(f"Device {device_name} not found")
+            return None
+
+        except DBusError as e:
             try:
-                if self._adapter is None:
-                    raise BluetoothError("Adapter not initialized")
-
-                logger.info(f"Scanning for device: {device_name}")
-
-                # Start discovery
-                await self._adapter.call_start_discovery()  # type: ignore[attr-defined]
-
-                # Wait for scan
-                await asyncio.sleep(scan_timeout)
-
-                # Get object manager to enumerate all Bluetooth objects
-                root_intro = await self._get_introspection("/")
-                manager_proxy = self._bus.get_proxy_object("org.bluez", "/", root_intro)  # type: ignore[union-attr]
-                manager = manager_proxy.get_interface("org.freedesktop.DBus.ObjectManager")
-
-                objects: dict[str, dict[str, Any]] = await manager.call_get_managed_objects()  # type: ignore[attr-defined]
-
-                # Search through discovered devices
-                for _path, interfaces in objects.items():
-                    if "org.bluez.Device1" in interfaces:
-                        device_props = interfaces["org.bluez.Device1"]
-                        if device_props.get("Name") == device_name:
-                            mac_address = device_props.get("Address")
-                            logger.info(f"Found {device_name} at {mac_address}")
-                            await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
-                            return mac_address
-
-                await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
-                logger.warning(f"Device {device_name} not found")
-                return None
-
-            except DBusError as e:
-                try:
-                    if self._adapter is not None:
-                        await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
-                except Exception:
-                    pass
-                raise BluetoothError(f"D-Bus error during discovery: {e}")
-            except BluetoothError:
-                raise
-            except Exception as e:
-                try:
-                    if self._adapter is not None:
-                        await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
-                except Exception:
-                    pass
-                raise BluetoothError(f"Device discovery failed: {e}")
-
-        return asyncio.run(_async_impl())
+                if self._adapter is not None:
+                    await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            raise BluetoothError(f"D-Bus error during discovery: {e}")
+        except BluetoothError:
+            raise
+        except Exception as e:
+            try:
+                if self._adapter is not None:
+                    await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            raise BluetoothError(f"Device discovery failed: {e}")
 
     def find_device_by_mac(self, mac_address: str) -> bool:
         """Check if device with MAC address exists/is known.
@@ -214,19 +263,19 @@ class BluetoothManager:
         Returns:
             True if device exists, False otherwise
         """
+        return self._run_async(self._async_find_device_by_mac(mac_address))
 
-        async def _async_impl() -> bool:
-            device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
+    async def _async_find_device_by_mac(self, mac_address: str) -> bool:
+        """Async implementation of find_device_by_mac."""
+        device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
 
-            try:
-                if self._bus is None:
-                    return False
-                await self._get_introspection(device_path)
-                return True
-            except Exception:
+        try:
+            if self._bus is None:
                 return False
-
-        return asyncio.run(_async_impl())
+            await self._get_introspection(device_path)
+            return True
+        except Exception:
+            return False
 
     def pair_device(self, mac_address: str, pin: str = "0000") -> bool:
         """Pair with a Bluetooth device.
@@ -241,43 +290,43 @@ class BluetoothManager:
         Raises:
             BluetoothError: If pairing fails
         """
+        return self._run_async(self._async_pair_device(mac_address, pin))
 
-        async def _async_impl() -> bool:
-            device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
+    async def _async_pair_device(self, mac_address: str, pin: str) -> bool:
+        """Async implementation of pair_device."""
+        device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
 
-            try:
-                if self._bus is None:
-                    raise BluetoothError("Bus not initialized")
+        try:
+            if self._bus is None:
+                raise BluetoothError("Bus not initialized")
 
-                # Get device introspection and proxy
-                device_intro = await self._get_introspection(device_path)
-                device_proxy = self._bus.get_proxy_object(
-                    "org.bluez", device_path, device_intro
-                )
-                device_iface = device_proxy.get_interface("org.bluez.Device1")
-                device_props = device_proxy.get_interface(
-                    "org.freedesktop.DBus.Properties"
-                )
+            # Get device introspection and proxy
+            device_intro = await self._get_introspection(device_path)
+            device_proxy = self._bus.get_proxy_object(
+                "org.bluez", device_path, device_intro
+            )
+            device_iface = device_proxy.get_interface("org.bluez.Device1")
+            device_props = device_proxy.get_interface(
+                "org.freedesktop.DBus.Properties"
+            )
 
-                # Check if already paired
-                paired: bool = await device_props.call_get("org.bluez.Device1", "Paired")  # type: ignore[attr-defined]
-                if paired:
-                    logger.info(f"Device {mac_address} already paired")
-                    return True
-
-                logger.info(f"Pairing with {mac_address}...")
-                await device_iface.call_pair()  # type: ignore[attr-defined]
-                logger.info(f"Successfully paired with {mac_address}")
+            # Check if already paired
+            paired: bool = await device_props.call_get("org.bluez.Device1", "Paired")  # type: ignore[attr-defined]
+            if paired:
+                logger.info(f"Device {mac_address} already paired")
                 return True
 
-            except DBusError as e:
-                raise BluetoothError(f"D-Bus error during pairing: {e}")
-            except BluetoothError:
-                raise
-            except Exception as e:
-                raise BluetoothError(f"Pairing failed: {e}")
+            logger.info(f"Pairing with {mac_address}...")
+            await device_iface.call_pair()  # type: ignore[attr-defined]
+            logger.info(f"Successfully paired with {mac_address}")
+            return True
 
-        return asyncio.run(_async_impl())
+        except DBusError as e:
+            raise BluetoothError(f"D-Bus error during pairing: {e}")
+        except BluetoothError:
+            raise
+        except Exception as e:
+            raise BluetoothError(f"Pairing failed: {e}")
 
     def trust_device(self, mac_address: str) -> bool:
         """Trust a device so it can auto-reconnect.
@@ -291,36 +340,36 @@ class BluetoothManager:
         Raises:
             BluetoothError: If trust operation fails
         """
+        return self._run_async(self._async_trust_device(mac_address))
 
-        async def _async_impl() -> bool:
-            device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
+    async def _async_trust_device(self, mac_address: str) -> bool:
+        """Async implementation of trust_device."""
+        device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
 
-            try:
-                if self._bus is None:
-                    raise BluetoothError("Bus not initialized")
+        try:
+            if self._bus is None:
+                raise BluetoothError("Bus not initialized")
 
-                # Get device introspection and proxy
-                device_intro = await self._get_introspection(device_path)
-                device_proxy = self._bus.get_proxy_object(
-                    "org.bluez", device_path, device_intro
-                )
-                device_props = device_proxy.get_interface(
-                    "org.freedesktop.DBus.Properties"
-                )
+            # Get device introspection and proxy
+            device_intro = await self._get_introspection(device_path)
+            device_proxy = self._bus.get_proxy_object(
+                "org.bluez", device_path, device_intro
+            )
+            device_props = device_proxy.get_interface(
+                "org.freedesktop.DBus.Properties"
+            )
 
-                # Set Trusted property
-                await device_props.call_set("org.bluez.Device1", "Trusted", ("b", True))  # type: ignore[attr-defined]
-                logger.info(f"Device {mac_address} is now trusted")
-                return True
+            # Set Trusted property
+            await device_props.call_set("org.bluez.Device1", "Trusted", ("b", True))  # type: ignore[attr-defined]
+            logger.info(f"Device {mac_address} is now trusted")
+            return True
 
-            except DBusError as e:
-                raise BluetoothError(f"D-Bus error setting trust: {e}")
-            except BluetoothError:
-                raise
-            except Exception as e:
-                raise BluetoothError(f"Trust failed: {e}")
-
-        return asyncio.run(_async_impl())
+        except DBusError as e:
+            raise BluetoothError(f"D-Bus error setting trust: {e}")
+        except BluetoothError:
+            raise
+        except Exception as e:
+            raise BluetoothError(f"Trust failed: {e}")
 
     def connect_device(
         self, mac_address: str, max_retries: int = 3, retry_delay: float = 2.0
@@ -338,71 +387,77 @@ class BluetoothManager:
         Raises:
             BluetoothError: If all connection attempts fail
         """
+        timeout = max(max_retries * (retry_delay + 10), _DEFAULT_ASYNC_TIMEOUT)
+        return self._run_async(
+            self._async_connect_device(mac_address, max_retries, retry_delay),
+            timeout=timeout,
+        )
 
-        async def _async_impl() -> bool:
-            device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
+    async def _async_connect_device(
+        self, mac_address: str, max_retries: int, retry_delay: float
+    ) -> bool:
+        """Async implementation of connect_device."""
+        device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
 
-            try:
-                if self._bus is None:
-                    raise BluetoothError("Bus not initialized")
+        try:
+            if self._bus is None:
+                raise BluetoothError("Bus not initialized")
 
-                # Get device introspection and proxy
-                device_intro = await self._get_introspection(device_path)
-                device_proxy = self._bus.get_proxy_object(
-                    "org.bluez", device_path, device_intro
-                )
-                device_iface = device_proxy.get_interface("org.bluez.Device1")
-                device_props = device_proxy.get_interface(
-                    "org.freedesktop.DBus.Properties"
-                )
+            # Get device introspection and proxy
+            device_intro = await self._get_introspection(device_path)
+            device_proxy = self._bus.get_proxy_object(
+                "org.bluez", device_path, device_intro
+            )
+            device_iface = device_proxy.get_interface("org.bluez.Device1")
+            device_props = device_proxy.get_interface(
+                "org.freedesktop.DBus.Properties"
+            )
 
-                # Check if already connected
-                connected: bool = await device_props.call_get("org.bluez.Device1", "Connected")  # type: ignore[attr-defined]
-                if connected:
-                    logger.info(f"Device {mac_address} already connected")
+            # Check if already connected
+            connected: bool = await device_props.call_get("org.bluez.Device1", "Connected")  # type: ignore[attr-defined]
+            if connected:
+                logger.info(f"Device {mac_address} already connected")
+                return True
+
+            # Try connecting with retries
+            last_error: DBusError | None = None
+            for attempt in range(1, max_retries + 1):
+                try:
+                    logger.info(
+                        f"Connecting to {mac_address} (attempt {attempt}/{max_retries})..."
+                    )
+                    await device_iface.call_connect()  # type: ignore[attr-defined]
+                    logger.info(f"Successfully connected to {mac_address}")
                     return True
+                except DBusError as e:
+                    last_error = e
+                    error_str = str(e)
 
-                # Try connecting with retries
-                last_error: DBusError | None = None
-                for attempt in range(1, max_retries + 1):
-                    try:
-                        logger.info(
-                            f"Connecting to {mac_address} (attempt {attempt}/{max_retries})..."
-                        )
-                        await device_iface.call_connect()  # type: ignore[attr-defined]
-                        logger.info(f"Successfully connected to {mac_address}")
-                        return True
-                    except DBusError as e:
-                        last_error = e
-                        error_str = str(e)
+                    # Check for "Operation currently not available" error
+                    if (
+                        "NotAvailable" in error_str
+                        or "not available" in error_str.lower()
+                    ):
+                        if attempt < max_retries:
+                            logger.warning(
+                                f"Device not ready (attempt {attempt}/{max_retries}), "
+                                f"waiting {retry_delay}s before retry..."
+                            )
+                            await asyncio.sleep(retry_delay)
+                            continue
 
-                        # Check for "Operation currently not available" error
-                        if (
-                            "NotAvailable" in error_str
-                            or "not available" in error_str.lower()
-                        ):
-                            if attempt < max_retries:
-                                logger.warning(
-                                    f"Device not ready (attempt {attempt}/{max_retries}), "
-                                    f"waiting {retry_delay}s before retry..."
-                                )
-                                await asyncio.sleep(retry_delay)
-                                continue
+                    # For other errors, don't retry
+                    raise BluetoothError(f"D-Bus connection error: {e}")
 
-                        # For other errors, don't retry
-                        raise BluetoothError(f"D-Bus connection error: {e}")
+            # All retries exhausted
+            raise BluetoothError(
+                f"Connection failed after {max_retries} attempts: {last_error}"
+            )
 
-                # All retries exhausted
-                raise BluetoothError(
-                    f"Connection failed after {max_retries} attempts: {last_error}"
-                )
-
-            except BluetoothError:
-                raise
-            except Exception as e:
-                raise BluetoothError(f"Connection failed: {e}")
-
-        return asyncio.run(_async_impl())
+        except BluetoothError:
+            raise
+        except Exception as e:
+            raise BluetoothError(f"Connection failed: {e}")
 
     def disconnect_device(self, mac_address: str) -> bool:
         """Disconnect from a Bluetooth device.
@@ -416,33 +471,33 @@ class BluetoothManager:
         Raises:
             BluetoothError: If disconnection fails
         """
+        return self._run_async(self._async_disconnect_device(mac_address))
 
-        async def _async_impl() -> bool:
-            device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
+    async def _async_disconnect_device(self, mac_address: str) -> bool:
+        """Async implementation of disconnect_device."""
+        device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
 
-            try:
-                if self._bus is None:
-                    raise BluetoothError("Bus not initialized")
+        try:
+            if self._bus is None:
+                raise BluetoothError("Bus not initialized")
 
-                # Get device introspection and proxy
-                device_intro = await self._get_introspection(device_path)
-                device_proxy = self._bus.get_proxy_object(
-                    "org.bluez", device_path, device_intro
-                )
-                device_iface = device_proxy.get_interface("org.bluez.Device1")
+            # Get device introspection and proxy
+            device_intro = await self._get_introspection(device_path)
+            device_proxy = self._bus.get_proxy_object(
+                "org.bluez", device_path, device_intro
+            )
+            device_iface = device_proxy.get_interface("org.bluez.Device1")
 
-                await device_iface.call_disconnect()  # type: ignore[attr-defined]
-                logger.info(f"Disconnected from {mac_address}")
-                return True
+            await device_iface.call_disconnect()  # type: ignore[attr-defined]
+            logger.info(f"Disconnected from {mac_address}")
+            return True
 
-            except DBusError as e:
-                raise BluetoothError(f"D-Bus error during disconnect: {e}")
-            except BluetoothError:
-                raise
-            except Exception as e:
-                raise BluetoothError(f"Disconnection failed: {e}")
-
-        return asyncio.run(_async_impl())
+        except DBusError as e:
+            raise BluetoothError(f"D-Bus error during disconnect: {e}")
+        except BluetoothError:
+            raise
+        except Exception as e:
+            raise BluetoothError(f"Disconnection failed: {e}")
 
     def discover_rfcomm_channel(self, mac_address: str) -> int:
         """Discover the RFCOMM channel for Serial Port Profile (SPP).
@@ -509,3 +564,20 @@ class BluetoothManager:
 
         logger.info(f"Device {mac_address} ready on channel {channel}")
         return mac_address, channel
+
+    def close(self) -> None:
+        """Clean up the background event loop and D-Bus connection.
+
+        Disconnects from the D-Bus bus and stops the background event loop thread.
+        """
+        try:
+            if self._bus is not None:
+                self._loop.call_soon_threadsafe(self._bus.disconnect)
+        except Exception:
+            pass
+
+        try:
+            self._loop.call_soon_threadsafe(self._loop.stop)
+            self._thread.join(timeout=5.0)
+        except Exception:
+            pass

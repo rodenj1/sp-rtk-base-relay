@@ -14,17 +14,16 @@ if TYPE_CHECKING:
     from dbus_fast import BusType, DBusError
     from dbus_fast.aio import MessageBus as AioMessageBus
     from dbus_fast.introspection import Node
-    from dbus_fast.proxy_object import ProxyInterface
 
 try:
     from dbus_fast import BusType, DBusError
     from dbus_fast.aio import MessageBus as AioMessageBus
     from dbus_fast.introspection import Node
-    from dbus_fast.proxy_object import ProxyInterface
     
     _dbus_fast_available = True
 except ImportError:
     _dbus_fast_available = False
+
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +66,7 @@ class BluetoothManager:
 
         self.adapter_path = f"/org/bluez/{adapter_name}"
         self._bus: "AioMessageBus | None" = None
-        self._adapter: "ProxyInterface | None" = None
+        self._adapter: Any = None
         
         # Hybrid introspection cache: pre-cache adapter/root, lazy-cache devices
         self._introspection_cache: dict[str, "Node"] = {}

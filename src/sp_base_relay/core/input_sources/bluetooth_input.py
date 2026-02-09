@@ -2,17 +2,25 @@
 
 This module provides a Bluetooth input source implementation for reading
 RTCM correction data from GNSS receivers via Bluetooth SPP (Serial Port Profile).
-Uses native BlueZ D-Bus API via pydbus and native Python Bluetooth sockets.
+Uses native BlueZ D-Bus API via dbus-fast and native Python Bluetooth sockets.
 """
 
 import logging
 import socket
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from dataclasses import dataclass
 
 from .base_input import InputSource
 from ..bluetooth_manager import BluetoothManager, BluetoothError
 from ...exceptions import InputSourceError
+
+# Bluetooth socket constants (Linux-only)
+if TYPE_CHECKING:
+    AF_BLUETOOTH: int = getattr(socket, "AF_BLUETOOTH", 31)
+    BTPROTO_RFCOMM: int = getattr(socket, "BTPROTO_RFCOMM", 3)
+else:
+    AF_BLUETOOTH = getattr(socket, "AF_BLUETOOTH", 31)
+    BTPROTO_RFCOMM = getattr(socket, "BTPROTO_RFCOMM", 3)
 
 logger = logging.getLogger(__name__)
 
@@ -111,9 +119,9 @@ class BluetoothInputSource(InputSource):
                 
                 # Create AF_BLUETOOTH socket
                 self.bt_socket = socket.socket(
-                    socket.AF_BLUETOOTH,
+                    AF_BLUETOOTH,  # type: ignore[arg-type]
                     socket.SOCK_STREAM,
-                    socket.BTPROTO_RFCOMM
+                    BTPROTO_RFCOMM  # type: ignore[arg-type]
                 )
                 self.bt_socket.settimeout(self.config.connect_timeout)
                 
@@ -217,7 +225,7 @@ class BluetoothInputSource(InputSource):
         Returns:
             Dictionary with Bluetooth connection details
         """
-        info = {
+        info: dict[str, Any] = {
             "device_name": self.config.device_name,
             "mac_address": self.config.mac_address or self.connected_mac,
             "adapter": self.config.adapter_name,

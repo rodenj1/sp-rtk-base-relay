@@ -1,213 +1,217 @@
 """Mock Bluetooth fixtures for testing.
 
-This module provides mock implementations of pydbus and D-Bus objects
+This module provides mock implementations of dbus-fast and D-Bus objects
 for testing Bluetooth functionality without requiring actual hardware.
 """
 
 from typing import Any
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock
 
 
-class MockDBusDevice:
-    """Mock D-Bus Bluetooth device object."""
+class MockProxyInterface:
+    """Mock dbus-fast ProxyInterface with call_* methods."""
     
-    def __init__(
-        self,
-        mac_address: str,
-        name: str = "Test Device",
-        paired: bool = False,
-        trusted: bool = False,
-        connected: bool = False
-    ):
-        self.Address = mac_address
-        self.Name = name
-        self.Paired = paired
-        self.Trusted = trusted
-        self.Connected = connected
-        
-        self._pair_should_fail = False
-        self._connect_should_fail = False
-        self._disconnect_should_fail = False
+    def __init__(self, interface_name: str, device_data: dict[str, Any] | None = None):
+        self.interface_name = interface_name
+        self._device_data = device_data or {}
+        self._should_fail: dict[str, bool] = {}
     
-    def Pair(self) -> None:
-        """Mock pairing method."""
-        if self._pair_should_fail:
-            raise Exception("Pairing failed")
-        self.Paired = True
-    
-    def Connect(self) -> None:
-        """Mock connection method."""
-        if self._connect_should_fail:
-            raise Exception("Connection failed")
-        self.Connected = True
-    
-    def Disconnect(self) -> None:
-        """Mock disconnection method."""
-        if self._disconnect_should_fail:
-            raise Exception("Disconnection failed")
-        self.Connected = False
-    
-    def set_pair_should_fail(self, should_fail: bool) -> None:
-        """Configure pairing to fail for testing."""
-        self._pair_should_fail = should_fail
-    
-    def set_connect_should_fail(self, should_fail: bool) -> None:
-        """Configure connection to fail for testing."""
-        self._connect_should_fail = should_fail
-    
-    def set_disconnect_should_fail(self, should_fail: bool) -> None:
-        """Configure disconnection to fail for testing."""
-        self._disconnect_should_fail = should_fail
-
-
-class MockDBusAdapter:
-    """Mock D-Bus Bluetooth adapter object."""
-    
-    def __init__(self):
-        self._discovery_active = False
-        self._discovery_should_fail = False
-    
-    def StartDiscovery(self) -> None:
-        """Mock start discovery method."""
-        if self._discovery_should_fail:
+    async def call_start_discovery(self) -> None:
+        """Mock StartDiscovery method."""
+        if self._should_fail.get("start_discovery"):
             raise Exception("Discovery failed")
-        self._discovery_active = True
     
-    def StopDiscovery(self) -> None:
-        """Mock stop discovery method."""
-        self._discovery_active = False
+    async def call_stop_discovery(self) -> None:
+        """Mock StopDiscovery method."""
+        pass
     
-    def set_discovery_should_fail(self, should_fail: bool) -> None:
-        """Configure discovery to fail for testing."""
-        self._discovery_should_fail = should_fail
+    async def call_pair(self) -> None:
+        """Mock Pair method."""
+        if self._should_fail.get("pair"):
+            raise Exception("Pairing failed")
+        self._device_data["Paired"] = True
     
-    @property
-    def is_discovering(self) -> bool:
-        """Check if discovery is active."""
-        return self._discovery_active
+    async def call_connect(self) -> None:
+        """Mock Connect method."""
+        if self._should_fail.get("connect"):
+            raise Exception("Connection failed")
+        self._device_data["Connected"] = True
+    
+    async def call_disconnect(self) -> None:
+        """Mock Disconnect method."""
+        if self._should_fail.get("disconnect"):
+            raise Exception("Disconnection failed")
+        self._device_data["Connected"] = False
+    
+    async def call_get(self, interface: str, property_name: str) -> Any:
+        """Mock Properties Get method."""
+        if interface == "org.bluez.Device1":
+            return self._device_data.get(property_name, False)
+        return None
+    
+    async def call_set(self, interface: str, property_name: str, value: tuple[str, Any]) -> None:
+        """Mock Properties Set method."""
+        if interface == "org.bluez.Device1":
+            _, actual_value = value
+            self._device_data[property_name] = actual_value
+    
+    async def call_get_managed_objects(self) -> dict[str, dict[str, Any]]:
+        """Mock ObjectManager GetManagedObjects method."""
+        # This will be populated by the MockMessageBus
+        return self._device_data.get("_managed_objects", {})
+    
+    def set_should_fail(self, method: str, should_fail: bool = True) -> None:
+        """Configure a method to fail for testing."""
+        self._should_fail[method] = should_fail
 
 
-class MockObjectManager:
-    """Mock D-Bus ObjectManager."""
+class MockProxyObject:
+    """Mock dbus-fast ProxyObject."""
     
-    def __init__(self):
-        self._devices: dict[str, MockDBusDevice] = {}
+    def __init__(self, bus_name: str, path: str, device_data: dict[str, Any] | None = None):
+        self.bus_name = bus_name
+        self.path = path
+        self._device_data = device_data or {}
+        self._interfaces: dict[str, MockProxyInterface] = {}
     
-    def GetManagedObjects(self) -> dict[str, dict[str, Any]]:
-        """Return mock managed objects."""
-        objects = {}
+    def get_interface(self, interface_name: str) -> MockProxyInterface:
+        """Get a mock interface."""
+        if interface_name not in self._interfaces:
+            self._interfaces[interface_name] = MockProxyInterface(
+                interface_name, self._device_data
+            )
+        return self._interfaces[interface_name]
+
+
+class MockNode:
+    """Mock introspection Node object."""
+    
+    def __init__(self, path: str):
+        self.path = path
+
+
+class MockMessageBus:
+    """Mock dbus-fast async MessageBus."""
+    
+    def __init__(self, bus_type: Any = None):
+        self.bus_type = bus_type
+        self._devices: dict[str, dict[str, Any]] = {}
+        self._introspection_cache: dict[str, MockNode] = {}
+        self._should_fail_paths: set[str] = set()
+    
+    async def connect(self) -> "MockMessageBus":
+        """Mock connect method."""
+        return self
+    
+    async def introspect(self, bus_name: str, path: str) -> MockNode:
+        """Mock introspect method."""
+        if path in self._should_fail_paths:
+            raise Exception(f"Introspection failed for {path}")
         
-        for device_path, device in self._devices.items():
+        if path not in self._introspection_cache:
+            self._introspection_cache[path] = MockNode(path)
+        return self._introspection_cache[path]
+    
+    def get_proxy_object(
+        self, bus_name: str, path: str, introspection: Any
+    ) -> MockProxyObject:
+        """Get a mock proxy object."""
+        if path in self._should_fail_paths:
+            raise Exception(f"Failed to get proxy for {path}")
+        
+        # For ObjectManager (root path), include managed objects
+        if path == "/":
+            device_data = {"_managed_objects": self._get_managed_objects()}
+            return MockProxyObject(bus_name, path, device_data)
+        
+        # For device paths
+        if "/dev_" in path:
+            device_data = self._devices.get(path, {})
+            return MockProxyObject(bus_name, path, device_data)
+        
+        # For adapter or other paths
+        return MockProxyObject(bus_name, path)
+    
+    def _get_managed_objects(self) -> dict[str, dict[str, Any]]:
+        """Get all managed objects for ObjectManager."""
+        objects = {}
+        for device_path, device_data in self._devices.items():
             objects[device_path] = {
                 "org.bluez.Device1": {
-                    "Address": device.Address,
-                    "Name": device.Name,
-                    "Paired": device.Paired,
-                    "Trusted": device.Trusted,
-                    "Connected": device.Connected,
+                    "Address": device_data.get("Address", ""),
+                    "Name": device_data.get("Name", "Unknown"),
+                    "Paired": device_data.get("Paired", False),
+                    "Trusted": device_data.get("Trusted", False),
+                    "Connected": device_data.get("Connected", False),
                 }
             }
-        
         return objects
-    
-    def add_device(self, mac_address: str, name: str, device_path: str) -> MockDBusDevice:
-        """Add a mock device to the manager."""
-        device = MockDBusDevice(mac_address=mac_address, name=name)
-        self._devices[device_path] = device
-        return device
-    
-    def remove_device(self, device_path: str) -> None:
-        """Remove a mock device from the manager."""
-        if device_path in self._devices:
-            del self._devices[device_path]
-    
-    def clear_devices(self) -> None:
-        """Remove all mock devices."""
-        self._devices.clear()
-
-
-class MockSystemBus:
-    """Mock pydbus SystemBus."""
-    
-    def __init__(self):
-        self._adapter = MockDBusAdapter()
-        self._object_manager = MockObjectManager()
-        self._devices: dict[str, MockDBusDevice] = {}
-        self._get_should_fail_for: set[str] = set()
-    
-    def get(self, bus_name: str, object_path: str) -> Any:
-        """Mock get method for D-Bus objects."""
-        # Check if this path should fail
-        if object_path in self._get_should_fail_for:
-            raise Exception(f"Failed to get object: {object_path}")
-        
-        # Return object manager (check first)
-        if object_path == "/":
-            return self._object_manager
-        
-        # Return device (check before adapter since device paths contain adapter path)
-        if "/dev_" in object_path:
-            if object_path in self._devices:
-                return self._devices[object_path]
-            else:
-                raise Exception(f"Device not found: {object_path}")
-        
-        # Return adapter
-        if object_path.startswith("/org/bluez/hci"):
-            return self._adapter
-        
-        raise Exception(f"Unknown object path: {object_path}")
     
     def add_device(
         self,
         mac_address: str,
         name: str = "Test Device",
-        adapter_path: str = "/org/bluez/hci0"
-    ) -> MockDBusDevice:
-        """Add a mock device."""
+        adapter_path: str = "/org/bluez/hci0",
+        paired: bool = False,
+        trusted: bool = False,
+        connected: bool = False
+    ) -> None:
+        """Add a mock device to the bus."""
         device_path = f"{adapter_path}/dev_{mac_address.replace(':', '_')}"
-        device = MockDBusDevice(mac_address=mac_address, name=name)
-        self._devices[device_path] = device
-        # Also add to object manager for discovery
-        self._object_manager.add_device(mac_address, name, device_path)
-        return device
+        self._devices[device_path] = {
+            "Address": mac_address,
+            "Name": name,
+            "Paired": paired,
+            "Trusted": trusted,
+            "Connected": connected,
+        }
     
     def remove_device(self, mac_address: str, adapter_path: str = "/org/bluez/hci0") -> None:
-        """Remove a mock device."""
+        """Remove a mock device from the bus."""
         device_path = f"{adapter_path}/dev_{mac_address.replace(':', '_')}"
         if device_path in self._devices:
             del self._devices[device_path]
-        self._object_manager.remove_device(device_path)
     
-    def set_get_should_fail(self, object_path: str, should_fail: bool = True) -> None:
-        """Configure get() to fail for specific path."""
+    def set_should_fail(self, path: str, should_fail: bool = True) -> None:
+        """Configure operations on a path to fail."""
         if should_fail:
-            self._get_should_fail_for.add(object_path)
+            self._should_fail_paths.add(path)
         else:
-            self._get_should_fail_for.discard(object_path)
+            self._should_fail_paths.discard(path)
+    
+    def get_device_data(self, mac_address: str, adapter_path: str = "/org/bluez/hci0") -> dict[str, Any] | None:
+        """Get device data for inspection in tests."""
+        device_path = f"{adapter_path}/dev_{mac_address.replace(':', '_')}"
+        return self._devices.get(device_path)
     
     def clear_all_devices(self) -> None:
         """Remove all mock devices."""
         self._devices.clear()
-        self._object_manager.clear_devices()
-    
-    @property
-    def adapter(self) -> MockDBusAdapter:
-        """Get the mock adapter."""
-        return self._adapter
-    
-    @property
-    def object_manager(self) -> MockObjectManager:
-        """Get the mock object manager."""
-        return self._object_manager
 
 
-def create_mock_pydbus_module() -> MagicMock:
-    """Create a mock pydbus module for testing.
+def create_mock_dbus_fast() -> tuple[MagicMock, type[MockMessageBus], Any]:
+    """Create mock dbus-fast module components for testing.
     
     Returns:
-        Mock pydbus module with SystemBus that returns MockSystemBus
+        Tuple of (BusType mock, MessageBus class, DBusError class)
     """
-    mock_pydbus = MagicMock()
-    mock_pydbus.SystemBus = MockSystemBus
-    return mock_pydbus
+    # Mock BusType enum
+    mock_bus_type = MagicMock()
+    mock_bus_type.SYSTEM = "SYSTEM"
+    mock_bus_type.SESSION = "SESSION"
+    
+    # Mock DBusError class
+    class MockDBusError(Exception):
+        """Mock D-Bus error."""
+        pass
+    
+    return mock_bus_type, MockMessageBus, MockDBusError
+
+
+def create_mock_message_bus() -> MockMessageBus:
+    """Create a standalone mock MessageBus for testing.
+    
+    Returns:
+        MockMessageBus instance ready for testing
+    """
+    return MockMessageBus()

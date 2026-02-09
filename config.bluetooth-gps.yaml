@@ -1,0 +1,74 @@
+# SP-Base-Relay Configuration for Bluetooth GPS
+# Device: RTK_BASE_ROD (98:D3:51:FE:FE:E4)
+# This configuration uses a Bluetooth GPS device connected via rfcomm
+
+# Input Source Configuration - Bluetooth GPS via Serial Port
+input:
+  source: serial  # Changed from 'tcp' to 'serial' for Bluetooth GPS
+  config:
+    port: /dev/rfcomm0        # Bluetooth serial port created by bluetooth-gps.service
+    baudrate: 115200          # PySerial standard field name
+    bytesize: 8               # PySerial standard field name  
+    stopbits: 1               # PySerial standard field name
+    parity: "N"               # PySerial standard: N (None), E (Even), O (Odd), M (Mark), S (Space)
+    timeout: 1.0              # Read timeout in seconds
+    rtscts: false             # Hardware flow control disabled
+    xonxoff: false            # Software flow control disabled
+
+# RTCM Server Configuration
+server:
+  host: 91.186.9.136
+  port: 50010
+  username: RODEN01
+  password: dae5
+  connection_timeout: 10
+  read_timeout: 30
+  heartbeat_timeout: 30
+  retry_initial_delay: 15     # 15s delay for graceful server disconnects
+  retry_max_delay: 60
+  retry_multiplier: 2.0
+
+# Logging Configuration
+logging:
+  level: INFO                 # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: json                # Options: json, text
+  file: /var/log/sp-base-relay/sp-base-relay.log
+  max_size_mb: 50
+  backup_count: 3
+
+# Metrics Configuration
+metrics:
+  enabled: true
+  host: 0.0.0.0              # Listen on all interfaces
+  port: 8080
+  path: /metrics
+
+# Connection Monitoring Configuration
+monitoring:
+  heartbeat_timeout: 30
+  reconnect_delay_base: 1
+  reconnect_max_delay: 60
+  max_reconnect_attempts: 0   # 0 = unlimited
+  connection_check_interval: 5
+
+# Service Configuration
+service:
+  daemon: false
+  pid_file: /var/run/sp-base-relay.pid
+  user: sp-base-relay
+  group: sp-base-relay
+
+# Notes:
+# - Bluetooth GPS device must be paired and trusted before starting
+# - bluetooth-gps.service must be running to create /dev/rfcomm0
+# - Serial port permissions: should be readable/writable by sp-base-relay user
+# - For troubleshooting, use: tools/bluetooth/test-connection.sh
+#
+# PySerial Standard Field Names (now aligned with SerialInputConfig):
+# - baudrate: 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600
+# - bytesize: 5, 6, 7, 8
+# - parity: "N" (None), "E" (Even), "O" (Odd), "M" (Mark), "S" (Space)
+# - stopbits: 1, 1.5, 2
+# - timeout: read timeout in seconds
+# - rtscts: hardware flow control (true/false)
+# - xonxoff: software flow control (true/false)

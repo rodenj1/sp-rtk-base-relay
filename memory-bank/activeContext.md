@@ -532,6 +532,46 @@ WARNING: (continues with warnings on each retry)
 - ✅ Coverage maintained: 79% rtcm_client, 84% data_pipeline, 73% main.py
 - ✅ No functional changes - purely logging level adjustments
 
+## Recent Changes and Decisions
+
+### dbus-fast Migration Decision (February 9, 2026)
+**STATUS**: Planning Complete - Ready for Implementation
+
+**Problem Identified**:
+- pydbus library unmaintained since 2018, no type hints
+- 50+ pylance/pyright errors in Bluetooth components
+- Blocking achievement of 100% type safety compliance
+
+**Options Evaluated**:
+1. **dasbus** - Initially considered, actively maintained but lacking desired type hints
+2. **dbus-fast** ✅ **SELECTED** - Actively maintained, full type hints, best performance
+
+**Why dbus-fast Won**:
+- ✅ **Actively maintained**: Recent 2025/2026 commits from Bluetooth-Devices org
+- ✅ **Full type hint support**: Complete type stubs resolve all pylance errors
+- ✅ **Best performance**: Cython-optimized (faster than pydbus and dasbus)
+- ✅ **Excellent documentation**: 209 code examples, trust score 7.9
+- ✅ **Modern Python**: Asyncio-based with async/await patterns
+- ✅ **No C dependencies**: Pure Python (unlike python-sdbus)
+
+**Architecture Decision**: 
+- Use **sync wrapper pattern** with `asyncio.run()` internally
+- Keep BluetoothManager API synchronous (minimal disruption)
+- Slight performance overhead (~10-50ms per D-Bus call) acceptable for occasional operations
+- Alternative full asyncio refactor rejected (8-10 hours, unnecessary disruption)
+
+**Implementation Plan**: 
+- Timeline: 3-4 hours estimated
+- Risk Level: MEDIUM (asyncio complexity mitigated by wrapper pattern)
+- Files affected: ~150 lines in bluetooth_manager.py, ~10 lines bluetooth_input.py, ~100 lines test mocks
+- Migration plan: `dbus-fast-migration-plan.md`
+
+**Next Steps**:
+- Phase 1: Install dbus-fast, remove pydbus/pygobject (30 min)
+- Phase 2: Implement async wrappers in bluetooth_manager.py (120 min)
+- Phase 3: Update tests and validate (60 min)
+- Phase 4: Documentation updates (30 min)
+
 ## Active Decisions and Considerations
 
 ### Phase 7: CLI & Service Management (Current Priority)

@@ -83,11 +83,25 @@ class MockProxyObject:
         return self._interfaces[interface_name]
 
 
+class MockInterface:
+    """Mock introspection Interface object."""
+    
+    def __init__(self, name: str):
+        self.name = name
+
+
 class MockNode:
     """Mock introspection Node object."""
     
     def __init__(self, path: str):
         self.path = path
+        # Add common BlueZ interfaces
+        self.interfaces = [
+            MockInterface("org.bluez.Adapter1"),
+            MockInterface("org.bluez.Device1"),
+            MockInterface("org.freedesktop.DBus.Properties"),
+            MockInterface("org.freedesktop.DBus.ObjectManager"),
+        ]
 
 
 class MockMessageBus:

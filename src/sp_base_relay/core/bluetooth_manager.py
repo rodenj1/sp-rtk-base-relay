@@ -84,7 +84,7 @@ class BluetoothManager:
         async def _async_init() -> None:
             try:
                 # Connect to system bus
-                self._bus = await MessageBus(bus_type=BusType.SYSTEM).connect()  # type: ignore[misc]
+                self._bus = await AioMessageBus(bus_type=BusType.SYSTEM).connect()  # type: ignore[misc]
 
                 # Pre-cache adapter and root introspection (these never change)
                 adapter_intro = await self._get_introspection(self.adapter_path)

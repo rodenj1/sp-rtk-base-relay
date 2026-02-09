@@ -49,10 +49,19 @@ class MockProxyInterface:
             return self._device_data.get(property_name, False)
         return None
     
-    async def call_set(self, interface: str, property_name: str, value: tuple[str, Any]) -> None:
-        """Mock Properties Set method."""
+    async def call_set(self, interface: str, property_name: str, value: Any) -> None:
+        """Mock Properties Set method.
+        
+        Handles both dbus-fast Variant objects and raw tuples.
+        """
         if interface == "org.bluez.Device1":
-            _, actual_value = value
+            # Handle dbus-fast Variant objects (have .value attribute)
+            if hasattr(value, "value"):
+                actual_value = value.value
+            elif isinstance(value, tuple) and len(value) == 2:
+                _, actual_value = value
+            else:
+                actual_value = value
             self._device_data[property_name] = actual_value
     
     async def call_get_managed_objects(self) -> dict[str, dict[str, Any]]:

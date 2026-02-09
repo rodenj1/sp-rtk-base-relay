@@ -14,12 +14,12 @@ import threading
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from dbus_fast import BusType, DBusError
+    from dbus_fast import BusType, DBusError, Variant
     from dbus_fast.aio import MessageBus as AioMessageBus
     from dbus_fast.introspection import Node
 
 try:
-    from dbus_fast import BusType, DBusError
+    from dbus_fast import BusType, DBusError, Variant
     from dbus_fast.aio import MessageBus as AioMessageBus
     from dbus_fast.introspection import Node
     
@@ -359,8 +359,8 @@ class BluetoothManager:
                 "org.freedesktop.DBus.Properties"
             )
 
-            # Set Trusted property
-            await device_props.call_set("org.bluez.Device1", "Trusted", ("b", True))  # type: ignore[attr-defined]
+            # Set Trusted property using dbus-fast Variant
+            await device_props.call_set("org.bluez.Device1", "Trusted", Variant("b", True))  # type: ignore[attr-defined]
             logger.info(f"Device {mac_address} is now trusted")
             return True
 

@@ -200,41 +200,97 @@ class BluetoothManager:
             timeout=max(scan_timeout + 30, _DEFAULT_ASYNC_TIMEOUT),
         )
 
-    async def _async_find_device_by_name(
-        self, device_name: str, scan_timeout: int
-    ) -> str | None:
-        """Async implementation of find_device_by_name."""
+    @staticmethod
+    def _unwrap_variant(value: Any) -> Any:
+        """Unwrap a dbus-fast Variant to its plain Python value.
+
+        dbus-fast's GetManagedObjects returns property values wrapped in
+        Variant objects. This helper extracts the raw value for comparison.
+
+        Args:
+            value: A dbus-fast Variant or plain Python value
+
+        Returns:
+            The unwrapped value
+        """
+        if hasattr(value, "value"):
+            return value.value
+        return value
+
+    async def _async_find_device_in_known(self, device_name: str) -> str | None:
+        """Search BlueZ's known/paired devices for a device by name.
+
+        This checks devices already registered in BlueZ (paired, cached, etc.)
+        WITHOUT running a Bluetooth scan. This is instant and works for
+        already-paired devices that may not be actively advertising.
+
+        Args:
+            device_name: Bluetooth device name to search for
+
+        Returns:
+            MAC address if found among known devices, None otherwise
+        """
         try:
-            if self._adapter is None:
-                raise BluetoothError("Adapter not initialized")
-
-            logger.info(f"Scanning for device: {device_name}")
-
-            # Start discovery
-            await self._adapter.call_start_discovery()  # type: ignore[attr-defined]
-
-            # Wait for scan
-            await asyncio.sleep(scan_timeout)
-
-            # Get object manager to enumerate all Bluetooth objects
             root_intro = await self._get_introspection("/")
             manager_proxy = self._bus.get_proxy_object("org.bluez", "/", root_intro)  # type: ignore[union-attr]
             manager = manager_proxy.get_interface("org.freedesktop.DBus.ObjectManager")
 
             objects: dict[str, dict[str, Any]] = await manager.call_get_managed_objects()  # type: ignore[attr-defined]
 
-            # Search through discovered devices
             for _path, interfaces in objects.items():
                 if "org.bluez.Device1" in interfaces:
                     device_props = interfaces["org.bluez.Device1"]
-                    if device_props.get("Name") == device_name:
-                        mac_address = device_props.get("Address")
-                        logger.info(f"Found {device_name} at {mac_address}")
-                        await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
-                        return mac_address
+                    name = self._unwrap_variant(device_props.get("Name"))
+                    if name == device_name:
+                        mac_address = self._unwrap_variant(device_props.get("Address"))
+                        logger.info(
+                            f"Found {device_name} at {mac_address} (known device)"
+                        )
+                        return str(mac_address) if mac_address else None
+        except Exception as e:
+            logger.debug(f"Error checking known devices: {e}")
 
-            await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
-            logger.warning(f"Device {device_name} not found")
+        return None
+
+    async def _async_find_device_by_name(
+        self, device_name: str, scan_timeout: int
+    ) -> str | None:
+        """Async implementation of find_device_by_name.
+
+        First checks BlueZ's known devices (instant), then falls back to
+        a full Bluetooth scan if the device is not already known.
+        """
+        try:
+            if self._adapter is None:
+                raise BluetoothError("Adapter not initialized")
+
+            # Step 1: Check known/paired devices first (no scan needed)
+            logger.info(f"Checking known devices for: {device_name}")
+            mac = await self._async_find_device_in_known(device_name)
+            if mac:
+                return mac
+
+            # Step 2: Not found among known devices, do a full scan
+            logger.info(
+                f"Device not in known list, scanning for: {device_name} "
+                f"(timeout={scan_timeout}s)"
+            )
+
+            await self._adapter.call_start_discovery()  # type: ignore[attr-defined]
+            await asyncio.sleep(scan_timeout)
+
+            # Check again after scan (new devices may have appeared)
+            mac = await self._async_find_device_in_known(device_name)
+
+            try:
+                await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+            if mac:
+                return mac
+
+            logger.warning(f"Device {device_name} not found after scan")
             return None
 
         except DBusError as e:

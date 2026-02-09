@@ -65,6 +65,20 @@ class MockProxyInterface:
         self._should_fail[method] = should_fail
 
 
+class MockInterface:
+    """Mock introspection Interface object."""
+    
+    def __init__(self, name: str):
+        self.name = name
+
+
+class MockIntrospection:
+    """Mock introspection object compatible with dbus-fast."""
+    
+    def __init__(self, interfaces: list[MockInterface]):
+        self.interfaces = interfaces
+
+
 class MockProxyObject:
     """Mock dbus-fast ProxyObject."""
     
@@ -73,6 +87,25 @@ class MockProxyObject:
         self.path = path
         self._device_data = device_data or {}
         self._interfaces: dict[str, MockProxyInterface] = {}
+        
+        # Create introspection based on path
+        if "/dev_" in path:
+            interface_list = [
+                MockInterface("org.bluez.Device1"),
+                MockInterface("org.freedesktop.DBus.Properties"),
+            ]
+        elif path == "/":
+            interface_list = [
+                MockInterface("org.freedesktop.DBus.ObjectManager"),
+            ]
+        else:
+            # Adapter path
+            interface_list = [
+                MockInterface("org.bluez.Adapter1"),
+                MockInterface("org.freedesktop.DBus.Properties"),
+            ]
+        
+        self.introspection = MockIntrospection(interface_list)
     
     def get_interface(self, interface_name: str) -> MockProxyInterface:
         """Get a mock interface."""
@@ -81,13 +114,6 @@ class MockProxyObject:
                 interface_name, self._device_data
             )
         return self._interfaces[interface_name]
-
-
-class MockInterface:
-    """Mock introspection Interface object."""
-    
-    def __init__(self, name: str):
-        self.name = name
 
 
 class MockNode:
@@ -117,14 +143,74 @@ class MockMessageBus:
         """Mock connect method."""
         return self
     
-    async def introspect(self, bus_name: str, path: str) -> MockNode:
-        """Mock introspect method."""
+    async def introspect(self, bus_name: str, path: str) -> str:
+        """Mock introspect method - returns XML string for dbus-fast compatibility."""
         if path in self._should_fail_paths:
             raise Exception(f"Introspection failed for {path}")
         
-        if path not in self._introspection_cache:
-            self._introspection_cache[path] = MockNode(path)
-        return self._introspection_cache[path]
+        # Return actual introspection XML that dbus-fast can parse
+        if "/dev_" in path:
+            # Check if the device actually exists in our mock registry
+            if path not in self._devices:
+                raise Exception(f"org.bluez.Error.DoesNotExist: {path} does not exist")
+            # Device introspection
+            return '''<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.bluez.Device1">
+    <method name="Pair"></method>
+    <method name="Connect"></method>
+    <method name="Disconnect"></method>
+    <property name="Address" type="s" access="read"></property>
+    <property name="Name" type="s" access="read"></property>
+    <property name="Paired" type="b" access="read"></property>
+    <property name="Trusted" type="b" access="readwrite"></property>
+    <property name="Connected" type="b" access="read"></property>
+  </interface>
+  <interface name="org.freedesktop.DBus.Properties">
+    <method name="Get">
+      <arg direction="in" type="s" name="interface_name"/>
+      <arg direction="in" type="s" name="property_name"/>
+      <arg direction="out" type="v" name="value"/>
+    </method>
+    <method name="Set">
+      <arg direction="in" type="s" name="interface_name"/>
+      <arg direction="in" type="s" name="property_name"/>
+      <arg direction="in" type="v" name="value"/>
+    </method>
+  </interface>
+</node>'''
+        elif path == "/":
+            # ObjectManager introspection
+            return '''<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.freedesktop.DBus.ObjectManager">
+    <method name="GetManagedObjects">
+      <arg direction="out" type="a{oa{sa{sv}}}" name="objects"/>
+    </method>
+  </interface>
+</node>'''
+        else:
+            # Adapter introspection
+            return '''<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.bluez.Adapter1">
+    <method name="StartDiscovery"></method>
+    <method name="StopDiscovery"></method>
+    <property name="Address" type="s" access="read"></property>
+    <property name="Name" type="s" access="read"></property>
+    <property name="Powered" type="b" access="readwrite"></property>
+  </interface>
+  <interface name="org.freedesktop.DBus.Properties">
+    <method name="Get">
+      <arg direction="in" type="s" name="interface_name"/>
+      <arg direction="in" type="s" name="property_name"/>
+      <arg direction="out" type="v" name="value"/>
+    </method>
+  </interface>
+</node>'''
     
     def get_proxy_object(
         self, bus_name: str, path: str, introspection: Any
@@ -148,7 +234,7 @@ class MockMessageBus:
     
     def _get_managed_objects(self) -> dict[str, dict[str, Any]]:
         """Get all managed objects for ObjectManager."""
-        objects = {}
+        objects: dict[str, dict[str, Any]] = {}
         for device_path, device_data in self._devices.items():
             objects[device_path] = {
                 "org.bluez.Device1": {

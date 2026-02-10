@@ -11,7 +11,7 @@ with sync wrappers dispatching coroutines via run_coroutine_threadsafe().
 import asyncio
 import logging
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from dbus_fast import BusType, DBusError, Variant
@@ -235,14 +235,17 @@ class BluetoothManager:
             manager_proxy = self._bus.get_proxy_object("org.bluez", "/", root_intro)  # type: ignore[union-attr]
             manager = manager_proxy.get_interface("org.freedesktop.DBus.ObjectManager")
 
-            objects: dict[str, dict[str, Any]] = await manager.call_get_managed_objects()  # type: ignore[attr-defined]
+            raw_objects: Any = await manager.call_get_managed_objects()  # type: ignore[attr-defined]
+            objects = cast(dict[str, dict[str, dict[str, Any]]], raw_objects)
 
             for _path, interfaces in objects.items():
                 if "org.bluez.Device1" in interfaces:
-                    device_props = interfaces["org.bluez.Device1"]
-                    name = self._unwrap_variant(device_props.get("Name"))
+                    device_props: dict[str, Any] = interfaces["org.bluez.Device1"]
+                    name: str | None = self._unwrap_variant(device_props.get("Name"))
                     if name == device_name:
-                        mac_address = self._unwrap_variant(device_props.get("Address"))
+                        mac_address: str | None = self._unwrap_variant(
+                            device_props.get("Address")
+                        )
                         logger.info(
                             f"Found {device_name} at {mac_address} (known device)"
                         )

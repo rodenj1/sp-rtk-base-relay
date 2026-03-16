@@ -1,0 +1,374 @@
+# SP-Base-Relay v2.0 — Multi-Destination Architecture Plan
+
+## Document Status
+- **Created**: March 16, 2026
+- **Status**: Approved — Ready for implementation
+- **Version**: 2.0.0 (Major release with breaking changes)
+
+---
+
+## Executive Summary
+
+SP-Base-Relay v2.0 transforms the system from a single-destination RTCM relay (GPS Source → Sure-Path Server) into a multi-destination broadcast system (GPS Source → N Destinations). This enables simultaneous publishing to:
+- **Sure-Path** server (existing, custom protocol)
+- **NTRIP casters** (RTK2go, Onocoy, rtkdirect, etc.) via NTRIP v1.0/v2.0
+- **Local TCP server** for LAN clients
+
+---
+
+## Architectural Decisions
+
+### Decision 1: Concurrency Model — A+ Threading
+**Choice**: Threading with per-destination queues, async-ready interface design
+
+**Rationale**:
+- Existing codebase is threading-based and production-stable
+- Serial/Bluetooth input sources are inherently blocking I/O
+- Each destination gets its own thread — natural fault isolation
+- 4-5 destinations means manageable thread count (~10-15 threads)
+- Minimal migration risk from existing v1.0 code
+- "Async-ready" means the TCP server destination can use asyncio internally
+
+**Architecture**:
+```
+                          ┌─ Queue ──▶ [SurePath Thread] ──▶ Sure-Path Server
+[Input Thread] ──▶ [Broadcaster] ─┤─ Queue ──▶ [NTRIP Thread]   ──▶ NTRIP Caster
+                          └─ Queue ──▶ [TCP Srv Thread]  ──▶ Local TCP Clients
+```
+
+### Decision 2: NTRIP Protocol — v1.0 + v2.0, Default v2.0
+**Choice**: Support both NTRIP versions, v2.0 as the default
+
+**Rationale**:
+- v2.0 is HTTP-compliant (better firewall/proxy traversal)
+- v1.0 is simpler and universally supported
+- Delta between implementations is ~40 lines of code
+- Target casters: RTK2go, Onocoy, rtkdirect (all support both)
+
+### Decision 3: Message Filtering — Allowlist/Blocklist/Pass-All
+**Choice**: Per-destination RTCM message type ID filtering
+
+**Modes**:
+- `pass_all`: No filtering, raw chunks forwarded (zero overhead)
+- `allowlist`: Only specified message IDs pass through
+- `blocklist`: All messages pass except specified IDs
+
+**Implementation**: Filtering occurs in the broadcast hub before queueing, using existing `RTCMMessageDecoder` for frame parsing.
+
+### Decision 4: Metrics — Per-Destination Labels (Clean Slate)
+**Choice**: Replace global metrics with per-destination Prometheus labels
+
+**Rationale**: With 4-5 destinations, operators need per-destination visibility. Breaking change is acceptable for a major version.
+
+### Decision 5: TCP Server — Async Inside Thread (A+ Pattern)
+**Choice**: Multi-client TCP server using `asyncio.start_server()` inside its own thread
+
+**Rationale**: Elegantly handles many simultaneous clients while fitting the threading architecture.
+
+### Decision 6: Configuration — `destinations:` List Format
+**Choice**: Replace `server:` with `destinations:` list, each with name/type/enabled/filter/config
+
+**Breaking Change**: Old `server:` format rejected with clear migration message.
+
+---
+
+## NTRIP Protocol Specification
+
+### Terminology
+| Term | Role | Our Implementation |
+|---|---|---|
+| NTRIP Server | Pushes RTCM from base station to caster | **This is what we build** |
+| NTRIP Caster | Hub that distributes data to clients | RTK2go, Onocoy, rtkdirect |
+| NTRIP Client | Rover/consumer receiving corrections | Not our concern |
+
+### NTRIP v1.0 Server-to-Caster Protocol
+```
+# 1. TCP connect to caster:port (typically 2101)
+
+# 2. Send SOURCE request
+SOURCE <mountpoint_password>\r\n
+Source-Agent: NTRIP sp-base-relay/2.0\r\n
+\r\n
+
+# 3. Receive response
+ICY 200 OK\r\n
+\r\n
+
+# 4. Stream raw RTCM binary data continuously
+<raw RTCM bytes...>
+```
+
+### NTRIP v2.0 Server-to-Caster Protocol
+```
+# 1. TCP connect to caster:port (typically 2101)
+
+# 2. Send HTTP POST
+POST /<mountpoint> HTTP/1.1\r\n
+Host: <caster_host>\r\n
+Ntrip-Version: Ntrip/2.0\r\n
+Authorization: Basic <base64(username:password)>\r\n
+User-Agent: NTRIP sp-base-relay/2.0\r\n
+Transfer-Encoding: chunked\r\n
+\r\n
+
+# 3. Receive response
+HTTP/1.1 200 OK\r\n
+\r\n
+
+# 4. Stream RTCM data using HTTP chunked encoding
+<hex_length>\r\n
+<rtcm_binary_data>\r\n
+0\r\n
+\r\n
+```
+
+### Connection Management
+- Reconnection with exponential backoff (same pattern as Sure-Path)
+- TCP keepalive enabled for connection health monitoring
+- No custom heartbeat (unlike Sure-Path) — casters expect continuous data flow
+- Data flow monitoring: detect stale connections by tracking last successful send
+
+---
+
+## Module Structure
+
+```
+src/sp_base_relay/
+├── main.py                           # Refactored service orchestration (v2)
+├── config.py                         # Refactored config with destinations: list
+├── metrics.py                        # Rewritten with per-destination labels
+├── exceptions.py                     # Add NtripError, DestinationError
+├── rtcm_decoder.py                   # Unchanged
+├── logger.py                         # Unchanged
+├── core/
+│   ├── broadcast_hub.py              # NEW — reads source, fans out to destinations
+│   ├── message_filter.py             # NEW — RTCM message filtering logic
+│   ├── rtcm_client.py                # Kept for Sure-Path (wrapped by destination)
+│   ├── connection_states.py          # Unchanged
+│   ├── data_pipeline.py              # DEPRECATED (replaced by broadcast_hub)
+│   ├── bluetooth_manager.py          # Unchanged
+│   ├── input_sources/                # Unchanged
+│   │   ├── base_input.py
+│   │   ├── serial_input.py
+│   │   ├── tcp_input.py
+│   │   ├── bluetooth_input.py
+│   │   └── input_factory.py
+│   └── destinations/                 # NEW — destination module package
+│       ├── __init__.py
+│       ├── base_destination.py       # Abstract base class for all destinations
+│       ├── destination_factory.py    # Factory for creating destinations from config
+│       ├── surepath_destination.py   # Wraps RTCMClient behind BaseDestination
+│       ├── ntrip_destination.py      # NTRIP v1/v2 server implementation
+│       └── tcp_server_destination.py # TCP serial server (async inside thread)
+```
+
+---
+
+## Configuration Format (v2)
+
+```yaml
+# === GPS Source (single, unchanged concept) ===
+input:
+  source: tcp                         # tcp | serial | usb_serial | bluetooth
+  config:
+    host: 192.168.0.242
+    port: 3000
+    timeout: 5.0
+
+# === Destinations (1 to many) ===
+destinations:
+  - name: surepath
+    type: surepath
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      host: rtcm.example.com
+      port: 50010
+      username: your_mountpoint
+      password: your_password
+      connection_timeout: 10
+      heartbeat_timeout: 30
+      retry_initial_delay: 15
+      retry_max_delay: 60
+      retry_multiplier: 2.0
+
+  - name: rtk2go
+    type: ntrip
+    enabled: true
+    filter:
+      mode: blocklist
+      message_ids: [4072]
+    config:
+      caster: rtk2go.com
+      port: 2101
+      mountpoint: your_mountpoint
+      password: my_rtk2go_password
+      username: ""
+      version: "2.0"
+      retry_initial_delay: 10
+      retry_max_delay: 120
+      retry_multiplier: 2.0
+      connection_timeout: 15
+
+  - name: onocoy
+    type: ntrip
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      caster: servers.onocoy.com
+      port: 2101
+      mountpoint: MY_ONOCOY_MOUNT
+      password: my_onocoy_password
+      version: "2.0"
+      retry_initial_delay: 10
+      retry_max_delay: 120
+
+  - name: rtkdirect
+    type: ntrip
+    enabled: true
+    filter:
+      mode: allowlist
+      message_ids: [1005, 1077, 1087, 1097, 1127, 1230]
+    config:
+      caster: caster.rtkdirect.com
+      port: 2101
+      mountpoint: MY_MOUNT
+      password: my_password
+      version: "1.0"
+      retry_initial_delay: 10
+      retry_max_delay: 120
+
+  - name: local_tcp
+    type: tcp_server
+    enabled: false
+    filter:
+      mode: pass_all
+    config:
+      host: 0.0.0.0
+      port: 5016
+      max_clients: 10
+
+# === Global Settings ===
+metrics:
+  enabled: true
+  host: 0.0.0.0
+  port: 8080
+
+logging:
+  level: INFO
+  format: json
+  file: /var/log/sp-base-relay.log
+  max_size_mb: 50
+  backup_count: 3
+
+service:
+  daemon: false
+```
+
+---
+
+## Per-Destination Metrics (v2)
+
+### Destination Metrics (labeled by destination name)
+```
+sp_base_relay_dest_bytes_sent_total{destination="..."}
+sp_base_relay_dest_messages_sent_total{destination="..."}
+sp_base_relay_dest_messages_filtered_total{destination="..."}
+sp_base_relay_dest_connection_status{destination="..."}
+sp_base_relay_dest_connection_attempts_total{destination="..."}
+sp_base_relay_dest_errors_total{destination="...", error_type="..."}
+sp_base_relay_dest_relay_latency_seconds{destination="..."}
+sp_base_relay_dest_queue_depth{destination="..."}
+sp_base_relay_dest_reconnect_attempts_total{destination="..."}
+```
+
+### Global Metrics
+```
+sp_base_relay_input_bytes_read_total
+sp_base_relay_input_connection_status
+sp_base_relay_service_uptime_seconds
+sp_base_relay_active_destinations_count
+sp_base_relay_rtcm_messages_by_id_total{message_id="..."}
+```
+
+---
+
+## Development Phases
+
+### Phase 1: Foundation — Base Destination & Broadcast Hub
+**Effort**: 3-4 sessions | **Dependencies**: None
+
+1. `BaseDestination` ABC with standard interface
+2. `DestinationStats` dataclass for per-destination metrics
+3. `MessageFilter` with pass_all/allowlist/blocklist modes
+4. `BroadcastHub` — input thread → frame parsing → filtered fanout → destination queues
+5. `DestinationFactory` — creates destinations from config
+6. Config v2 — `DestinationConfig` parsing, `destinations:` list, old format detection
+7. Full test suite for all new modules
+
+### Phase 2: Sure-Path Destination Refactor
+**Effort**: 1-2 sessions | **Dependencies**: Phase 1
+
+1. `SurePathDestination` wrapping existing `RTCMClient`
+2. `main.py` v2 — refactored service orchestration with broadcast hub
+3. Regression testing — verify Sure-Path works identically to v1
+
+### Phase 3: NTRIP Destination
+**Effort**: 2-3 sessions | **Dependencies**: Phase 1
+
+1. `NtripDestination` implementing `BaseDestination`
+2. `NtripV1Protocol` — SOURCE auth + raw streaming
+3. `NtripV2Protocol` — HTTP POST auth + chunked encoding
+4. Reconnection with exponential backoff
+5. Mock NTRIP caster for testing
+6. Real-world testing against RTK2go
+
+### Phase 4: Metrics v2
+**Effort**: 1-2 sessions | **Dependencies**: Phase 1, 2
+
+1. `MetricsCollector` v2 with per-destination labels
+2. Grafana dashboard v2 template
+3. Alerting rules for per-destination monitoring
+
+### Phase 5: TCP Server Destination (Low Priority)
+**Effort**: 1-2 sessions | **Dependencies**: Phase 1
+
+1. `TcpServerDestination` with asyncio inside thread
+2. Multi-client broadcast, backpressure handling
+3. Client connect/disconnect management
+
+### Phase 6: Integration & Polish
+**Effort**: 1-2 sessions | **Dependencies**: All above
+
+1. End-to-end integration tests
+2. Config migration documentation
+3. Updated README, deployment guide, example configs
+4. Version bump to 2.0.0
+5. Memory bank update
+
+**Total estimated effort**: 9-15 sessions
+
+---
+
+## Risk Mitigations
+
+| Risk | Mitigation |
+|---|---|
+| Sure-Path regression | Phase 2 specifically validates backward compatibility |
+| NTRIP protocol compliance | Test against free RTK2go caster |
+| Destination isolation failure | Thread-per-destination with independent queues |
+| Latency increase from filtering | `pass_all` skips frame parsing entirely |
+| Config migration confusion | Clear error message detecting old format |
+| Thread explosion | Max ~15 threads for 5 destinations — well within limits |
+
+---
+
+## Breaking Changes from v1.0
+
+1. **Config**: `server:` replaced by `destinations:` list
+2. **Metrics**: All Prometheus metric names changed (per-destination labels)
+3. **Module**: `DataPipelineCoordinator` replaced by `BroadcastHub`
+4. **Version**: Bumped to 2.0.0
+5. **Grafana Dashboard**: New template required (old dashboard incompatible)

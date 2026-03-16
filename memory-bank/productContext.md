@@ -2,28 +2,38 @@
 
 ## Why SP-Base-Relay Exists
 
-SP-Base-Relay solves a specific integration problem in the RTK GPS ecosystem where existing tools like RTKLIB's `str2str` cannot handle custom authentication protocols required by specialized RTCM correction services.
+SP-Base-Relay solves integration problems in the RTK GPS ecosystem where existing tools like RTKLIB's `str2str` cannot handle custom authentication protocols or multi-destination broadcasting to diverse correction services simultaneously.
 
 ## Problems It Solves
 
-### 1. Custom Protocol Support
+### 1. Custom Protocol Support (v1.x)
 - **Problem**: Standard NTRIP clients and `str2str` don't support custom authentication protocols
 - **Solution**: Native support for the specific `INIT:username:password*` authentication sequence
 - **Impact**: Enables RTK base stations to connect to previously incompatible correction services
 
-### 2. RTKBase Integration Gap
+### 2. Multi-Destination Broadcasting (v2.0 — NEW)
+- **Problem**: Base station operators need to publish corrections to multiple services simultaneously (Sure-Path, RTK2go, Onocoy, rtkdirect) but `str2str` only supports one output at a time
+- **Solution**: Single-source to N-destination broadcast hub with per-destination filtering, independent connection management, and fault isolation
+- **Impact**: One relay process replaces 3-4 separate tools, with unified monitoring
+
+### 3. NTRIP Server Integration (v2.0 — NEW)
+- **Problem**: Running separate NTRIP server instances per caster is fragile and hard to monitor
+- **Solution**: Built-in NTRIP v1.0 and v2.0 server protocol support with per-caster configuration
+- **Impact**: Direct NTRIP publishing to RTK2go, Onocoy, rtkdirect from a single service
+
+### 4. RTKBase Integration Gap
 - **Problem**: RTKBase users need custom RTCM server connectivity but no existing service supports it
 - **Solution**: Drop-in service that integrates with RTKBase's multi-service architecture
 - **Impact**: Extends RTKBase's capability without modifying core system
 
-### 3. Reliability and Monitoring
+### 5. Reliability and Monitoring
 - **Problem**: Network-based correction services need robust connection management
-- **Solution**: Advanced retry logic, heartbeat monitoring, and Prometheus metrics
-- **Impact**: Production-ready reliability with operational visibility
+- **Solution**: Advanced retry logic, heartbeat monitoring, and Prometheus metrics (v2: per-destination)
+- **Impact**: Production-ready reliability with operational visibility per destination
 
-### 4. Multiple Input Source Support
+### 6. Multiple Input Source Support
 - **Problem**: Different deployment scenarios require different connection methods
-- **Solution**: Unified interface supporting serial, USB, and TCP inputs
+- **Solution**: Unified interface supporting serial, USB, TCP, and Bluetooth inputs
 - **Impact**: Single tool handles diverse hardware configurations
 
 ## User Experience Goals
@@ -48,12 +58,12 @@ SP-Base-Relay solves a specific integration problem in the RTK GPS ecosystem whe
 
 ## How It Should Work
 
-### Core Workflow
-1. **Startup**: Read configuration, initialize connections, start monitoring
-2. **Data Flow**: Continuously relay RTCM data from input source to RTCM server
-3. **Error Recovery**: Detect connection issues, implement exponential backoff retry
-4. **Health Reporting**: Export metrics for monitoring system integration
-5. **Graceful Shutdown**: Clean disconnection and resource cleanup
+### Core Workflow (v2.0)
+1. **Startup**: Read v2 config, create destinations from `destinations:` list, start BroadcastHub
+2. **Data Flow**: Input → BroadcastHub → per-destination MessageFilter → Queue → Destination Thread → Server
+3. **Error Recovery**: Per-destination exponential backoff — one failure doesn't affect others
+4. **Health Reporting**: Per-destination Prometheus metrics with `{destination="name"}` labels
+5. **Graceful Shutdown**: Clean disconnection across all destinations and resource cleanup
 
 ### Integration with RTKBase
 - **Service Discovery**: Appears in RTKBase service management alongside other `str2str` services

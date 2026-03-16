@@ -8,7 +8,7 @@ import socket
 from unittest.mock import patch, MagicMock, Mock
 import pytest
 
-from tests.fixtures.mock_bluetooth import create_mock_pydbus_module, MockSystemBus
+from src.sp_base_relay.core.bluetooth_manager import BluetoothManager
 from src.sp_base_relay.core.input_sources.bluetooth_input import (
     BluetoothInputSource,
     BluetoothConfig,
@@ -110,30 +110,27 @@ class TestBluetoothInputSourceInit:
 
 
 class TestBluetoothInputSourceConnection:
-    """Test Bluetooth connection operations."""
+    """Test Bluetooth connection operations.
+    
+    These tests mock BluetoothManager methods to avoid asyncio.run() 
+    conflicting with mocked socket.socket. The BluetoothManager methods
+    are already fully tested in test_bluetooth_manager.py.
+    """
     
     def test_connect_success_with_device_name(self):
         """Test successful connection using device name."""
-        mock_pydbus = create_mock_pydbus_module()
-        mock_bus = MockSystemBus()
-        mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
-        mock_pydbus.SystemBus = lambda: mock_bus
-        
         config = BluetoothConfig(device_name="RTK_GPS_BASE")
         source = BluetoothInputSource(config)
         
-        # Mock socket
+        # Pre-inject a mock manager with ensure_device_ready mocked
+        mock_manager = MagicMock(spec=BluetoothManager)
+        mock_manager.ensure_device_ready.return_value = ("00:11:22:33:44:55", 1)
+        source.bt_manager = mock_manager
+        
         mock_socket = Mock()
         
-        with patch.dict('sys.modules', {'pydbus': mock_pydbus}):
-            with patch('socket.socket', return_value=mock_socket):
-                with patch('time.sleep'):
-                    # Force reload bluetooth_manager to use mocked pydbus
-                    import importlib
-                    import src.sp_base_relay.core.bluetooth_manager as bt_mgr_module
-                    importlib.reload(bt_mgr_module)
-                    
-                    result = source.connect()
+        with patch('src.sp_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
+            result = source.connect()
         
         assert result is True
         assert source.is_connected is True
@@ -142,29 +139,32 @@ class TestBluetoothInputSourceConnection:
         assert source.stats.connection_attempts == 1
         assert source.stats.successful_connections == 1
         mock_socket.connect.assert_called_once_with(("00:11:22:33:44:55", 1))
+        mock_manager.ensure_device_ready.assert_called_once_with(
+            device_name="RTK_GPS_BASE",
+            mac_address=None
+        )
     
     def test_connect_success_with_mac_address(self):
         """Test successful connection using MAC address."""
-        mock_pydbus = create_mock_pydbus_module()
-        mock_bus = MockSystemBus()
-        mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
-        mock_pydbus.SystemBus = lambda: mock_bus
-        
         config = BluetoothConfig(mac_address="00:11:22:33:44:55")
         source = BluetoothInputSource(config)
         
+        # Pre-inject a mock manager
+        mock_manager = MagicMock(spec=BluetoothManager)
+        mock_manager.ensure_device_ready.return_value = ("00:11:22:33:44:55", 1)
+        source.bt_manager = mock_manager
+        
         mock_socket = Mock()
         
-        with patch.dict('sys.modules', {'pydbus': mock_pydbus}):
-            with patch('socket.socket', return_value=mock_socket):
-                import importlib
-                import src.sp_base_relay.core.bluetooth_manager as bt_mgr_module
-                importlib.reload(bt_mgr_module)
-                
-                result = source.connect()
+        with patch('src.sp_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
+            result = source.connect()
         
         assert result is True
         assert source.is_connected is True
+        mock_manager.ensure_device_ready.assert_called_once_with(
+            device_name=None,
+            mac_address="00:11:22:33:44:55"
+        )
     
     def test_connect_already_connected(self):
         """Test connect when already connected."""
@@ -178,73 +178,59 @@ class TestBluetoothInputSourceConnection:
     
     def test_connect_device_not_found(self):
         """Test connection fails when device not found."""
-        mock_pydbus = create_mock_pydbus_module()
-        mock_bus = MockSystemBus()
-        mock_pydbus.SystemBus = lambda: mock_bus
+        from src.sp_base_relay.core.bluetooth_manager import BluetoothError
         
         config = BluetoothConfig(device_name="NonExistent")
         source = BluetoothInputSource(config)
         
-        with patch.dict('sys.modules', {'pydbus': mock_pydbus}):
-            with patch('time.sleep'):
-                import importlib
-                import src.sp_base_relay.core.bluetooth_manager as bt_mgr_module
-                importlib.reload(bt_mgr_module)
-                
-                with pytest.raises(InputSourceError) as exc_info:
-                    source.connect()
+        # Mock manager that raises BluetoothError for device not found
+        mock_manager = MagicMock(spec=BluetoothManager)
+        mock_manager.ensure_device_ready.side_effect = BluetoothError(
+            "Device NonExistent not found"
+        )
+        source.bt_manager = mock_manager
         
-        # Error message wrapped as "Unexpected" because BluetoothError raises
+        with pytest.raises(InputSourceError) as exc_info:
+            source.connect()
+        
         assert "Device NonExistent not found" in str(exc_info.value)
         assert source.is_connected is False
     
     def test_connect_socket_fails(self):
         """Test connection fails when socket connection fails."""
-        mock_pydbus = create_mock_pydbus_module()
-        mock_bus = MockSystemBus()
-        mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
-        mock_pydbus.SystemBus = lambda: mock_bus
-        
         config = BluetoothConfig(device_name="RTK_GPS_BASE")
         source = BluetoothInputSource(config)
+        
+        # Mock manager succeeds, but socket fails
+        mock_manager = MagicMock(spec=BluetoothManager)
+        mock_manager.ensure_device_ready.return_value = ("00:11:22:33:44:55", 1)
+        source.bt_manager = mock_manager
         
         mock_socket = Mock()
         mock_socket.connect.side_effect = socket.error("Connection refused")
         
-        with patch.dict('sys.modules', {'pydbus': mock_pydbus}):
-            with patch('socket.socket', return_value=mock_socket):
-                with patch('time.sleep'):
-                    import importlib
-                    import src.sp_base_relay.core.bluetooth_manager as bt_mgr_module
-                    importlib.reload(bt_mgr_module)
-                    
-                    with pytest.raises(InputSourceError) as exc_info:
-                        source.connect()
+        with patch('src.sp_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
+            with pytest.raises(InputSourceError) as exc_info:
+                source.connect()
         
         assert "Bluetooth socket connection failed" in str(exc_info.value)
         assert source.is_connected is False
     
     def test_disconnect(self):
         """Test disconnection."""
-        mock_pydbus = create_mock_pydbus_module()
-        mock_bus = MockSystemBus()
-        mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
-        mock_pydbus.SystemBus = lambda: mock_bus
-        
         config = BluetoothConfig(device_name="RTK_GPS_BASE")
         source = BluetoothInputSource(config)
         
+        # Mock manager
+        mock_manager = MagicMock(spec=BluetoothManager)
+        mock_manager.ensure_device_ready.return_value = ("00:11:22:33:44:55", 1)
+        source.bt_manager = mock_manager
+        
         mock_socket = Mock()
         
-        with patch.dict('sys.modules', {'pydbus': mock_pydbus}):
-            with patch('socket.socket', return_value=mock_socket):
-                with patch('time.sleep'):
-                    import importlib
-                    import src.sp_base_relay.core.bluetooth_manager as bt_mgr_module
-                    importlib.reload(bt_mgr_module)
-                    
-                    source.connect()
-                    source.disconnect()
+        with patch('src.sp_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
+            source.connect()
+            source.disconnect()
         
         assert source.is_connected is False
         assert source.bt_socket is None

@@ -13,8 +13,10 @@
 - **PySerial**: Serial port communication for GNSS receiver connections
 - **PyYAML**: YAML configuration file parsing
 - **Prometheus Client**: Metrics collection and export
-- **Socket (stdlib)**: TCP communication with RTCM server
+- **dbus-fast**: Modern D-Bus library with type hints for Bluetooth integration (Cython-optimized)
+- **Socket (stdlib)**: TCP communication with RTCM server and Bluetooth sockets
 - **Threading (stdlib)**: Concurrent operations management
+- **Asyncio (stdlib)**: Async/await support for D-Bus operations
 - **Logging (stdlib)**: Structured logging with rotation support
 
 ### Development Tools
@@ -108,7 +110,16 @@ python = ">=3.10"
 pyserial = ">=3.5"
 pyyaml = ">=6.0"
 prometheus-client = ">=0.17.0"
+dbus-fast = ">=2.0.0"  # Modern D-Bus library with type hints (added Feb 2026)
+# Note: Removed pydbus (unmaintained) and pygobject (no longer needed)
 ```
+
+**Bluetooth/D-Bus Migration (February 2026)**:
+- Migrated from `pydbus` (unmaintained, no type hints) to `dbus-fast`
+- `dbus-fast` provides full type hint support, resolving 50+ pylance errors
+- Cython-optimized for better performance than pydbus
+- Asyncio-based with sync wrapper pattern for API compatibility
+- Actively maintained by Bluetooth-Devices organization
 
 ### Development Dependencies
 ```toml

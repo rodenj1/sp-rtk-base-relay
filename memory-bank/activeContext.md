@@ -532,6 +532,53 @@ WARNING: (continues with warnings on each retry)
 - ✅ Coverage maintained: 79% rtcm_client, 84% data_pipeline, 73% main.py
 - ✅ No functional changes - purely logging level adjustments
 
+## Recent Changes and Decisions
+
+### dbus-fast Migration (February 9, 2026)
+**STATUS**: ✅ COMPLETE - All 556 Unit Tests Passing (100%)
+
+**Problem Solved**:
+- ✅ pydbus library replaced (was unmaintained since 2018)
+- ✅ Full type hint coverage achieved in Bluetooth components
+- ✅ All pylance/pyright errors resolved in production code
+- ✅ 100% type safety compliance in Bluetooth modules
+- ✅ **All 556 unit tests passing** (100% pass rate)
+
+**Migration Completed**:
+1. **dbus-fast** - Successfully migrated from pydbus
+2. **Sync wrapper pattern** - Implemented using `asyncio.run()` internally
+3. **API compatibility** - BluetoothManager API unchanged (zero disruption)
+4. **Type safety** - Complete type stubs, full type hint coverage
+
+**Implementation Results**:
+- ✅ **Production Code**: Fully functional and type-safe
+- ✅ **bluetooth_manager.py**: 286 lines migrated with async/sync wrappers
+- ✅ **bluetooth_input.py**: Socket constants fixed with TYPE_CHECKING
+- ✅ **Dependencies**: Clean migration (dbus-fast >= 2.0.0)
+- ✅ **Performance**: Cython-optimized dbus-fast ready for use
+- ✅ **Tests**: **44/44 Bluetooth tests passing (100%)**
+
+**Test Fixes Applied** (February 9, 2026):
+- ✅ Fixed `test_trust_device_fails` assertion to match new error propagation
+- ✅ Resolved asyncio.run() / socket.socket mock conflict in BluetoothInput tests
+  - Root cause: Patching `socket.socket` globally breaks asyncio event loop creation
+  - Solution: Mock BluetoothManager methods (already tested separately) instead of live D-Bus calls
+  - BluetoothInput connection tests now use `MagicMock(spec=BluetoothManager)` for clean isolation
+- ✅ Cleaned up unused mock_bluetooth imports in test_bluetooth_input.py
+
+**Benefits Achieved**:
+- ✅ Modern async Python patterns with sync wrapper
+- ✅ Better performance potential (Cython-optimized)
+- ✅ Future-proof dependency (actively maintained)
+- ✅ Excellent documentation (209 code examples)
+- ✅ 100% of all Bluetooth tests passing (manager + input)
+
+**Test Results** (February 9, 2026 - Final):
+- ✅ **44/44 Bluetooth tests passing (100%)**
+- ✅ **556/556 total unit tests passing (100%)**
+- ✅ All BluetoothManager Tests (19/19): Init, Discovery, Pairing, Connection, Helpers
+- ✅ All BluetoothInput Tests (25/25): Config, Init, Connection, Data Reading, Info
+
 ## Active Decisions and Considerations
 
 ### Phase 7: CLI & Service Management (Current Priority)

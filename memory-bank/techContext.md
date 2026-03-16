@@ -45,35 +45,79 @@ source .venv/bin/activate
 uv run pytest --cov=src/sp_base_relay --cov-report=html
 ```
 
-### Project Structure
+### Project Structure (v2.0)
 ```
 sp-base-relay/
-├── pyproject.toml           # UV/Python project configuration (moved to root)
+├── pyproject.toml           # UV/Python project configuration
 ├── uv.lock                  # Dependency lock file
 ├── README.md                # Project documentation
-├── config.example.yaml      # Example configuration
+├── config.example.yaml      # Example configuration (v2 format)
+├── docs/
+│   ├── v2-architecture-plan.md  # Full v2.0 architecture document
+│   ├── bluetooth-gps-setup.md
+│   ├── bluetooth-recovery.md
+│   ├── deployment-guide.md
+│   └── metrics-guide.md
 ├── src/
 │   └── sp_base_relay/
 │       ├── __init__.py
-│       ├── main.py          # CLI entry point
-│       ├── config.py        # Configuration management
+│       ├── main.py          # CLI entry point (v2 with BroadcastHub)
+│       ├── config.py        # Config management (v2 destinations: list)
 │       ├── logger.py        # Logging setup
-│       ├── exceptions.py    # Custom exceptions
-│       ├── metrics.py       # Prometheus metrics
+│       ├── exceptions.py    # Custom exceptions (+NtripError, DestinationError)
+│       ├── metrics.py       # Prometheus metrics (v2 per-destination labels)
+│       ├── rtcm_decoder.py  # RTCM frame parsing
 │       └── core/
 │           ├── __init__.py
-│           ├── input_manager.py
-│           ├── rtcm_client.py
-│           ├── data_pipeline.py
-│           └── health_monitor.py
+│           ├── broadcast_hub.py      # NEW v2 — fan-out to destinations
+│           ├── message_filter.py     # NEW v2 — RTCM message filtering
+│           ├── rtcm_client.py        # Sure-Path TCP client (unchanged)
+│           ├── connection_states.py  # Connection state machine
+│           ├── data_pipeline.py      # DEPRECATED (replaced by broadcast_hub)
+│           ├── bluetooth_manager.py  # Bluetooth SPP management
+│           ├── input_sources/        # Input source strategy pattern
+│           │   ├── base_input.py
+│           │   ├── serial_input.py
+│           │   ├── tcp_input.py
+│           │   ├── bluetooth_input.py
+│           │   └── input_factory.py
+│           └── destinations/         # NEW v2 — destination strategy pattern
+│               ├── __init__.py
+│               ├── base_destination.py       # ABC for all destinations
+│               ├── destination_factory.py    # Factory from config
+│               ├── surepath_destination.py   # Wraps RTCMClient
+│               ├── ntrip_destination.py      # NTRIP v1/v2 server
+│               └── tcp_server_destination.py # Local TCP server
 ├── tests/
-│   ├── unit/                # Unit tests
+│   ├── unit/                # Unit tests (556+ tests)
 │   ├── integration/         # Integration tests
+│   ├── manual/              # Manual/hardware tests
 │   └── fixtures/            # Test data and mocks
 └── tools/
-    ├── install.sh           # Installation script
+    ├── install.sh / uninstall.sh
+    ├── bluetooth/           # Bluetooth helper scripts
     └── systemd/             # Service definitions
 ```
+
+## v2.0 New Protocols & Technologies (March 2026)
+
+### NTRIP Protocol
+SP-Base-Relay v2.0 implements the **NTRIP Server** role (pushes RTCM data to a caster):
+- **NTRIP v1.0**: `SOURCE <password>\r\n` → `ICY 200 OK` → raw RTCM stream
+- **NTRIP v2.0**: `POST /<mount> HTTP/1.1` + Basic Auth → `HTTP 200` → chunked RTCM stream
+- Target casters: RTK2go, Onocoy, rtkdirect
+- No additional dependencies needed — built on stdlib `socket` and `base64`
+
+### Configuration v2 Format
+- Breaking change: `server:` → `destinations:` list
+- Each destination has: name, type (surepath/ntrip/tcp_server), enabled, filter, config
+- Filter modes: pass_all / allowlist / blocklist (on RTCM message type IDs)
+- Old format detection with clear migration error message
+
+### Per-Destination Metrics
+- All metric names changed (breaking from v1)
+- Prometheus labels: `{destination="surepath"}`, `{destination="rtk2go"}`, etc.
+- New Grafana dashboard template required
 
 ## Technical Constraints
 

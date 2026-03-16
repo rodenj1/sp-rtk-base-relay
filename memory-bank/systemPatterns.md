@@ -2,144 +2,192 @@
 
 ## Architecture Overview
 
-SP-Base-Relay follows a modular, service-oriented architecture with clear separation of concerns:
+### v2.0 Multi-Destination Architecture (March 2026)
 
+SP-Base-Relay v2.0 transforms from a single-destination relay into a multi-destination broadcast system using a fan-out pattern:
+
+```
+                              ┌─ Queue ──▶ [SurePath Thread]  ──▶ Sure-Path Server
+[Input Thread] ──▶ [BroadcastHub] ─┤─ Queue ──▶ [NTRIP Thread]    ──▶ NTRIP Caster(s)
+                              └─ Queue ──▶ [TCP Server Thread] ──▶ Local TCP Clients
+```
+
+### Detailed Component View
+```
+┌─────────────────────┐    ┌──────────────────────────────────────────────────────┐
+│ Input Sources       │    │ sp-base-relay v2.0                                  │
+│ - Serial UART       │    │                                                      │
+│ - USB Serial        │────│─▶ [BroadcastHub]                                    │
+│ - TCP (RTKBase)     │    │       │ message_filter per destination               │
+│ - Bluetooth SPP     │    │       ├─▶ Queue ─▶ SurePathDestination ──▶ SP Server │
+└─────────────────────┘    │       ├─▶ Queue ─▶ NtripDestination   ──▶ RTK2go    │
+                           │       ├─▶ Queue ─▶ NtripDestination   ──▶ Onocoy    │
+┌─────────────────────┐    │       ├─▶ Queue ─▶ NtripDestination   ──▶ rtkdirect │
+│ Prometheus Metrics  │◄───│       └─▶ Queue ─▶ TcpServerDest      ──▶ LAN       │
+│ (per-destination)   │    │                                                      │
+└─────────────────────┘    │ [MetricsCollector v2 — per-destination labels]       │
+                           └──────────────────────────────────────────────────────┘
+┌─────────────────────┐
+│ Configuration       │
+│ - config.yaml v2    │    destinations: list format (breaking change from v1)
+│ - per-dest filters  │
+└─────────────────────┘
+```
+
+### v1.x Architecture (October 2025 — February 2026, DEPRECATED)
 ```
 ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
 │ Input Sources       │────│ sp-base-relay       │────│ Custom RTCM Server  │
-│ - Serial UART       │    │ Python Package      │    │ Custom RTCM Server  │
-│ - USB Serial        │    │                     │    └─────────────────────┘
-│ - TCP (RTKBase)     │    │ ┌─────────────────┐ │              │
-│ - TCP Direct        │    │ │ Input Manager   │ │              │
-└─────────────────────┘    │ └─────────────────┘ │              │
-                           │ ┌─────────────────┐ │              │
-┌─────────────────────┐    │ │ Data Pipeline   │ │              │
-│ Prometheus Metrics  │◄───│ └─────────────────┘ │              │
-└─────────────────────┘    │ ┌─────────────────┐ │              │
-                           │ │ RTCM Client     │ │──────────────┘
-┌─────────────────────┐    │ └─────────────────┘ │
-│ Configuration       │────│ ┌─────────────────┐ │
-│ - config.yaml       │    │ │ Health Monitor  │ │
-└─────────────────────┘    │ └─────────────────┘ │
-                           └─────────────────────┘
+│ - Serial/TCP/BT     │    │ DataPipelineCoord.  │    │ (Sure-Path only)    │
+└─────────────────────┘    └─────────────────────┘    └─────────────────────┘
 ```
 
 ## Key Design Patterns
 
-### 1. Strategy Pattern - Input Sources
-**Purpose**: Support multiple input connection types with unified interface
+### 1. Strategy Pattern — Input Sources & Destinations (v1 + v2)
+**Purpose**: Unified interfaces for both input sources AND output destinations
 **Implementation**:
 ```python
+# Input sources (v1, unchanged)
 class InputSource(ABC):
     @abstractmethod
-    def connect(self) -> bool:
+    def connect(self) -> bool: ...
     @abstractmethod  
-    def read_data(self) -> Optional[bytes]:
+    def read_data(self) -> bytes | None: ...
     @abstractmethod
-    def disconnect(self) -> None:
+    def disconnect(self) -> None: ...
 
-class TCPInputSource(InputSource):
-    # RTKBase integration via localhost:5015
-    
-class SerialInputSource(InputSource):  
-    # Direct GNSS receiver connection
+# Destinations (v2 NEW)
+class BaseDestination(ABC):
+    @abstractmethod
+    def start(self) -> None: ...
+    @abstractmethod
+    def send(self, data: bytes) -> bool: ...
+    @abstractmethod
+    def stop(self) -> None: ...
+    @abstractmethod
+    def get_stats(self) -> DestinationStats: ...
 ```
 
-### 2. Observer Pattern - Health Monitoring
-**Purpose**: Decouple metrics collection from core operations
+### 2. Fan-Out Pattern — BroadcastHub (v2 NEW)
+**Purpose**: Single input stream distributed to N destination queues
 **Implementation**:
-- Core components emit events (connection established, data sent, errors)
-- MetricsCollector observes and updates Prometheus metrics
-- Health monitor tracks overall system state
+- BroadcastHub reads from input thread, optionally parses RTCM frames
+- Per-destination MessageFilter (pass_all/allowlist/blocklist) applied before queueing
+- Each destination has its own `queue.Queue` for fault isolation
+- `pass_all` mode skips frame parsing entirely for zero overhead
 
-### 3. Circuit Breaker Pattern - Connection Management
+### 3. Observer Pattern — Per-Destination Metrics (v2 Enhanced)
+**Purpose**: Decouple metrics collection with per-destination visibility
+**Implementation**:
+- Each destination exposes `get_stats() -> DestinationStats`
+- MetricsCollector v2 polls stats and exports with `{destination="name"}` labels
+- Global metrics for input source and service-level health
+
+### 4. Circuit Breaker Pattern — Connection Management (v1 + v2)
 **Purpose**: Prevent cascading failures and implement intelligent retry
 **Implementation**:
-- Track connection failure rates
-- Implement exponential backoff with maximum delay
-- Gracefully degrade when RTCM server unavailable
+- Track connection failure rates per destination (independent)
+- Exponential backoff with configurable initial/max delay per destination
+- One destination failure does NOT affect others (thread isolation)
 
-### 4. Pipeline Pattern - Data Processing
-**Purpose**: Clean data flow with minimal latency
+### 5. Factory Pattern — DestinationFactory (v2 NEW)
+**Purpose**: Create destination instances from config
 **Implementation**:
-```
-Input Source → Data Buffer → RTCM Client → Server
-     ↓              ↓            ↓
-  Metrics    →  Metrics   →   Metrics
-```
+- Parses `destinations:` list from config v2
+- Creates appropriate destination type (surepath/ntrip/tcp_server)
+- Validates per-destination config and filter settings
+
+### 6. A+ Pattern — Async Inside Thread (v2 NEW)
+**Purpose**: Use asyncio where beneficial while keeping threading architecture
+**Implementation**:
+- TCP Server destination uses `asyncio.start_server()` inside its own thread
+- Elegantly handles many simultaneous clients
+- Thread provides isolation; asyncio provides efficient I/O multiplexing
 
 ## Component Relationships
 
-### Core Service Dependencies
+### v2.0 Core Service Dependencies
 ```
-SPBaseRelay (main)
-├── ConfigManager (reads config.yaml)
-├── InputManager (creates appropriate InputSource)
-├── RTCMClient (handles server connection)
-├── MetricsCollector (Prometheus metrics)  
-└── HealthMonitor (tracks overall system health)
+SPBaseRelay (main v2)
+├── ConfigManager (reads config.yaml v2 — destinations: list)
+├── InputSource (created by InputFactory — unchanged)
+├── BroadcastHub (NEW — reads input, fans out to destinations)
+│   ├── MessageFilter per destination (pass_all/allowlist/blocklist)
+│   ├── SurePathDestination (wraps RTCMClient)
+│   ├── NtripDestination (NTRIP v1/v2 protocol)
+│   ├── NtripDestination (another caster)
+│   └── TcpServerDestination (local TCP server)
+├── MetricsCollector v2 (per-destination Prometheus labels)
+└── SignalHandler (graceful shutdown)
 ```
 
-### Threading Model
-- **Main Thread**: Service coordination, configuration management
-- **Input Thread**: Continuous reading from input source
-- **Output Thread**: RTCM server communication and heartbeat monitoring
+### v2.0 Threading Model
+- **Main Thread**: Service coordination, signal handling
+- **Input Thread**: Continuous reading from input source (unchanged)
+- **Broadcast Thread**: Frame parsing, filtering, queue distribution
+- **Destination Threads**: One per enabled destination (independent)
+  - SurePath thread: Custom INIT auth + $HB$ heartbeat
+  - NTRIP thread(s): SOURCE/HTTP POST auth + raw/chunked streaming
+  - TCP Server thread: asyncio event loop for multi-client broadcast
 - **Metrics Thread**: Prometheus HTTP server (if enabled)
-- **Health Thread**: Periodic health checks and cleanup
 
-### Error Propagation
+### v1.x Component Dependencies (DEPRECATED)
+```
+SPBaseRelay (main v1)
+├── ConfigManager → InputManager → RTCMClient
+├── DataPipelineCoordinator (3-thread: input, coordinator, heartbeat)
+└── MetricsCollector (global metrics only)
+```
+
+### Error Propagation (v2 Enhanced)
 - Input errors: Log and attempt reconnection, continue operation
-- Output errors: Implement exponential backoff, buffer data briefly
-- Configuration errors: Fail fast with clear error messages
-- System errors: Graceful shutdown with resource cleanup
+- Destination errors: Independent per-destination — one failure doesn't affect others
+- Configuration errors: Fail fast with clear error messages (detect old v1 format)
+- System errors: Graceful shutdown with resource cleanup across all destinations
 
 ## Key Technical Decisions
 
-### 1. No RTCM Validation
-**Decision**: Pass-through mode with no message validation
-**Rationale**: Minimize latency, trust input source quality
-**Impact**: Reduces CPU overhead, maintains real-time performance
+### v1.x Decisions (Still Active)
+1. **No RTCM Validation**: Pass-through mode — minimize latency, trust input source
+2. **YAML Configuration**: config.yaml with env var overrides
+3. **Prometheus Metrics**: Industry-standard monitoring
+4. **Exponential Backoff Retry**: Prevent server overload during outages
+5. **Threading Over Async**: Simpler debugging, better library compatibility
 
-### 2. Separate Configuration File
-**Decision**: Use config.yaml instead of RTKBase integration initially  
-**Rationale**: Standalone operation requirement, future integration flexibility
-**Impact**: Independent deployment, easier testing, later RTKBase integration
-
-### 3. Prometheus Metrics
-**Decision**: Use Prometheus client library for metrics export
-**Rationale**: Industry standard, good monitoring ecosystem integration
-**Impact**: Professional monitoring capabilities, ops team familiar tooling
-
-### 4. Exponential Backoff Retry
-**Decision**: Implement intelligent retry with exponential backoff
-**Rationale**: Prevent server overload, handle transient network issues
-**Impact**: Robust operation, reduced server load during outages
-
-### 5. Threading Over Async
-**Decision**: Use threading for concurrent operations
-**Rationale**: Simpler debugging, better library compatibility
-**Impact**: Straightforward implementation, familiar patterns for ops teams
+### v2.0 Decisions (March 2026)
+6. **A+ Threading**: Per-destination threads with async-ready interfaces. TCP server uses asyncio internally.
+7. **NTRIP v1.0 + v2.0**: Both supported, v2.0 default. ~40 lines delta between implementations.
+8. **Per-Destination Filtering**: pass_all (zero overhead) / allowlist / blocklist on RTCM message type IDs
+9. **Clean Slate Metrics**: Breaking change — per-destination Prometheus labels replace global metrics
+10. **`destinations:` Config Format**: Breaking change from v1 `server:` — list of typed destination configs
+11. **BroadcastHub Replaces DataPipeline**: Fan-out pattern instead of single-destination coordinator
 
 ## Critical Implementation Paths
 
-### 1. Authentication Flow
+### v1.x Sure-Path Authentication (Unchanged)
 ```
-Connect TCP → Send INIT command → Receive $HB$ → Start heartbeat monitoring
-```
-
-### 2. Data Relay Flow  
-```
-Read from input → Buffer data → Send to RTCM server → Update metrics
+Connect TCP → Send INIT:user:pass* → Receive $HB$ → Start heartbeat monitoring
 ```
 
-### 3. Error Recovery Flow
+### v2.0 NTRIP v1.0 Server-to-Caster (NEW)
+```
+Connect TCP → Send SOURCE <password>\r\n → Receive ICY 200 OK → Stream raw RTCM
+```
+
+### v2.0 NTRIP v2.0 Server-to-Caster (NEW)
+```
+Connect TCP → POST /<mount> HTTP/1.1 + Basic Auth → Receive HTTP 200 → Stream chunked RTCM
+```
+
+### v2.0 Broadcast Data Flow (NEW)
+```
+Input Thread → BroadcastHub → [per-dest MessageFilter] → Queue → Destination Thread → Server
+```
+
+### Error Recovery (v1 + v2)
 ```
 Detect failure → Log error → Close connections → Wait (exponential backoff) → Retry
-```
-
-### 4. Health Monitoring Flow
-```
-Check input status → Check output status → Update metrics → Log status
 ```
 
 ## Integration Points

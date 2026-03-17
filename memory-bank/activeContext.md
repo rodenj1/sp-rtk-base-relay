@@ -4,9 +4,9 @@
 
 **Primary Objective**: SP-Base-Relay v2.0 — Multi-Destination Architecture (March 2026)
 
-**Status**: Phase 2B COMPLETE. Ready for Phase 3 (NTRIP Destination).
+**Status**: Phase 3A COMPLETE. Session 3B (mock NTRIP caster integration testing) next.
 
-**Branch**: `feature/v2-multi-destination` (latest: commit b455542)
+**Branch**: `feature/v2-multi-destination` (latest: commit 26fe862)
 
 ### v2.0 Phase 1 — Foundation Complete ✅
 
@@ -29,7 +29,13 @@
 |---|---|---|---|
 | 2B | main.py v2 — BroadcastHub + DestinationFactory orchestration | 53 (rewritten) | b455542 |
 
-**Total v2 new tests**: ~276 new tests (832 total, up from 556 in v1.x)
+### v2.0 Phase 3A — NtripDestination Complete ✅ (March 17, 2026)
+
+| Session | Deliverable | Tests | Commit |
+|---|---|---|---|
+| 3A | NtripDestination — NTRIP v1.0 + v2.0 server, factory registration | 39 | 26fe862 |
+
+**Total v2 new tests**: ~315 new tests (871 total, up from 556 in v1.x)
 
 ### Design Review Decisions (DR-1 through DR-7)
 1. **DR-1**: Dual-path frame parsing — parse only when filtering needed
@@ -45,15 +51,13 @@ Full architecture plan: `docs/v2-architecture-plan.md`
 
 ---
 
-## Next Steps — Phase 3: NTRIP Destination
+## Next Steps — Phase 3B: Mock NTRIP Caster Integration Testing
 
-**Effort**: 2-3 sessions | **Dependencies**: Phase 2 (DONE)
+**Effort**: 1 session | **Dependencies**: Phase 3A (DONE)
 
-1. `NtripDestination` implementing BaseDestination
-2. NTRIP v1.0 protocol (SOURCE + raw stream)
-3. NTRIP v2.0 protocol (HTTP POST + chunked transfer)
-4. Mock NTRIP caster for testing
-5. RTK2go real-world testing
+1. Mock NTRIP caster fixture for local integration testing (no RTK2go)
+2. Integration tests: v1.0 connect + stream, v2.0 connect + stream
+3. Error scenario tests: auth reject, caster crash, reconnection
 
 ---
 
@@ -62,7 +66,8 @@ Full architecture plan: `docs/v2-architecture-plan.md`
 ### Phase 1: Foundation — COMPLETE ✅
 ### Phase 2A: SurePathDestination — COMPLETE ✅
 ### Phase 2B: main.py v2 Refactor — COMPLETE ✅
-### Phase 3: NTRIP Destination — NOT STARTED
+### Phase 3A: NtripDestination — COMPLETE ✅
+### Phase 3B: Mock NTRIP Caster Testing — NOT STARTED
 ### Phase 4: Metrics v2 — NOT STARTED
 ### Phase 5: TCP Server Destination — NOT STARTED (Low Priority)
 ### Phase 6: Integration & Polish — NOT STARTED

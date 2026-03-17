@@ -1,11 +1,11 @@
 # Progress
 
-## Current Status — v2.0 Phase 2B COMPLETE (March 17, 2026)
+## Current Status — v2.0 Phase 3A COMPLETE (March 17, 2026)
 
 **v1.x**: All phases complete (production-running)
-**v2.0**: Phase 2B complete. Phase 3 (NTRIP Destination) next.
+**v2.0**: Phase 3A complete. Phase 3B (mock NTRIP caster testing) next.
 **Branch**: `feature/v2-multi-destination`
-**Tests**: 832 passing (~276 new v2 tests), zero regressions
+**Tests**: 871 passing (~315 new v2 tests), zero regressions
 
 Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
@@ -42,14 +42,23 @@ Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 - [x] `test_main.py` fully rewritten (53 tests)
 - [x] 832/832 passing, zero regressions
 
-### Phase 3: NTRIP Destination
-**Status**: NOT STARTED | **Effort**: 2-3 sessions
+### Phase 3A: NtripDestination ✅ COMPLETE
+**Status**: COMPLETE (Session 3A, commit `26fe862`) | **Effort**: 1 session
 
-- [ ] `NtripDestination` implementing BaseDestination
-- [ ] NTRIP v1.0 protocol (SOURCE + raw stream)
-- [ ] NTRIP v2.0 protocol (HTTP POST + chunked)
-- [ ] Mock NTRIP caster for testing
-- [ ] RTK2go real-world testing
+- [x] `NtripDestination` implementing BaseDestination (direct TCP socket)
+- [x] NTRIP v1.0 protocol (SOURCE auth + raw binary streaming)
+- [x] NTRIP v2.0 protocol (HTTP POST + Basic auth + chunked transfer encoding)
+- [x] TCP keepalive (DR-5), exponential backoff reconnection
+- [x] `build_ntrip_destination` factory builder, auto-registered
+- [x] 39 new tests (97% coverage on ntrip_destination.py)
+- [x] 871/871 passing, zero regressions
+
+### Phase 3B: Mock NTRIP Caster Testing
+**Status**: NOT STARTED | **Effort**: 1 session
+
+- [ ] Mock NTRIP caster fixture for local integration testing
+- [ ] Integration tests: v1.0 + v2.0 connect + stream
+- [ ] Error scenario tests: auth reject, caster crash, reconnection
 
 ### Phase 4: Metrics v2
 **Status**: NOT STARTED | **Effort**: 1-2 sessions
@@ -74,7 +83,7 @@ Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
 ---
 
-## v2.0 Module Map (Phase 2A Complete)
+## v2.0 Module Map (Phase 3A Complete)
 
 ```
 src/sp_base_relay/
@@ -84,10 +93,11 @@ src/sp_base_relay/
 │   ├── message_filter.py        # NEW — FilterConfig + MessageFilter
 │   ├── broadcast_hub.py         # NEW — fan-out coordinator
 │   └── destinations/
-│       ├── __init__.py           # Exports + auto-registers surepath
+│       ├── __init__.py           # Exports + auto-registers surepath + ntrip
 │       ├── base_destination.py   # NEW — ABC + queue + stats
 │       ├── destination_factory.py # NEW — registry-based factory
-│       └── surepath_destination.py # NEW — RTCMClient wrapper
+│       ├── surepath_destination.py # NEW — RTCMClient wrapper
+│       └── ntrip_destination.py  # NEW — NTRIP v1.0 + v2.0 server
 ```
 
 ---
@@ -125,4 +135,4 @@ src/sp_base_relay/
 - ⚠️ v2.0 is a breaking change (config format, metrics names)
 - ⚠️ Phase 10 (PyPI packaging) still not started from v1.x
 - ✅ v1.x Sure-Path connection is production-stable
-- ✅ All 832 unit tests passing
+- ✅ All 871 unit tests passing

@@ -1,10 +1,11 @@
 # Progress
 
-## Current Status — v2.0 Design Review Complete (March 16, 2026)
+## Current Status — v2.0 Phase 1 Session 1A Complete (March 17, 2026)
 
-**v1.x**: All phases complete (556 tests, ~90% coverage, production-running)
-**v2.0**: Architecture planning + design review complete. Phase 1 Session 1A ready to begin.
-**Branch**: `feature/v2-multi-destination` (off `main` at `f8a766f`)
+**v1.x**: All phases complete (production-running)
+**v2.0**: Phase 1 Session 1A complete. Session 1B (Config v2) ready to begin.
+**Branch**: `feature/v2-multi-destination` (commit `9269df9`)
+**Tests**: 658 passing (102 new), 84.79% overall coverage
 
 Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
@@ -13,15 +14,16 @@ Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 ## v2.0 Development Progress
 
 ### Phase 1: Foundation — Base Destination & Broadcast Hub
-**Status**: NOT STARTED | **Effort**: 3-4 sessions
+**Status**: IN PROGRESS (Session 1A complete) | **Effort**: 3-4 sessions
 
-- [ ] `BaseDestination` ABC with standard interface
-- [ ] `DestinationStats` dataclass
-- [ ] `MessageFilter` (pass_all/allowlist/blocklist)
-- [ ] `BroadcastHub` (replaces DataPipelineCoordinator)
-- [ ] `DestinationFactory`
-- [ ] Config v2 (`destinations:` list parsing)
-- [ ] Test suite for all new modules
+- [x] `BaseDestination` ABC with standard interface (88% coverage)
+- [x] `DestinationStats` dataclass
+- [x] `MessageFilter` (pass_all/allowlist/blocklist) (100% coverage)
+- [x] `DestinationError` / `NtripError` exception types (100% coverage)
+- [ ] Config v2 (`destinations:` list parsing) — Session 1B
+- [ ] `BroadcastHub` (replaces DataPipelineCoordinator) — Session 1C
+- [ ] `DestinationFactory` — Session 1D
+- [ ] Test suite for remaining modules
 
 ### Phase 2: Sure-Path Destination Refactor
 **Status**: NOT STARTED | **Effort**: 1-2 sessions

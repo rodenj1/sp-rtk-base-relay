@@ -4,9 +4,9 @@
 
 **Primary Objective**: SP-Base-Relay v2.0 — Multi-Destination Architecture (March 2026)
 
-**Status**: Design review complete, ready for Phase 1 Session 1A implementation
+**Status**: Phase 1 Session 1A complete. Session 1B (Config v2) ready to begin.
 
-**Branch**: `feature/v2-multi-destination` (branched off `main` at `f8a766f`)
+**Branch**: `feature/v2-multi-destination` (commit `9269df9`)
 
 ### v2.0 Planning & Design Review (March 16, 2026)
 Architecture planning + detailed design review completed. Key decisions:

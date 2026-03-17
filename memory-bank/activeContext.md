@@ -4,20 +4,31 @@
 
 **Primary Objective**: SP-Base-Relay v2.0 — Multi-Destination Architecture (March 2026)
 
-**Status**: Planning complete, ready for Phase 1 implementation
+**Status**: Design review complete, ready for Phase 1 Session 1A implementation
 
-### v2.0 Planning Session (March 16, 2026)
-Comprehensive architecture planning session completed with the following decisions:
+**Branch**: `feature/v2-multi-destination` (branched off `main` at `f8a766f`)
 
-1. **Concurrency Model**: A+ Threading — per-destination queues with async-ready interface. TCP server destination uses asyncio internally inside its own thread.
-2. **NTRIP Protocol**: Both v1.0 and v2.0 supported, v2.0 as default. Target casters: RTK2go, Onocoy, rtkdirect.
-3. **Message Filtering**: Per-destination RTCM message type ID filtering with pass_all/allowlist/blocklist modes.
-4. **Metrics**: Clean slate v2.0 — per-destination Prometheus labels replacing global metrics entirely.
-5. **TCP Server**: Multi-client async inside thread (A+ pattern), low priority.
-6. **Configuration**: `destinations:` list format replacing `server:` section. Breaking change with migration message.
+### v2.0 Planning & Design Review (March 16, 2026)
+Architecture planning + detailed design review completed. Key decisions:
+
+1. **Concurrency Model**: A+ Threading — per-destination queues with async-ready interface
+2. **NTRIP Protocol**: Both v1.0 and v2.0 supported, v2.0 as default
+3. **Message Filtering**: Per-destination RTCM message type ID filtering (pass_all/allowlist/blocklist)
+4. **Metrics**: Clean slate v2.0 — per-destination Prometheus labels
+5. **TCP Server**: Multi-client async inside thread (A+ pattern), low priority
+6. **Configuration**: `destinations:` list format replacing `server:` section
+
+### Design Review Decisions (DR-1 through DR-7)
+7. **DR-1**: Dual-path frame parsing — parse only when filtering needed; `pass_all` gets raw chunks; metrics decoding post-send per destination thread
+8. **DR-2**: Queue overflow — drop newest (non-blocking), clear queue on reconnect, `maxsize=100`, track drops metric
+9. **DR-3**: Separate Broadcast Thread — acts as coordinator between input and destinations
+10. **DR-4**: Config migration — documentation only, no CLI migration tool
+11. **DR-5**: NTRIP connection health — industry standard `send()` failure + exponential backoff (same for v1 & v2)
+12. **DR-6**: NTRIP STR records — deferred to post-v2.0
+13. **DR-7**: Input no-data watchdog — passive logging (WARNING after 30s, Prometheus gauge)
 
 ### Architecture Document
-Full architecture plan: `docs/v2-architecture-plan.md`
+Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
 ---
 

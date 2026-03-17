@@ -1,11 +1,12 @@
 # Progress
 
-## Current Status — v2.0 Planning Complete (March 16, 2026)
+## Current Status — v2.0 Design Review Complete (March 16, 2026)
 
 **v1.x**: All phases complete (556 tests, ~90% coverage, production-running)
-**v2.0**: Architecture planning complete, Phase 1 implementation ready to begin
+**v2.0**: Architecture planning + design review complete. Phase 1 Session 1A ready to begin.
+**Branch**: `feature/v2-multi-destination` (off `main` at `f8a766f`)
 
-Full architecture plan: `docs/v2-architecture-plan.md`
+Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
 ---
 

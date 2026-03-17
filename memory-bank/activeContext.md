@@ -4,9 +4,9 @@
 
 **Primary Objective**: SP-Base-Relay v2.0 — Multi-Destination Architecture (March 2026)
 
-**Status**: Phase 3 COMPLETE (3A + 3B). Phase 4 (Metrics v2) next.
+**Status**: Phase 4 COMPLETE (Metrics v2). Phase 5 (TCP Server) or Phase 6 (Integration) next.
 
-**Branch**: `feature/v2-multi-destination` (latest: commit 74805e3)
+**Branch**: `feature/v2-multi-destination` (latest: commit 1912b14)
 
 ### v2.0 Phase 1 — Foundation Complete ✅
 
@@ -41,7 +41,13 @@
 |---|---|---|---|
 | 3B | MockNtripCaster fixture + NTRIP integration tests (real TCP) | 20 | 74805e3 |
 
-**Total v2 new tests**: ~335 new tests (891 total, up from 556 in v1.x)
+### v2.0 Phase 4 — Metrics v2 Complete ✅ (March 17, 2026)
+
+| Session | Deliverable | Tests | Commit |
+|---|---|---|---|
+| 4 | MetricsCollector v2 — per-destination Prometheus labels, Grafana dashboard v2 | 43 (rewritten) | 1912b14 |
+
+**Total v2 new tests**: ~352 new tests (908 total, up from 556 in v1.x)
 
 ### Design Review Decisions (DR-1 through DR-7)
 1. **DR-1**: Dual-path frame parsing — parse only when filtering needed
@@ -57,13 +63,13 @@ Full architecture plan: `docs/v2-architecture-plan.md`
 
 ---
 
-## Next Steps — Phase 4: Metrics v2
+## Next Steps — Phase 5 or 6
 
-**Effort**: 1-2 sessions | **Dependencies**: Phase 3 (DONE)
+**Option A — Phase 5: TCP Server Destination** (1-2 sessions)
+- `TcpServerDestination` (asyncio inside thread), multi-client broadcast, backpressure
 
-1. `MetricsCollector` v2 with per-destination labels
-2. Grafana dashboard v2
-3. Alerting rules
+**Option B — Phase 6: Integration & Polish** (1-2 sessions)
+- End-to-end integration tests, updated docs/README/example configs, version bump to 2.0.0
 
 ---
 
@@ -74,7 +80,7 @@ Full architecture plan: `docs/v2-architecture-plan.md`
 ### Phase 2B: main.py v2 Refactor — COMPLETE ✅
 ### Phase 3A: NtripDestination — COMPLETE ✅
 ### Phase 3B: Mock NTRIP Caster Testing — COMPLETE ✅
-### Phase 4: Metrics v2 — NOT STARTED
+### Phase 4: Metrics v2 — COMPLETE ✅
 ### Phase 5: TCP Server Destination — NOT STARTED (Low Priority)
 ### Phase 6: Integration & Polish — NOT STARTED
 

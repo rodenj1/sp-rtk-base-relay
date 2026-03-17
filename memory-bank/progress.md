@@ -1,11 +1,11 @@
 # Progress
 
-## Current Status — v2.0 Phase 3 COMPLETE (March 17, 2026)
+## Current Status — v2.0 Phase 4 COMPLETE (March 17, 2026)
 
 **v1.x**: All phases complete (production-running)
-**v2.0**: Phase 3 complete (3A + 3B). Phase 4 (Metrics v2) next.
+**v2.0**: Phase 4 complete (Metrics v2). Phase 5 (TCP Server) or Phase 6 (Integration) next.
 **Branch**: `feature/v2-multi-destination`
-**Tests**: 891 passing (~335 new v2 tests), zero regressions
+**Tests**: 908 passing (~352 new v2 tests), zero regressions
 
 Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
@@ -60,12 +60,18 @@ Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 - [x] 20 integration tests: v1.0 + v2.0 happy path, header format, chunked roundtrip, auth reject, caster crash, connection refused, data integrity
 - [x] 891/891 passing, zero regressions
 
-### Phase 4: Metrics v2
-**Status**: NOT STARTED | **Effort**: 1-2 sessions
+### Phase 4: Metrics v2 ✅ COMPLETE
+**Status**: COMPLETE (Session 4, commit `1912b14`) | **Effort**: 1 session
 
-- [ ] `MetricsCollector` v2 with per-destination labels
-- [ ] Grafana dashboard v2
-- [ ] Alerting rules
+- [x] `MetricsCollector` v2 — clean-slate rewrite with per-destination Prometheus labels
+- [x] Per-dest: `dest_bytes_sent`, `dest_messages_sent`, `dest_messages_dropped`, `dest_messages_filtered`, `dest_connection_status`, `dest_connection_attempts`, `dest_errors`, `dest_queue_depth`
+- [x] Global: `input_connection_status`, `input_seconds_since_last_data` (DR-7), `service_uptime_seconds`, `active_destinations_count`, `hub_running_status`
+- [x] Pull model via `update_all()` — reads DestinationStats + BroadcastHub on 1s loop
+- [x] Delta-based counter increments via `_DestSnapshot` bookkeeping
+- [x] `main.py._update_metrics()` updated to v2 API
+- [x] `test_metrics.py` rewritten — 43 tests (100% coverage on metrics.py)
+- [x] Grafana dashboard v2 — `$destination` template variable, per-dest throughput/queue/drops/errors panels, DR-7 watchdog panel
+- [x] 908/908 passing, 88.53% coverage, zero regressions
 
 ### Phase 5: TCP Server Destination (Low Priority)
 **Status**: NOT STARTED | **Effort**: 1-2 sessions
@@ -83,11 +89,12 @@ Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
 ---
 
-## v2.0 Module Map (Phase 3A Complete)
+## v2.0 Module Map (Phase 4 Complete)
 
 ```
 src/sp_base_relay/
 ├── config.py                    # v2 destination configs + old format detection
+├── metrics.py                   # REWRITTEN — per-destination Prometheus labels
 ├── exceptions.py                # DestinationError, NtripError added
 ├── core/
 │   ├── message_filter.py        # NEW — FilterConfig + MessageFilter
@@ -135,4 +142,4 @@ src/sp_base_relay/
 - ⚠️ v2.0 is a breaking change (config format, metrics names)
 - ⚠️ Phase 10 (PyPI packaging) still not started from v1.x
 - ✅ v1.x Sure-Path connection is production-stable
-- ✅ All 891 unit tests passing
+- ✅ All 908 unit tests passing

@@ -1,162 +1,141 @@
-"""Prometheus metrics collection and export for SP-Base-Relay.
+"""Prometheus metrics collection and export for SP-Base-Relay v2.
 
-This module provides comprehensive metrics collection for monitoring
-the RTCM relay service using Prometheus.
+Clean-slate rewrite for the multi-destination architecture.
+All metrics are per-destination using Prometheus labels, replacing
+the single-destination global counters from v1.
+
+Pull model: ``update_all()`` reads from ``DestinationStats`` and
+``BroadcastHub`` on each scrape interval (1 s in the main loop).
 """
 
+from __future__ import annotations
+
 import logging
+from collections.abc import Sequence
 import time
-from typing import Any
+from typing import TYPE_CHECKING
+
 from prometheus_client import (
     Counter,
     Gauge,
-    Histogram,
     start_http_server,
 )
+
+if TYPE_CHECKING:
+    from sp_base_relay.core.broadcast_hub import BroadcastHub
+    from sp_base_relay.core.destinations.base_destination import BaseDestination
 
 
 logger = logging.getLogger(__name__)
 
 
 class MetricsCollector:
-    """Collects and exports Prometheus metrics for SP-Base-Relay.
+    """Prometheus metrics collector for SP-Base-Relay v2.
 
-    Provides comprehensive metrics for:
-    - Connection status and health
-    - Data flow and throughput
-    - Error rates and types
-    - System uptime and performance
+    Provides **per-destination** metrics (labeled by ``destination``)
+    and **global** metrics for the input source and service health.
+
+    Usage::
+
+        mc = MetricsCollector()
+        mc.start_metrics_server(port=8080)
+        # ... every 1 s in the main loop ...
+        mc.update_all(destinations, hub, input_connected=True)
     """
 
-    def __init__(self, namespace: str = "sp_base_relay"):
+    def __init__(self, namespace: str = "sp_base_relay") -> None:
         """Initialize metrics collector.
 
         Args:
-            namespace: Metric name prefix
+            namespace: Prometheus metric name prefix.
         """
         self.namespace = namespace
         self._running = False
+        self._service_start_time = time.time()
 
-        # Connection metrics
-        self.rtcm_connection_status = Gauge(
-            f"{namespace}_rtcm_connection_status",
-            "RTCM server connection status (1=connected, 0=disconnected)",
+        # ── Per-destination metrics (labelled) ──────────────────────
+        self.dest_bytes_sent = Counter(
+            f"{namespace}_dest_bytes_sent_total",
+            "Total bytes sent to destination",
+            ["destination"],
+        )
+        self.dest_messages_sent = Counter(
+            f"{namespace}_dest_messages_sent_total",
+            "Total messages sent to destination",
+            ["destination"],
+        )
+        self.dest_messages_dropped = Counter(
+            f"{namespace}_dest_messages_dropped_total",
+            "Total messages dropped (queue overflow) per destination",
+            ["destination"],
+        )
+        self.dest_messages_filtered = Counter(
+            f"{namespace}_dest_messages_filtered_total",
+            "Total messages filtered out per destination",
+            ["destination"],
+        )
+        self.dest_connection_status = Gauge(
+            f"{namespace}_dest_connection_status",
+            "Destination connection status (1=connected, 0=disconnected)",
+            ["destination"],
+        )
+        self.dest_connection_attempts = Counter(
+            f"{namespace}_dest_connection_attempts_total",
+            "Total connection attempts per destination",
+            ["destination"],
+        )
+        self.dest_errors = Counter(
+            f"{namespace}_dest_errors_total",
+            "Total errors per destination",
+            ["destination"],
+        )
+        self.dest_queue_depth = Gauge(
+            f"{namespace}_dest_queue_depth",
+            "Current queue depth per destination",
+            ["destination"],
         )
 
-        self.rtcm_connection_attempts_total = Counter(
-            f"{namespace}_rtcm_connection_attempts_total",
-            "Total RTCM server connection attempts",
-        )
-
-        self.rtcm_successful_connections_total = Counter(
-            f"{namespace}_rtcm_successful_connections_total",
-            "Total successful RTCM server connections",
-        )
-
-        self.rtcm_authentication_failures_total = Counter(
-            f"{namespace}_rtcm_authentication_failures_total",
-            "Total RTCM authentication failures",
-        )
-
-        self.rtcm_heartbeat_timeouts_total = Counter(
-            f"{namespace}_rtcm_heartbeat_timeouts_total",
-            "Total RTCM heartbeat timeout events",
-        )
-
-        # Data flow metrics
-        self.rtcm_messages_sent_total = Counter(
-            f"{namespace}_rtcm_messages_sent_total",
-            "Total RTCM messages sent to server",
-        )
-
-        self.rtcm_bytes_sent_total = Counter(
-            f"{namespace}_rtcm_bytes_sent_total", "Total bytes sent to RTCM server"
-        )
-
-        self.pipeline_messages_processed_total = Counter(
-            f"{namespace}_pipeline_messages_processed_total",
-            "Total messages processed through pipeline",
-        )
-
-        self.pipeline_bytes_processed_total = Counter(
-            f"{namespace}_pipeline_bytes_processed_total",
-            "Total bytes processed through pipeline",
-        )
-
-        # Input source metrics
+        # ── Global metrics ──────────────────────────────────────────
         self.input_connection_status = Gauge(
             f"{namespace}_input_connection_status",
             "Input source connection status (1=connected, 0=disconnected)",
         )
-
-        self.input_bytes_read_total = Counter(
-            f"{namespace}_input_bytes_read_total", "Total bytes read from input source"
+        self.input_seconds_since_last_data = Gauge(
+            f"{namespace}_input_seconds_since_last_data",
+            "Seconds since last data received from input source (DR-7)",
         )
-
-        self.input_errors_total = Counter(
-            f"{namespace}_input_errors_total", "Total input source errors"
-        )
-
-        # Pipeline metrics
-        self.pipeline_running_status = Gauge(
-            f"{namespace}_pipeline_running_status",
-            "Pipeline running status (1=running, 0=stopped)",
-        )
-
-        self.pipeline_restarts_total = Counter(
-            f"{namespace}_pipeline_restarts_total", "Total pipeline restart attempts"
-        )
-
-        self.pipeline_errors_total = Counter(
-            f"{namespace}_pipeline_errors_total",
-            "Total pipeline errors by type",
-            ["error_type"],
-        )
-
-        # Health metrics
-        self.rtcm_heartbeat_last_received_timestamp = Gauge(
-            f"{namespace}_rtcm_heartbeat_last_received_timestamp",
-            "Unix timestamp of last RTCM heartbeat received",
-        )
-
         self.service_uptime_seconds = Gauge(
-            f"{namespace}_service_uptime_seconds", "Service uptime in seconds"
+            f"{namespace}_service_uptime_seconds",
+            "Service uptime in seconds",
+        )
+        self.active_destinations_count = Gauge(
+            f"{namespace}_active_destinations_count",
+            "Number of currently connected destinations",
+        )
+        self.hub_running_status = Gauge(
+            f"{namespace}_hub_running_status",
+            "Broadcast hub running status (1=running, 0=stopped)",
         )
 
-        self.pipeline_uptime_seconds = Gauge(
-            f"{namespace}_pipeline_uptime_seconds",
-            "Current pipeline session uptime in seconds",
-        )
+        # ── Internal bookkeeping ────────────────────────────────────
+        # Previous snapshot of each destination's cumulative counters
+        # so we can compute deltas for Prometheus Counter.inc().
+        self._prev_stats: dict[str, _DestSnapshot] = {}
 
-        # Relay performance metrics
-        self.relay_latency_seconds = Histogram(
-            f"{namespace}_relay_latency_seconds",
-            "End-to-end relay latency from input read to RTCM send",
-            buckets=[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0],
-        )
+        logger.info("MetricsCollector v2 initialized")
 
-        self.rtcm_messages_by_id_total = Counter(
-            f"{namespace}_rtcm_messages_by_id_total",
-            "Total RTCM messages sent by message ID",
-            ["message_id"],
-        )
+    # ================================================================
+    # Server lifecycle
+    # ================================================================
 
-        self.rtcm_message_decode_failures_total = Counter(
-            f"{namespace}_rtcm_message_decode_failures_total",
-            "Total RTCM message decode failures",
-        )
-
-        # Service start time for uptime calculation
-        self._service_start_time = time.time()
-
-        logger.info("Metrics collector initialized")
-
-    def start_metrics_server(self, port: int = 9090, host: str = "0.0.0.0") -> None:
+    def start_metrics_server(
+        self, port: int = 9090, host: str = "0.0.0.0"
+    ) -> None:
         """Start Prometheus metrics HTTP server.
 
         Args:
-            port: Port to listen on
-            host: Host to bind to
+            port: Port to listen on.
+            host: Host to bind to.
         """
         if self._running:
             logger.warning("Metrics server already running")
@@ -171,214 +150,179 @@ class MetricsCollector:
             raise
 
     def stop_metrics_server(self) -> None:
-        """Stop metrics server."""
+        """Stop metrics server (marks as stopped)."""
         if not self._running:
             return
-
         self._running = False
         logger.info("Metrics server stopped")
 
-    def update_from_rtcm_stats(self, stats: Any, prev_stats: Any | None = None) -> None:
-        """Update metrics from RTCM client statistics.
-
-        Args:
-            stats: ConnectionStats from RTCMClient
-            prev_stats: Previous stats for calculating deltas (optional)
-        """
-        # For counters, we increment by the delta since last update
-        if prev_stats:
-            # Increment by difference
-            conn_attempts_delta = (
-                stats.connection_attempts - prev_stats.connection_attempts
-            )
-            if conn_attempts_delta > 0:
-                self.rtcm_connection_attempts_total.inc(conn_attempts_delta)
-
-            conn_success_delta = (
-                stats.successful_connections - prev_stats.successful_connections
-            )
-            if conn_success_delta > 0:
-                self.rtcm_successful_connections_total.inc(conn_success_delta)
-
-            auth_fail_delta = (
-                stats.authentication_failures - prev_stats.authentication_failures
-            )
-            if auth_fail_delta > 0:
-                self.rtcm_authentication_failures_total.inc(auth_fail_delta)
-
-            hb_timeout_delta = stats.heartbeat_timeouts - prev_stats.heartbeat_timeouts
-            if hb_timeout_delta > 0:
-                self.rtcm_heartbeat_timeouts_total.inc(hb_timeout_delta)
-
-            msg_sent_delta = stats.messages_sent - prev_stats.messages_sent
-            if msg_sent_delta > 0:
-                self.rtcm_messages_sent_total.inc(msg_sent_delta)
-
-            bytes_sent_delta = stats.bytes_sent - prev_stats.bytes_sent
-            if bytes_sent_delta > 0:
-                self.rtcm_bytes_sent_total.inc(bytes_sent_delta)
-
-        # Update health metrics
-        if stats.last_heartbeat_time > 0:
-            self.rtcm_heartbeat_last_received_timestamp.set(stats.last_heartbeat_time)
-
-    def update_from_pipeline_stats(
-        self, stats: Any, prev_stats: Any | None = None
-    ) -> None:
-        """Update metrics from data pipeline statistics.
-
-        Args:
-            stats: PipelineStats from DataPipelineCoordinator
-            prev_stats: Previous stats for calculating deltas (optional)
-        """
-        # For counters, increment by delta
-        if prev_stats:
-            msg_proc_delta = stats.messages_processed - prev_stats.messages_processed
-            if msg_proc_delta > 0:
-                self.pipeline_messages_processed_total.inc(msg_proc_delta)
-
-            bytes_proc_delta = stats.bytes_processed - prev_stats.bytes_processed
-            if bytes_proc_delta > 0:
-                self.pipeline_bytes_processed_total.inc(bytes_proc_delta)
-
-            restart_delta = stats.restart_attempts - prev_stats.restart_attempts
-            if restart_delta > 0:
-                self.pipeline_restarts_total.inc(restart_delta)
-
-            input_err_delta = stats.input_errors - prev_stats.input_errors
-            if input_err_delta > 0:
-                self.pipeline_errors_total.labels(error_type="input").inc(
-                    input_err_delta
-                )
-
-            rtcm_err_delta = stats.rtcm_errors - prev_stats.rtcm_errors
-            if rtcm_err_delta > 0:
-                self.pipeline_errors_total.labels(error_type="rtcm").inc(rtcm_err_delta)
-
-            coord_err_delta = stats.coordination_errors - prev_stats.coordination_errors
-            if coord_err_delta > 0:
-                self.pipeline_errors_total.labels(error_type="coordination").inc(
-                    coord_err_delta
-                )
-
-        # Update pipeline uptime
-        if stats.uptime_start is not None:
-            uptime = time.time() - stats.uptime_start
-            self.pipeline_uptime_seconds.set(uptime)
-        else:
-            self.pipeline_uptime_seconds.set(0)
-
-    def update_from_input_stats(
-        self, stats: Any, prev_stats: Any | None = None
-    ) -> None:
-        """Update metrics from input source statistics.
-
-        Args:
-            stats: ConnectionStatistics from InputSource
-            prev_stats: Previous stats for calculating deltas (optional)
-        """
-        # Update input source data metrics
-        if prev_stats:
-            bytes_read_delta = stats.bytes_read - prev_stats.bytes_read
-            if bytes_read_delta > 0:
-                self.input_bytes_read_total.inc(bytes_read_delta)
-
-    def update_connection_status(
-        self, rtcm_connected: bool, input_connected: bool
-    ) -> None:
-        """Update connection status gauges.
-
-        Args:
-            rtcm_connected: RTCM server connection status
-            input_connected: Input source connection status
-        """
-        self.rtcm_connection_status.set(1 if rtcm_connected else 0)
-        self.input_connection_status.set(1 if input_connected else 0)
-
-    def update_pipeline_status(self, running: bool) -> None:
-        """Update pipeline running status.
-
-        Args:
-            running: Pipeline running status
-        """
-        self.pipeline_running_status.set(1 if running else 0)
-
-    def update_service_uptime(self) -> None:
-        """Update service uptime metric."""
-        uptime = time.time() - self._service_start_time
-        self.service_uptime_seconds.set(uptime)
-
-    def record_relay_latency(self, latency_seconds: float) -> None:
-        """Record relay latency observation.
-
-        Args:
-            latency_seconds: Relay latency in seconds
-        """
-        self.relay_latency_seconds.observe(latency_seconds)
-
-    def increment_message_id_counter(self, message_id: int) -> None:
-        """Increment counter for specific RTCM message ID.
-
-        Args:
-            message_id: RTCM message ID (0-4095)
-        """
-        self.rtcm_messages_by_id_total.labels(message_id=str(message_id)).inc()
-
-    def increment_decode_failures(self) -> None:
-        """Increment decode failure counter."""
-        self.rtcm_message_decode_failures_total.inc()
-
-    def collect_all_metrics(
-        self,
-        rtcm_client: Any,
-        pipeline_coordinator: Any,
-        input_source: Any,
-        prev_rtcm_stats: Any | None = None,
-        prev_pipeline_stats: Any | None = None,
-        prev_input_stats: Any | None = None,
-    ) -> tuple[Any, Any, Any]:
-        """Collect and update all metrics from components.
-
-        Args:
-            rtcm_client: RTCMClient instance
-            pipeline_coordinator: DataPipelineCoordinator instance
-            input_source: InputSource instance
-            prev_rtcm_stats: Previous RTCM stats (optional)
-            prev_pipeline_stats: Previous pipeline stats (optional)
-            prev_input_stats: Previous input stats (optional)
-
-        Returns:
-            Tuple of (current_rtcm_stats, current_pipeline_stats, current_input_stats)
-        """
-        # Get current stats
-        rtcm_stats = rtcm_client.connection_statistics
-        pipeline_stats = pipeline_coordinator.pipeline_statistics
-        input_stats = input_source.connection_statistics
-
-        # Update RTCM metrics
-        self.update_from_rtcm_stats(rtcm_stats, prev_rtcm_stats)
-
-        # Update pipeline metrics
-        self.update_from_pipeline_stats(pipeline_stats, prev_pipeline_stats)
-
-        # Update input source metrics
-        self.update_from_input_stats(input_stats, prev_input_stats)
-
-        # Update connection status
-        self.update_connection_status(
-            rtcm_client.is_connected, input_source.is_connected
-        )
-
-        # Update pipeline status
-        self.update_pipeline_status(pipeline_coordinator.is_running)
-
-        # Update service uptime
-        self.update_service_uptime()
-
-        # Return current stats for next iteration
-        return (rtcm_stats, pipeline_stats, input_stats)
-
     @property
     def is_running(self) -> bool:
-        """Check if metrics server is running."""
+        """Whether the metrics HTTP server is active."""
         return self._running
+
+    # ================================================================
+    # Main update entry point
+    # ================================================================
+
+    def update_all(
+        self,
+        destinations: Sequence[BaseDestination],
+        hub: BroadcastHub | None = None,
+        input_connected: bool = False,
+    ) -> None:
+        """Refresh all Prometheus metrics from live components.
+
+        Called once per main-loop iteration (~1 s).
+
+        Args:
+            destinations: List of active destination instances.
+            hub: BroadcastHub (for input health data).
+            input_connected: Whether the GPS input source is connected.
+        """
+        self._update_destination_metrics(destinations)
+        self._update_global_metrics(destinations, hub, input_connected)
+
+    # ================================================================
+    # Per-destination update
+    # ================================================================
+
+    def _update_destination_metrics(
+        self, destinations: Sequence[BaseDestination]
+    ) -> None:
+        """Read DestinationStats and update labelled Prometheus metrics."""
+        for dest in destinations:
+            stats = dest.get_stats()
+            name = dest.name
+            prev = self._prev_stats.get(name)
+
+            # Gauges — set absolute values
+            self.dest_connection_status.labels(destination=name).set(
+                1 if dest.is_connected else 0
+            )
+            self.dest_queue_depth.labels(destination=name).set(
+                stats.queue_depth
+            )
+
+            # Counters — increment by delta since last update
+            if prev is not None:
+                _inc_delta(
+                    self.dest_bytes_sent.labels(destination=name),
+                    stats.bytes_sent,
+                    prev.bytes_sent,
+                )
+                _inc_delta(
+                    self.dest_messages_sent.labels(destination=name),
+                    stats.messages_sent,
+                    prev.messages_sent,
+                )
+                _inc_delta(
+                    self.dest_messages_dropped.labels(destination=name),
+                    stats.messages_dropped,
+                    prev.messages_dropped,
+                )
+                _inc_delta(
+                    self.dest_messages_filtered.labels(destination=name),
+                    stats.messages_filtered,
+                    prev.messages_filtered,
+                )
+                _inc_delta(
+                    self.dest_connection_attempts.labels(destination=name),
+                    stats.connection_attempts,
+                    prev.connection_attempts,
+                )
+                _inc_delta(
+                    self.dest_errors.labels(destination=name),
+                    stats.errors,
+                    prev.errors,
+                )
+
+            # Save snapshot for next iteration
+            self._prev_stats[name] = _DestSnapshot(
+                bytes_sent=stats.bytes_sent,
+                messages_sent=stats.messages_sent,
+                messages_dropped=stats.messages_dropped,
+                messages_filtered=stats.messages_filtered,
+                connection_attempts=stats.connection_attempts,
+                errors=stats.errors,
+            )
+
+    # ================================================================
+    # Global metrics update
+    # ================================================================
+
+    def _update_global_metrics(
+        self,
+        destinations: Sequence[BaseDestination],
+        hub: BroadcastHub | None,
+        input_connected: bool,
+    ) -> None:
+        """Update global (non-per-destination) metrics."""
+        # Input health
+        self.input_connection_status.set(1 if input_connected else 0)
+
+        # Seconds since last data (DR-7 watchdog)
+        if hub is not None:
+            last = hub.last_data_time
+            if last > 0:
+                self.input_seconds_since_last_data.set(time.time() - last)
+            else:
+                self.input_seconds_since_last_data.set(-1)
+            self.hub_running_status.set(1 if hub.is_running else 0)
+        else:
+            self.input_seconds_since_last_data.set(-1)
+            self.hub_running_status.set(0)
+
+        # Active destinations
+        active = sum(1 for d in destinations if d.is_connected)
+        self.active_destinations_count.set(active)
+
+        # Service uptime
+        self.service_uptime_seconds.set(time.time() - self._service_start_time)
+
+
+# =====================================================================
+# Internal helpers
+# =====================================================================
+
+
+class _DestSnapshot:
+    """Lightweight snapshot of cumulative counters for delta computation."""
+
+    __slots__ = (
+        "bytes_sent",
+        "messages_sent",
+        "messages_dropped",
+        "messages_filtered",
+        "connection_attempts",
+        "errors",
+    )
+
+    def __init__(
+        self,
+        bytes_sent: int = 0,
+        messages_sent: int = 0,
+        messages_dropped: int = 0,
+        messages_filtered: int = 0,
+        connection_attempts: int = 0,
+        errors: int = 0,
+    ) -> None:
+        self.bytes_sent = bytes_sent
+        self.messages_sent = messages_sent
+        self.messages_dropped = messages_dropped
+        self.messages_filtered = messages_filtered
+        self.connection_attempts = connection_attempts
+        self.errors = errors
+
+
+def _inc_delta(counter: Counter, current: int, previous: int) -> None:
+    """Increment a Prometheus Counter by the delta (if positive).
+
+    Args:
+        counter: A labelled Counter child.
+        current: Current cumulative value.
+        previous: Previous cumulative value.
+    """
+    delta = current - previous
+    if delta > 0:
+        counter.inc(delta)

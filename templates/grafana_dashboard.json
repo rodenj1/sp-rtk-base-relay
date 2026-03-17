@@ -2,1059 +2,485 @@
   "apiVersion": "v0alpha1",
   "kind": "Dashboard",
   "metadata": {
-    "name": "sp-base-relay-monitoring"
+    "name": "sp-base-relay-v2-monitoring"
   },
   "spec": {
-    "title": "SP-Base-Relay Monitoring",
-    "tags": ["rtcm", "gps", "relay"],
+    "title": "SP-Base-Relay v2 Monitoring",
+    "tags": ["rtcm", "gps", "relay", "multi-destination"],
     "timezone": "browser",
     "schemaVersion": 41,
     "version": 0,
     "refresh": "5s",
     "editable": true,
+    "templating": {
+      "list": [
+        {
+          "name": "destination",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(sp_base_relay_dest_connection_status, destination)",
+          "multi": true,
+          "includeAll": true,
+          "refresh": 2,
+          "current": { "text": "All", "value": "$__all" }
+        }
+      ]
+    },
     "panels": [
       {
         "id": 1,
         "type": "stat",
-        "title": "Connection Status",
-        "gridPos": {
-          "h": 4,
-          "w": 6,
-          "x": 0,
-          "y": 0
-        },
+        "title": "Service Overview",
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
         "targets": [
           {
-            "expr": "sp_base_relay_rtcm_connection_status",
-            "legendFormat": "RTCM Server",
+            "expr": "sp_base_relay_service_uptime_seconds",
+            "legendFormat": "Service Uptime",
             "refId": "A"
-          },
-          {
-            "expr": "sp_base_relay_input_connection_status",
-            "legendFormat": "Input Source",
-            "refId": "B"
           }
         ],
-        "options": {
-          "reduceOptions": {
-            "values": false,
-            "calcs": ["lastNotNull"]
-          },
-          "textMode": "value_and_name",
-          "graphMode": "none",
-          "colorMode": "background",
-          "justifyMode": "auto",
-          "orientation": "auto"
-        },
         "fieldConfig": {
           "defaults": {
+            "unit": "s",
             "thresholds": {
               "mode": "absolute",
-              "steps": [
-                {
-                  "value": null,
-                  "color": "red"
-                },
-                {
-                  "value": 0,
-                  "color": "red"
-                },
-                {
-                  "value": 1,
-                  "color": "green"
-                }
-              ]
-            },
-            "mappings": [
-              {
-                "type": "value",
-                "options": {
-                  "0": {
-                    "text": "Disconnected",
-                    "color": "red"
-                  },
-                  "1": {
-                    "text": "Connected",
-                    "color": "green"
-                  }
-                }
-              }
-            ]
-          },
-          "overrides": []
+              "steps": [{ "value": null, "color": "green" }]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "textMode": "value_and_name",
+          "graphMode": "none",
+          "colorMode": "value"
         }
       },
       {
         "id": 2,
         "type": "stat",
-        "title": "Pipeline Status",
-        "gridPos": {
-          "h": 4,
-          "w": 6,
-          "x": 6,
-          "y": 0
-        },
+        "title": "Active Destinations",
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
         "targets": [
           {
-            "expr": "sp_base_relay_pipeline_running_status",
-            "legendFormat": "Pipeline",
+            "expr": "sp_base_relay_active_destinations_count",
+            "legendFormat": "Connected",
             "refId": "A"
           }
         ],
-        "options": {
-          "reduceOptions": {
-            "values": false,
-            "calcs": ["lastNotNull"]
-          },
-          "textMode": "value_and_name",
-          "graphMode": "none",
-          "colorMode": "background",
-          "justifyMode": "auto",
-          "orientation": "auto"
-        },
         "fieldConfig": {
           "defaults": {
             "thresholds": {
               "mode": "absolute",
               "steps": [
-                {
-                  "value": null,
-                  "color": "red"
-                },
-                {
-                  "value": 0,
-                  "color": "red"
-                },
-                {
-                  "value": 1,
-                  "color": "green"
-                }
+                { "value": null, "color": "red" },
+                { "value": 1, "color": "yellow" },
+                { "value": 2, "color": "green" }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "textMode": "value_and_name",
+          "graphMode": "none",
+          "colorMode": "background"
+        }
+      },
+      {
+        "id": 3,
+        "type": "stat",
+        "title": "Input Source",
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+        "targets": [
+          {
+            "expr": "sp_base_relay_input_connection_status",
+            "legendFormat": "GPS Input",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "red" },
+                { "value": 0, "color": "red" },
+                { "value": 1, "color": "green" }
               ]
             },
             "mappings": [
               {
                 "type": "value",
                 "options": {
-                  "0": {
-                    "text": "Stopped",
-                    "color": "red"
-                  },
-                  "1": {
-                    "text": "Running",
-                    "color": "green"
-                  }
+                  "0": { "text": "Disconnected", "color": "red" },
+                  "1": { "text": "Connected", "color": "green" }
                 }
               }
             ]
-          },
-          "overrides": []
-        }
-      },
-      {
-        "id": 3,
-        "type": "stat",
-        "title": "Service Uptime",
-        "gridPos": {
-          "h": 4,
-          "w": 6,
-          "x": 12,
-          "y": 0
-        },
-        "targets": [
-          {
-            "expr": "sp_base_relay_service_uptime_seconds",
-            "legendFormat": "Uptime",
-            "refId": "A"
           }
-        ],
-        "options": {
-          "reduceOptions": {
-            "values": false,
-            "calcs": ["lastNotNull"]
-          },
-          "textMode": "auto",
-          "graphMode": "none",
-          "colorMode": "value",
-          "justifyMode": "auto",
-          "orientation": "auto"
         },
-        "fieldConfig": {
-          "defaults": {
-            "unit": "s",
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "value": null,
-                  "color": "green"
-                }
-              ]
-            }
-          },
-          "overrides": []
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "textMode": "value_and_name",
+          "graphMode": "none",
+          "colorMode": "background"
         }
       },
       {
         "id": 4,
         "type": "stat",
-        "title": "Pipeline Uptime",
-        "gridPos": {
-          "h": 4,
-          "w": 6,
-          "x": 18,
-          "y": 0
-        },
+        "title": "Broadcast Hub",
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
         "targets": [
           {
-            "expr": "sp_base_relay_pipeline_uptime_seconds",
-            "legendFormat": "Pipeline Uptime",
+            "expr": "sp_base_relay_hub_running_status",
+            "legendFormat": "Hub",
             "refId": "A"
           }
         ],
-        "options": {
-          "reduceOptions": {
-            "values": false,
-            "calcs": ["lastNotNull"]
-          },
-          "textMode": "auto",
-          "graphMode": "none",
-          "colorMode": "value",
-          "justifyMode": "auto",
-          "orientation": "auto"
-        },
         "fieldConfig": {
           "defaults": {
-            "unit": "s",
             "thresholds": {
               "mode": "absolute",
               "steps": [
-                {
-                  "value": null,
-                  "color": "green"
-                }
+                { "value": null, "color": "red" },
+                { "value": 0, "color": "red" },
+                { "value": 1, "color": "green" }
               ]
-            }
-          },
-          "overrides": []
-        }
-      },
-      {
-        "id": 5,
-        "type": "timeseries",
-        "title": "Data Throughput",
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 0,
-          "y": 4
-        },
-        "targets": [
-          {
-            "expr": "rate(sp_base_relay_rtcm_bytes_sent_total[1m])",
-            "legendFormat": "RTCM Bytes/sec",
-            "refId": "A"
-          },
-          {
-            "expr": "rate(sp_base_relay_pipeline_bytes_processed_total[1m])",
-            "legendFormat": "Pipeline Bytes/sec",
-            "refId": "B"
-          },
-          {
-            "expr": "rate(sp_base_relay_input_bytes_read_total[1m])",
-            "legendFormat": "Input Bytes/sec",
-            "refId": "C"
-          }
-        ],
-        "options": {
-          "tooltip": {
-            "mode": "multi",
-            "sort": "none"
-          },
-          "legend": {
-            "calcs": [],
-            "displayMode": "list",
-            "placement": "bottom",
-            "showLegend": true
-          }
-        },
-        "fieldConfig": {
-          "defaults": {
-            "custom": {
-              "drawStyle": "line",
-              "lineInterpolation": "linear",
-              "barAlignment": 0,
-              "lineWidth": 1,
-              "fillOpacity": 10,
-              "gradientMode": "none",
-              "spanNulls": false,
-              "showPoints": "never",
-              "pointSize": 5,
-              "stacking": {
-                "mode": "none",
-                "group": "A"
-              },
-              "axisPlacement": "auto",
-              "axisLabel": "",
-              "scaleDistribution": {
-                "type": "linear"
-              },
-              "hideFrom": {
-                "tooltip": false,
-                "viz": false,
-                "legend": false
-              },
-              "thresholdsStyle": {
-                "mode": "off"
+            },
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": { "text": "Stopped", "color": "red" },
+                  "1": { "text": "Running", "color": "green" }
+                }
               }
-            },
-            "color": {
-              "mode": "palette-classic"
-            },
-            "unit": "Bps",
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "value": null,
-                  "color": "green"
-                }
-              ]
-            }
-          },
-          "overrides": []
-        }
-      },
-      {
-        "id": 6,
-        "type": "timeseries",
-        "title": "Message Rate",
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 12,
-          "y": 4
-        },
-        "targets": [
-          {
-            "expr": "rate(sp_base_relay_rtcm_messages_sent_total[1m])",
-            "legendFormat": "RTCM Messages/sec",
-            "refId": "A"
-          },
-          {
-            "expr": "rate(sp_base_relay_pipeline_messages_processed_total[1m])",
-            "legendFormat": "Pipeline Messages/sec",
-            "refId": "B"
+            ]
           }
-        ],
+        },
         "options": {
-          "tooltip": {
-            "mode": "multi",
-            "sort": "none"
-          },
-          "legend": {
-            "calcs": [],
-            "displayMode": "list",
-            "placement": "bottom",
-            "showLegend": true
-          }
-        },
-        "fieldConfig": {
-          "defaults": {
-            "custom": {
-              "drawStyle": "line",
-              "lineInterpolation": "linear",
-              "barAlignment": 0,
-              "lineWidth": 1,
-              "fillOpacity": 10,
-              "gradientMode": "none",
-              "spanNulls": false,
-              "showPoints": "never",
-              "pointSize": 5,
-              "stacking": {
-                "mode": "none",
-                "group": "A"
-              },
-              "axisPlacement": "auto",
-              "axisLabel": "",
-              "scaleDistribution": {
-                "type": "linear"
-              },
-              "hideFrom": {
-                "tooltip": false,
-                "viz": false,
-                "legend": false
-              },
-              "thresholdsStyle": {
-                "mode": "off"
-              }
-            },
-            "color": {
-              "mode": "palette-classic"
-            },
-            "unit": "short",
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "value": null,
-                  "color": "green"
-                }
-              ]
-            }
-          },
-          "overrides": []
-        }
-      },
-      {
-        "id": 7,
-        "type": "timeseries",
-        "title": "Connection Attempts",
-        "gridPos": {
-          "h": 8,
-          "w": 8,
-          "x": 0,
-          "y": 12
-        },
-        "targets": [
-          {
-            "expr": "sp_base_relay_rtcm_connection_attempts_total",
-            "legendFormat": "Total Attempts",
-            "refId": "A"
-          },
-          {
-            "expr": "sp_base_relay_rtcm_successful_connections_total",
-            "legendFormat": "Successful",
-            "refId": "B"
-          }
-        ],
-        "options": {
-          "tooltip": {
-            "mode": "multi",
-            "sort": "none"
-          },
-          "legend": {
-            "calcs": [],
-            "displayMode": "list",
-            "placement": "bottom",
-            "showLegend": true
-          }
-        },
-        "fieldConfig": {
-          "defaults": {
-            "custom": {
-              "drawStyle": "line",
-              "lineInterpolation": "linear",
-              "barAlignment": 0,
-              "lineWidth": 1,
-              "fillOpacity": 10,
-              "gradientMode": "none",
-              "spanNulls": false,
-              "showPoints": "never",
-              "pointSize": 5,
-              "stacking": {
-                "mode": "none",
-                "group": "A"
-              },
-              "axisPlacement": "auto",
-              "axisLabel": "",
-              "scaleDistribution": {
-                "type": "linear"
-              },
-              "hideFrom": {
-                "tooltip": false,
-                "viz": false,
-                "legend": false
-              },
-              "thresholdsStyle": {
-                "mode": "off"
-              }
-            },
-            "color": {
-              "mode": "palette-classic"
-            },
-            "unit": "short",
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "value": null,
-                  "color": "green"
-                }
-              ]
-            }
-          },
-          "overrides": []
-        }
-      },
-      {
-        "id": 8,
-        "type": "timeseries",
-        "title": "Error Rates",
-        "gridPos": {
-          "h": 8,
-          "w": 8,
-          "x": 8,
-          "y": 12
-        },
-        "targets": [
-          {
-            "expr": "rate(sp_base_relay_pipeline_errors_total[5m])",
-            "legendFormat": "{{error_type}} Errors/min",
-            "refId": "A"
-          },
-          {
-            "expr": "rate(sp_base_relay_rtcm_authentication_failures_total[5m])",
-            "legendFormat": "Auth Failures/min",
-            "refId": "B"
-          },
-          {
-            "expr": "rate(sp_base_relay_rtcm_heartbeat_timeouts_total[5m])",
-            "legendFormat": "Heartbeat Timeouts/min",
-            "refId": "C"
-          }
-        ],
-        "options": {
-          "tooltip": {
-            "mode": "multi",
-            "sort": "none"
-          },
-          "legend": {
-            "calcs": [],
-            "displayMode": "list",
-            "placement": "bottom",
-            "showLegend": true
-          }
-        },
-        "fieldConfig": {
-          "defaults": {
-            "custom": {
-              "drawStyle": "line",
-              "lineInterpolation": "linear",
-              "barAlignment": 0,
-              "lineWidth": 1,
-              "fillOpacity": 10,
-              "gradientMode": "none",
-              "spanNulls": false,
-              "showPoints": "never",
-              "pointSize": 5,
-              "stacking": {
-                "mode": "none",
-                "group": "A"
-              },
-              "axisPlacement": "auto",
-              "axisLabel": "",
-              "scaleDistribution": {
-                "type": "linear"
-              },
-              "hideFrom": {
-                "tooltip": false,
-                "viz": false,
-                "legend": false
-              },
-              "thresholdsStyle": {
-                "mode": "off"
-              }
-            },
-            "color": {
-              "mode": "palette-classic"
-            },
-            "unit": "short",
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "value": null,
-                  "color": "green"
-                }
-              ]
-            }
-          },
-          "overrides": []
-        }
-      },
-      {
-        "id": 9,
-        "type": "stat",
-        "title": "Pipeline Restarts",
-        "gridPos": {
-          "h": 8,
-          "w": 8,
-          "x": 16,
-          "y": 12
-        },
-        "targets": [
-          {
-            "expr": "increase(sp_base_relay_pipeline_restarts_total[1h])",
-            "legendFormat": "Restarts per Hour",
-            "refId": "A"
-          }
-        ],
-        "options": {
-          "reduceOptions": {
-            "values": false,
-            "calcs": ["lastNotNull"]
-          },
+          "reduceOptions": { "calcs": ["lastNotNull"] },
           "textMode": "value_and_name",
-          "graphMode": "area",
-          "colorMode": "background",
-          "justifyMode": "auto",
-          "orientation": "auto"
-        },
-        "fieldConfig": {
-          "defaults": {
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "value": null,
-                  "color": "green"
-                },
-                {
-                  "value": 8,
-                  "color": "yellow"
-                },
-                {
-                  "value": 12,
-                  "color": "red"
-                }
-              ]
-            }
-          },
-          "overrides": []
+          "graphMode": "none",
+          "colorMode": "background"
         }
       },
       {
         "id": 10,
-        "type": "timeseries",
-        "title": "Heartbeat Health Rate",
-        "gridPos": {
-          "h": 4,
-          "w": 12,
-          "x": 0,
-          "y": 20
-        },
+        "type": "stat",
+        "title": "Per-Destination Connection Status",
+        "gridPos": { "h": 4, "w": 24, "x": 0, "y": 4 },
         "targets": [
           {
-            "expr": "rate(sp_base_relay_rtcm_heartbeat_last_received_timestamp[1m])",
-            "legendFormat": "Heartbeat Rate (expected: ~1.0/sec)",
+            "expr": "sp_base_relay_dest_connection_status{destination=~\"$destination\"}",
+            "legendFormat": "{{destination}}",
             "refId": "A"
           }
         ],
-        "options": {
-          "tooltip": {
-            "mode": "multi",
-            "sort": "none"
-          },
-          "legend": {
-            "calcs": ["last", "mean"],
-            "displayMode": "list",
-            "placement": "bottom",
-            "showLegend": true
-          }
-        },
         "fieldConfig": {
           "defaults": {
-            "custom": {
-              "drawStyle": "line",
-              "lineInterpolation": "linear",
-              "barAlignment": 0,
-              "lineWidth": 2,
-              "fillOpacity": 20,
-              "gradientMode": "none",
-              "spanNulls": false,
-              "showPoints": "never",
-              "pointSize": 5,
-              "stacking": {
-                "mode": "none",
-                "group": "A"
-              },
-              "axisPlacement": "auto",
-              "axisLabel": "Heartbeats per Second",
-              "scaleDistribution": {
-                "type": "linear"
-              },
-              "hideFrom": {
-                "tooltip": false,
-                "viz": false,
-                "legend": false
-              },
-              "thresholdsStyle": {
-                "mode": "line"
-              }
-            },
-            "color": {
-              "mode": "thresholds"
-            },
-            "unit": "short",
-            "decimals": 2,
             "thresholds": {
               "mode": "absolute",
               "steps": [
-                {
-                  "value": null,
-                  "color": "red"
-                },
-                {
-                  "value": 0.5,
-                  "color": "yellow"
-                },
-                {
-                  "value": 0.9,
-                  "color": "green"
+                { "value": null, "color": "red" },
+                { "value": 0, "color": "red" },
+                { "value": 1, "color": "green" }
+              ]
+            },
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": { "text": "Disconnected", "color": "red" },
+                  "1": { "text": "Connected", "color": "green" }
                 }
+              }
+            ]
+          }
+        },
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "textMode": "value_and_name",
+          "graphMode": "none",
+          "colorMode": "background",
+          "orientation": "horizontal"
+        }
+      },
+      {
+        "id": 20,
+        "type": "timeseries",
+        "title": "Bytes Sent per Destination",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+        "targets": [
+          {
+            "expr": "rate(sp_base_relay_dest_bytes_sent_total{destination=~\"$destination\"}[1m])",
+            "legendFormat": "{{destination}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "Bps",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 2,
+              "fillOpacity": 15,
+              "showPoints": "never"
+            },
+            "color": { "mode": "palette-classic" }
+          }
+        },
+        "options": {
+          "tooltip": { "mode": "multi", "sort": "desc" },
+          "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] }
+        }
+      },
+      {
+        "id": 21,
+        "type": "timeseries",
+        "title": "Messages Sent per Destination",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+        "targets": [
+          {
+            "expr": "rate(sp_base_relay_dest_messages_sent_total{destination=~\"$destination\"}[1m])",
+            "legendFormat": "{{destination}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 2,
+              "fillOpacity": 15,
+              "showPoints": "never"
+            },
+            "color": { "mode": "palette-classic" }
+          }
+        },
+        "options": {
+          "tooltip": { "mode": "multi", "sort": "desc" },
+          "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] }
+        }
+      },
+      {
+        "id": 30,
+        "type": "timeseries",
+        "title": "Queue Depth per Destination",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+        "targets": [
+          {
+            "expr": "sp_base_relay_dest_queue_depth{destination=~\"$destination\"}",
+            "legendFormat": "{{destination}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "showPoints": "never",
+              "thresholdsStyle": { "mode": "line" }
+            },
+            "color": { "mode": "palette-classic" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "green" },
+                { "value": 50, "color": "yellow" },
+                { "value": 90, "color": "red" }
               ]
             },
             "min": 0,
-            "max": 1.2
-          },
-          "overrides": []
+            "max": 100
+          }
+        },
+        "options": {
+          "tooltip": { "mode": "multi", "sort": "desc" },
+          "legend": { "displayMode": "list", "placement": "bottom" }
         }
       },
       {
-        "id": 11,
-        "type": "stat",
-        "title": "Cumulative Statistics",
-        "gridPos": {
-          "h": 4,
-          "w": 12,
-          "x": 12,
-          "y": 20
-        },
+        "id": 31,
+        "type": "timeseries",
+        "title": "Messages Dropped per Destination",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
         "targets": [
           {
-            "expr": "sp_base_relay_rtcm_messages_sent_total",
-            "legendFormat": "Total Messages Sent",
+            "expr": "rate(sp_base_relay_dest_messages_dropped_total{destination=~\"$destination\"}[5m]) * 60",
+            "legendFormat": "{{destination}} drops/min",
             "refId": "A"
-          },
-          {
-            "expr": "sp_base_relay_rtcm_bytes_sent_total",
-            "legendFormat": "Total Bytes Sent",
-            "refId": "B"
           }
         ],
-        "options": {
-          "reduceOptions": {
-            "values": false,
-            "calcs": ["lastNotNull"]
-          },
-          "textMode": "value_and_name",
-          "graphMode": "none",
-          "colorMode": "value",
-          "justifyMode": "auto",
-          "orientation": "auto"
-        },
         "fieldConfig": {
           "defaults": {
             "unit": "short",
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "value": null,
-                  "color": "blue"
-                }
-              ]
-            }
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "Total Bytes Sent"
-              },
-              "properties": [
-                {
-                  "id": "unit",
-                  "value": "bytes"
-                }
-              ]
-            }
-          ]
-        }
-      },
-      {
-        "id": 12,
-        "type": "timeseries",
-        "title": "Relay Latency (Percentiles)",
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 0,
-          "y": 24
-        },
-        "targets": [
-          {
-            "expr": "histogram_quantile(0.50, rate(sp_base_relay_relay_latency_seconds_bucket[5m]))",
-            "legendFormat": "p50 (median)",
-            "refId": "A"
-          },
-          {
-            "expr": "histogram_quantile(0.95, rate(sp_base_relay_relay_latency_seconds_bucket[5m]))",
-            "legendFormat": "p95",
-            "refId": "B"
-          },
-          {
-            "expr": "histogram_quantile(0.99, rate(sp_base_relay_relay_latency_seconds_bucket[5m]))",
-            "legendFormat": "p99",
-            "refId": "C"
-          }
-        ],
-        "options": {
-          "tooltip": {
-            "mode": "multi",
-            "sort": "none"
-          },
-          "legend": {
-            "calcs": ["last", "mean", "max"],
-            "displayMode": "table",
-            "placement": "bottom",
-            "showLegend": true
-          }
-        },
-        "fieldConfig": {
-          "defaults": {
             "custom": {
               "drawStyle": "line",
-              "lineInterpolation": "linear",
-              "barAlignment": 0,
               "lineWidth": 2,
               "fillOpacity": 10,
-              "gradientMode": "none",
-              "spanNulls": false,
-              "showPoints": "never",
-              "pointSize": 5,
-              "stacking": {
-                "mode": "none",
-                "group": "A"
-              },
-              "axisPlacement": "auto",
-              "axisLabel": "Latency",
-              "scaleDistribution": {
-                "type": "linear"
-              },
-              "hideFrom": {
-                "tooltip": false,
-                "viz": false,
-                "legend": false
-              },
-              "thresholdsStyle": {
-                "mode": "off"
-              }
+              "showPoints": "never"
             },
-            "color": {
-              "mode": "palette-classic"
-            },
-            "unit": "s",
+            "color": { "mode": "palette-classic" },
             "thresholds": {
               "mode": "absolute",
               "steps": [
-                {
-                  "value": null,
-                  "color": "green"
-                },
-                {
-                  "value": 0.01,
-                  "color": "yellow"
-                },
-                {
-                  "value": 0.1,
-                  "color": "red"
-                }
+                { "value": null, "color": "green" },
+                { "value": 1, "color": "yellow" },
+                { "value": 10, "color": "red" }
               ]
             }
-          },
-          "overrides": []
+          }
+        },
+        "options": {
+          "tooltip": { "mode": "multi", "sort": "desc" },
+          "legend": { "displayMode": "list", "placement": "bottom" }
         }
       },
       {
-        "id": 13,
-        "type": "stat",
-        "title": "Relay Latency (Current)",
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 12,
-          "y": 24
-        },
+        "id": 40,
+        "type": "timeseries",
+        "title": "Connection Attempts per Destination",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
         "targets": [
           {
-            "expr": "rate(sp_base_relay_relay_latency_seconds_sum[5m]) / rate(sp_base_relay_relay_latency_seconds_count[5m])",
-            "legendFormat": "Average Latency",
-            "refId": "A"
-          },
-          {
-            "expr": "histogram_quantile(0.95, rate(sp_base_relay_relay_latency_seconds_bucket[5m]))",
-            "legendFormat": "p95 Latency",
-            "refId": "B"
-          },
-          {
-            "expr": "histogram_quantile(0.99, rate(sp_base_relay_relay_latency_seconds_bucket[5m]))",
-            "legendFormat": "p99 Latency",
-            "refId": "C"
-          }
-        ],
-        "options": {
-          "reduceOptions": {
-            "values": false,
-            "calcs": ["lastNotNull"]
-          },
-          "textMode": "value_and_name",
-          "graphMode": "area",
-          "colorMode": "value",
-          "justifyMode": "auto",
-          "orientation": "auto"
-        },
-        "fieldConfig": {
-          "defaults": {
-            "unit": "s",
-            "decimals": 4,
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "value": null,
-                  "color": "green"
-                },
-                {
-                  "value": 0.01,
-                  "color": "yellow"
-                },
-                {
-                  "value": 0.1,
-                  "color": "red"
-                }
-              ]
-            }
-          },
-          "overrides": []
-        }
-      },
-      {
-        "id": 14,
-        "type": "bargauge",
-        "title": "RTCM Messages by Type",
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 0,
-          "y": 32
-        },
-        "targets": [
-          {
-            "expr": "sum by (message_id) (rate(sp_base_relay_rtcm_messages_by_id_total[5m]))",
-            "legendFormat": "ID {{message_id}}",
+            "expr": "sp_base_relay_dest_connection_attempts_total{destination=~\"$destination\"}",
+            "legendFormat": "{{destination}}",
             "refId": "A"
           }
         ],
-        "options": {
-          "orientation": "horizontal",
-          "displayMode": "gradient",
-          "showUnfilled": true,
-          "valueMode": "color"
-        },
         "fieldConfig": {
           "defaults": {
             "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 1,
+              "fillOpacity": 10,
+              "showPoints": "never"
+            },
+            "color": { "mode": "palette-classic" }
+          }
+        },
+        "options": {
+          "tooltip": { "mode": "multi", "sort": "desc" },
+          "legend": { "displayMode": "list", "placement": "bottom" }
+        }
+      },
+      {
+        "id": 41,
+        "type": "timeseries",
+        "title": "Errors per Destination",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+        "targets": [
+          {
+            "expr": "rate(sp_base_relay_dest_errors_total{destination=~\"$destination\"}[5m]) * 60",
+            "legendFormat": "{{destination}} errors/min",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "showPoints": "never"
+            },
+            "color": { "mode": "palette-classic" },
             "thresholds": {
               "mode": "absolute",
               "steps": [
-                {
-                  "value": null,
-                  "color": "blue"
-                }
+                { "value": null, "color": "green" },
+                { "value": 1, "color": "yellow" },
+                { "value": 5, "color": "red" }
+              ]
+            }
+          }
+        },
+        "options": {
+          "tooltip": { "mode": "multi", "sort": "desc" },
+          "legend": { "displayMode": "list", "placement": "bottom" }
+        }
+      },
+      {
+        "id": 50,
+        "type": "timeseries",
+        "title": "Input — Seconds Since Last Data (DR-7 Watchdog)",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+        "targets": [
+          {
+            "expr": "sp_base_relay_input_seconds_since_last_data",
+            "legendFormat": "Seconds since last GPS data",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 2,
+              "fillOpacity": 20,
+              "showPoints": "never",
+              "thresholdsStyle": { "mode": "line" }
+            },
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "green" },
+                { "value": 10, "color": "yellow" },
+                { "value": 30, "color": "red" }
               ]
             },
             "min": 0
-          },
-          "overrides": []
+          }
+        },
+        "options": {
+          "tooltip": { "mode": "single" },
+          "legend": { "displayMode": "list", "placement": "bottom" }
         }
       },
       {
-        "id": 15,
+        "id": 51,
         "type": "stat",
-        "title": "Message Decode Health",
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 12,
-          "y": 32
-        },
+        "title": "Messages Filtered per Destination",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
         "targets": [
           {
-            "expr": "rate(sp_base_relay_rtcm_message_decode_failures_total[5m]) * 60",
-            "legendFormat": "Decode Failures/min",
+            "expr": "sp_base_relay_dest_messages_filtered_total{destination=~\"$destination\"}",
+            "legendFormat": "{{destination}}",
             "refId": "A"
-          },
-          {
-            "expr": "sum(rate(sp_base_relay_rtcm_messages_by_id_total[5m])) * 60",
-            "legendFormat": "Decoded Messages/min",
-            "refId": "B"
           }
         ],
-        "options": {
-          "reduceOptions": {
-            "values": false,
-            "calcs": ["lastNotNull"]
-          },
-          "textMode": "value_and_name",
-          "graphMode": "area",
-          "colorMode": "background",
-          "justifyMode": "auto",
-          "orientation": "auto"
-        },
         "fieldConfig": {
           "defaults": {
             "unit": "short",
             "thresholds": {
               "mode": "absolute",
-              "steps": [
-                {
-                  "value": null,
-                  "color": "green"
-                },
-                {
-                  "value": 1,
-                  "color": "yellow"
-                },
-                {
-                  "value": 10,
-                  "color": "red"
-                }
-              ]
+              "steps": [{ "value": null, "color": "blue" }]
             }
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "Decoded Messages/min"
-              },
-              "properties": [
-                {
-                  "id": "color",
-                  "value": {
-                    "mode": "fixed",
-                    "fixedColor": "blue"
-                  }
-                }
-              ]
-            }
-          ]
+          }
+        },
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "textMode": "value_and_name",
+          "graphMode": "area",
+          "colorMode": "value",
+          "orientation": "horizontal"
         }
       }
     ],
-    "templating": {
-      "list": []
-    },
-    "annotations": {
-      "list": []
-    },
-    "time": {
-      "from": "now-6h",
-      "to": "now"
-    },
+    "annotations": { "list": [] },
+    "time": { "from": "now-6h", "to": "now" },
     "timepicker": {
-      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h"]
     },
     "links": []
   }

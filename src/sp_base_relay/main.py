@@ -280,32 +280,24 @@ class SPBaseRelayService:
         return self.hub.is_running
 
     def _update_metrics(self) -> None:
-        """Update Prometheus metrics from hub and destination stats.
+        """Update all Prometheus metrics (v2 per-destination + global).
 
-        Note: Full v2 per-destination metrics is Phase 4. For now we
-        update basic connection and pipeline status gauges.
+        Reads DestinationStats from each destination and BroadcastHub
+        health data. Called once per main-loop iteration (~1 s).
         """
         if not self.metrics or not self.hub:
             return
 
         try:
-            # Input connection status
             input_connected = (
                 self.input_source.is_connected if self.input_source else False
             )
 
-            # Any destination connected counts as RTCM connected (backward compat)
-            rtcm_connected = any(
-                d.is_connected for d in self.destinations
-            )
-
-            self.metrics.update_connection_status(
-                rtcm_connected=rtcm_connected,
+            self.metrics.update_all(
+                destinations=self.destinations,
+                hub=self.hub,
                 input_connected=input_connected,
             )
-
-            self.metrics.update_pipeline_status(running=self.hub.is_running)
-            self.metrics.update_service_uptime()
 
         except Exception as e:
             self.logger.warning(f"Failed to update metrics: {e}")

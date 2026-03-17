@@ -4,22 +4,32 @@
 
 **Primary Objective**: SP-Base-Relay v2.0 — Multi-Destination Architecture (March 2026)
 
-**Status**: Phase 1 COMPLETE. Ready for Phase 2 (SurePathDestination).
+**Status**: Phase 2B COMPLETE. Ready for Phase 3 (NTRIP Destination).
 
-**Branch**: `feature/v2-multi-destination` (latest commit pending push)
+**Branch**: `feature/v2-multi-destination` (latest: commit b455542)
 
-### v2.0 Phase 1 — Foundation Complete (March 17, 2026)
-
-All Phase 1 deliverables implemented and tested:
+### v2.0 Phase 1 — Foundation Complete ✅
 
 | Session | Deliverable | Tests | Commit |
 |---|---|---|---|
 | 1A | MessageFilter, BaseDestination, DestinationStats, exception types | 78 | (part of 0d238ec) |
 | 1B | Config v2 — destination configs, filter configs, env overrides, old format detection | 60+ | 0d238ec |
 | 1C | BroadcastHub — fan-out coordinator with frame parsing, watchdog, reconnection | 46 | f0e1b4f |
-| 1D | DestinationFactory — registry-based creation from config | 27 | pending |
+| 1D | DestinationFactory — registry-based creation from config | 27 | 3064ff9 |
 
-**Total v2 new tests**: ~211 new tests (799 total, up from 556 in v1.x)
+### v2.0 Phase 2A — SurePathDestination Complete ✅ (March 17, 2026)
+
+| Session | Deliverable | Tests | Commit |
+|---|---|---|---|
+| 2A | SurePathDestination — RTCMClient wrapper behind BaseDestination | 31 | 7b3fc9d |
+
+### v2.0 Phase 2B — main.py v2 Refactor Complete ✅ (March 17, 2026)
+
+| Session | Deliverable | Tests | Commit |
+|---|---|---|---|
+| 2B | main.py v2 — BroadcastHub + DestinationFactory orchestration | 53 (rewritten) | b455542 |
+
+**Total v2 new tests**: ~276 new tests (832 total, up from 556 in v1.x)
 
 ### Design Review Decisions (DR-1 through DR-7)
 1. **DR-1**: Dual-path frame parsing — parse only when filtering needed
@@ -35,21 +45,23 @@ Full architecture plan: `docs/v2-architecture-plan.md`
 
 ---
 
-## Next Steps — Phase 2: Sure-Path Destination Refactor
+## Next Steps — Phase 3: NTRIP Destination
 
-**Effort**: 1-2 sessions | **Dependencies**: Phase 1 (DONE)
+**Effort**: 2-3 sessions | **Dependencies**: Phase 2 (DONE)
 
-1. `SurePathDestination` — wraps existing `RTCMClient` behind `BaseDestination` interface
-2. `main.py` v2 — refactored service orchestration using BroadcastHub + DestinationFactory
-3. Register surepath type in DestinationFactory
-4. Regression testing — verify Sure-Path works identically to v1
+1. `NtripDestination` implementing BaseDestination
+2. NTRIP v1.0 protocol (SOURCE + raw stream)
+3. NTRIP v2.0 protocol (HTTP POST + chunked transfer)
+4. Mock NTRIP caster for testing
+5. RTK2go real-world testing
 
 ---
 
 ## v2.0 Development Phases
 
 ### Phase 1: Foundation — COMPLETE ✅
-### Phase 2: Sure-Path Destination Refactor — NEXT
+### Phase 2A: SurePathDestination — COMPLETE ✅
+### Phase 2B: main.py v2 Refactor — COMPLETE ✅
 ### Phase 3: NTRIP Destination — NOT STARTED
 ### Phase 4: Metrics v2 — NOT STARTED
 ### Phase 5: TCP Server Destination — NOT STARTED (Low Priority)

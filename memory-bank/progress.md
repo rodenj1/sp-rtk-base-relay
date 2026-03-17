@@ -1,11 +1,11 @@
 # Progress
 
-## Current Status — v2.0 Phase 1 Sessions 1A+1B Complete (March 17, 2026)
+## Current Status — v2.0 Phase 1 COMPLETE (March 17, 2026)
 
 **v1.x**: All phases complete (production-running)
-**v2.0**: Phase 1 Sessions 1A + 1B complete. Session 1C (BroadcastHub) next.
-**Branch**: `feature/v2-multi-destination` (commit `0d238ec`)
-**Tests**: 726 passing (170 new), 85.28% overall coverage
+**v2.0**: Phase 1 complete. Phase 2 (SurePathDestination) next.
+**Branch**: `feature/v2-multi-destination`
+**Tests**: 799 passing (~243 new v2 tests), zero regressions
 
 Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
@@ -13,22 +13,23 @@ Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
 ## v2.0 Development Progress
 
-### Phase 1: Foundation — Base Destination & Broadcast Hub
-**Status**: IN PROGRESS (Sessions 1A + 1B complete) | **Effort**: 3-4 sessions
+### Phase 1: Foundation — Base Destination & Broadcast Hub ✅ COMPLETE
+**Status**: COMPLETE (4 sessions: 1A, 1B, 1C, 1D) | **Effort**: 4 sessions
 
 - [x] `BaseDestination` ABC with standard interface (88% coverage)
 - [x] `DestinationStats` dataclass
 - [x] `MessageFilter` (pass_all/allowlist/blocklist) (100% coverage)
 - [x] `DestinationError` / `NtripError` exception types (100% coverage)
 - [x] Config v2 — `destinations:` list parsing, `DestinationFilterConfig`, `SurePathDestinationConfig`, `NtripDestinationConfig`, `TcpServerDestinationConfig`, per-dest env overrides, old v1.x format detection (DR-4). 60+ new tests. (Session 1B, commit `0d238ec`)
-- [ ] `BroadcastHub` (replaces DataPipelineCoordinator) — Session 1C
-- [ ] `DestinationFactory` — Session 1D
-- [ ] Test suite for remaining modules
+- [x] `BroadcastHub` — fan-out coordinator with dual-path distribution (DR-1), frame parsing, no-data watchdog (DR-7), input reconnection. 46 tests. (Session 1C, commit `f0e1b4f`)
+- [x] `DestinationFactory` — registry-based creation from `DestinationConfig`. 27 tests. (Session 1D)
+- [x] RTCMGenerator `to_bytes()` bug fix (incorrect length field + CRC)
 
-### Phase 2: Sure-Path Destination Refactor
+### Phase 2: Sure-Path Destination Refactor — NEXT
 **Status**: NOT STARTED | **Effort**: 1-2 sessions
 
 - [ ] `SurePathDestination` wrapping RTCMClient
+- [ ] Register `surepath` type in DestinationFactory
 - [ ] `main.py` v2 with broadcast hub
 - [ ] Regression testing
 
@@ -64,64 +65,35 @@ Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
 ---
 
-## v1.x Completed Work (October 2025 — February 2026)
+## v2.0 Module Map (Phase 1 Complete)
 
-### ✅ Phase 1: Core Foundation (COMPLETE)
-- UV package structure, config management (89% coverage), logging (91%), exceptions (100%)
-- 72 unit tests, RTCM test data generator
-
-### ✅ Phase 2: RTCM Server Connection (COMPLETE)
-- Multi-threaded TCP client with custom INIT auth + $HB$ heartbeat
-- Exponential backoff retry (1s→2s→4s→8s→16s→32s→60s)
-- Connection state machine (100% coverage)
-- 30 RTCM client tests + 10 connection state tests
-
-### ✅ Phase 3: Input Source Management (COMPLETE)
-- Strategy pattern: Serial (84%), TCP (90%), Bluetooth, Base (90%)
-- Input factory with registration system (86%)
-- Python 3.10+ modern type hints throughout
-
-### ✅ Phase 4: Data Pipeline (COMPLETE)
-- 3-thread architecture (input, coordinator, heartbeat)
-- Queue-based thread coordination (maxsize=10)
-- Coordinated restart, no buffering design
-- 100+ tests, 84% → 91% coverage
-
-### ✅ Phase 5: Prometheus Metrics (COMPLETE)
-- 17 metrics across 5 categories (96% coverage)
-- Grafana dashboard (11 panels), integration examples
-- Delta-based counter updates, thread-safe operations
-
-### ✅ Phase 7: CLI & Service Management (COMPLETE)
-- Full argparse CLI, SPBaseRelayService orchestration
-- Signal handling, threading architecture
-- 51 tests, systemd service file
-
-### ✅ Phase 8: Bluetooth GPS Integration (COMPLETE)
-- rfcomm-based Bluetooth SPP integration
-- 4 helper scripts, systemd service, 500+ line docs
-- RTK_GPS_BASE device configured
-
-### ✅ Phase 9.5: dbus-fast Migration (COMPLETE)
-- Migrated from pydbus (unmaintained) to dbus-fast
-- Full type hint coverage, async/sync wrapper pattern
-- 44/44 Bluetooth tests, 556/556 total tests passing
-
-### ✅ Production Enhancements (COMPLETE)
-- Smart logging (expected disconnects → INFO, retries → WARNING)
-- Aggressive socket cleanup (errno 9 fix)
-- Long-term outage handling (60 internal retries + systemd restarts)
-- 15s initial retry delay for 10-minute server cycle
+```
+src/sp_base_relay/
+├── config.py                    # v2 destination configs + old format detection
+├── exceptions.py                # DestinationError, NtripError added
+├── core/
+│   ├── message_filter.py        # NEW — FilterConfig + MessageFilter
+│   ├── broadcast_hub.py         # NEW — fan-out coordinator
+│   └── destinations/
+│       ├── __init__.py           # Exports BaseDestination, DestinationStats, DestinationFactory
+│       ├── base_destination.py   # NEW — ABC + queue + stats
+│       └── destination_factory.py # NEW — registry-based factory
+```
 
 ---
 
-## Test Coverage (v1.x Final — February 2026)
-- **556 total unit tests passing (100%)**
-- **~90% overall coverage**
-- config.py: 89%, logger.py: 91%, exceptions.py: 100%
-- connection_states.py: 100%, rtcm_client.py: 87%, data_pipeline.py: 91%
-- input_factory.py: 86%, serial_input.py: 84%, tcp_input.py: 90%
-- base_input.py: 90%, metrics.py: 96%
+## v1.x Completed Work (October 2025 — February 2026)
+
+### ✅ All v1.x Phases Complete
+- Phase 1: Core Foundation (config, logging, exceptions)
+- Phase 2: RTCM Server Connection (RTCMClient, heartbeat, auth)
+- Phase 3: Input Source Management (serial, tcp, bluetooth)
+- Phase 4: Data Pipeline (DataPipelineCoordinator)
+- Phase 5: Prometheus Metrics & Monitoring
+- Phase 7: CLI & Service Management
+- Phase 8: Bluetooth GPS Integration
+- Phase 9.5: dbus-fast Migration
+- Production enhancements (logging, socket cleanup, outage handling)
 
 ---
 
@@ -136,8 +108,6 @@ Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 | TCP Server | Async inside thread | Multi-client, A+ pattern |
 | Config | `destinations:` list | Breaking change from `server:` |
 
-Target casters: RTK2go, Onocoy, rtkdirect (currently running via external tools)
-
 ---
 
 ## Known Issues / Risks
@@ -145,4 +115,4 @@ Target casters: RTK2go, Onocoy, rtkdirect (currently running via external tools)
 - ⚠️ v2.0 is a breaking change (config format, metrics names)
 - ⚠️ Phase 10 (PyPI packaging) still not started from v1.x
 - ✅ v1.x Sure-Path connection is production-stable
-- ✅ All 556 unit tests passing
+- ✅ All 799 unit tests passing

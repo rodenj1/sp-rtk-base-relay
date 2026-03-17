@@ -547,9 +547,7 @@ class TestServiceMetrics:
 
         service._update_metrics()
 
-        mock_metrics.update_connection_status.assert_called_once()
-        mock_metrics.update_pipeline_status.assert_called_once()
-        mock_metrics.update_service_uptime.assert_called_once()
+        mock_metrics.update_all.assert_called_once()
 
     def test_update_metrics_without_collector(
         self, mock_config: Mock, mock_hub: Mock
@@ -566,7 +564,7 @@ class TestServiceMetrics:
         service = SPBaseRelayService(mock_config)
         service.hub = mock_hub
         service.metrics = mock_metrics
-        mock_metrics.update_connection_status.side_effect = Exception("Metrics error")
+        mock_metrics.update_all.side_effect = Exception("Metrics error")
         # Should not raise
         service._update_metrics()
 

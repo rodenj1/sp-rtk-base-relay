@@ -1,11 +1,11 @@
 # Progress
 
-## Current Status — v2.0 Phase 3A COMPLETE (March 17, 2026)
+## Current Status — v2.0 Phase 3 COMPLETE (March 17, 2026)
 
 **v1.x**: All phases complete (production-running)
-**v2.0**: Phase 3A complete. Phase 3B (mock NTRIP caster testing) next.
+**v2.0**: Phase 3 complete (3A + 3B). Phase 4 (Metrics v2) next.
 **Branch**: `feature/v2-multi-destination`
-**Tests**: 871 passing (~315 new v2 tests), zero regressions
+**Tests**: 891 passing (~335 new v2 tests), zero regressions
 
 Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
@@ -53,12 +53,12 @@ Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 - [x] 39 new tests (97% coverage on ntrip_destination.py)
 - [x] 871/871 passing, zero regressions
 
-### Phase 3B: Mock NTRIP Caster Testing
-**Status**: NOT STARTED | **Effort**: 1 session
+### Phase 3B: Mock NTRIP Caster Testing ✅ COMPLETE
+**Status**: COMPLETE (Session 3B, commit `74805e3`) | **Effort**: 1 session
 
-- [ ] Mock NTRIP caster fixture for local integration testing
-- [ ] Integration tests: v1.0 + v2.0 connect + stream
-- [ ] Error scenario tests: auth reject, caster crash, reconnection
+- [x] `MockNtripCaster` test fixture (threaded TCP server, v1.0/v2.0 protocol detection, chunked decoder)
+- [x] 20 integration tests: v1.0 + v2.0 happy path, header format, chunked roundtrip, auth reject, caster crash, connection refused, data integrity
+- [x] 891/891 passing, zero regressions
 
 ### Phase 4: Metrics v2
 **Status**: NOT STARTED | **Effort**: 1-2 sessions
@@ -135,4 +135,4 @@ src/sp_base_relay/
 - ⚠️ v2.0 is a breaking change (config format, metrics names)
 - ⚠️ Phase 10 (PyPI packaging) still not started from v1.x
 - ✅ v1.x Sure-Path connection is production-stable
-- ✅ All 871 unit tests passing
+- ✅ All 891 unit tests passing

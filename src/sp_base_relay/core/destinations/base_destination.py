@@ -330,6 +330,11 @@ class BaseDestination(ABC):
         """
         ...
 
+    @property
+    def is_connected(self) -> bool:
+        """Public accessor for connection status."""
+        return self._is_connected()
+
     @abstractmethod
     def _is_connected(self) -> bool:
         """Check if the connection to the remote server is alive.

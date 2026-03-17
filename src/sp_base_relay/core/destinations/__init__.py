@@ -23,9 +23,15 @@ from sp_base_relay.core.destinations.surepath_destination import (  # noqa: F401
     SurePathDestination,
 )
 
+# Import registers the "ntrip" builder with DestinationFactory
+from sp_base_relay.core.destinations.ntrip_destination import (  # noqa: F401
+    NtripDestination,
+)
+
 __all__ = [
     "BaseDestination",
     "DestinationFactory",
     "DestinationStats",
+    "NtripDestination",
     "SurePathDestination",
 ]

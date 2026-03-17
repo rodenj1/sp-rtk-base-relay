@@ -1,11 +1,11 @@
 # Progress
 
-## Current Status — v2.0 Phase 1 COMPLETE (March 17, 2026)
+## Current Status — v2.0 Phase 2B COMPLETE (March 17, 2026)
 
 **v1.x**: All phases complete (production-running)
-**v2.0**: Phase 1 complete. Phase 2 (SurePathDestination) next.
+**v2.0**: Phase 2B complete. Phase 3 (NTRIP Destination) next.
 **Branch**: `feature/v2-multi-destination`
-**Tests**: 799 passing (~243 new v2 tests), zero regressions
+**Tests**: 832 passing (~276 new v2 tests), zero regressions
 
 Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
@@ -25,13 +25,22 @@ Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 - [x] `DestinationFactory` — registry-based creation from `DestinationConfig`. 27 tests. (Session 1D)
 - [x] RTCMGenerator `to_bytes()` bug fix (incorrect length field + CRC)
 
-### Phase 2: Sure-Path Destination Refactor — NEXT
-**Status**: NOT STARTED | **Effort**: 1-2 sessions
+### Phase 2A: SurePathDestination ✅ COMPLETE
+**Status**: COMPLETE (Session 2A, commit `7b3fc9d`) | **Effort**: 1 session
 
-- [ ] `SurePathDestination` wrapping RTCMClient
-- [ ] Register `surepath` type in DestinationFactory
-- [ ] `main.py` v2 with broadcast hub
-- [ ] Regression testing
+- [x] `SurePathDestination` wrapping RTCMClient (composition pattern)
+- [x] Backoff-aware `_attempt_connect` override using RTCMClient retry delay
+- [x] `build_surepath_destination` factory builder, auto-registered
+- [x] 31 new tests
+
+### Phase 2B: main.py v2 Refactor ✅ COMPLETE
+**Status**: COMPLETE (Session 2B, commit `b455542`) | **Effort**: 1 session
+
+- [x] `main.py` v2 with BroadcastHub + DestinationFactory (~200 lines, down from 400+)
+- [x] Removed DataPipelineCoordinator, _restart_pipeline, _create_rtcm_client
+- [x] Added _create_destinations, _start_hub, public BaseDestination.is_connected property
+- [x] `test_main.py` fully rewritten (53 tests)
+- [x] 832/832 passing, zero regressions
 
 ### Phase 3: NTRIP Destination
 **Status**: NOT STARTED | **Effort**: 2-3 sessions
@@ -65,7 +74,7 @@ Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
 ---
 
-## v2.0 Module Map (Phase 1 Complete)
+## v2.0 Module Map (Phase 2A Complete)
 
 ```
 src/sp_base_relay/
@@ -75,9 +84,10 @@ src/sp_base_relay/
 │   ├── message_filter.py        # NEW — FilterConfig + MessageFilter
 │   ├── broadcast_hub.py         # NEW — fan-out coordinator
 │   └── destinations/
-│       ├── __init__.py           # Exports BaseDestination, DestinationStats, DestinationFactory
+│       ├── __init__.py           # Exports + auto-registers surepath
 │       ├── base_destination.py   # NEW — ABC + queue + stats
-│       └── destination_factory.py # NEW — registry-based factory
+│       ├── destination_factory.py # NEW — registry-based factory
+│       └── surepath_destination.py # NEW — RTCMClient wrapper
 ```
 
 ---
@@ -115,4 +125,4 @@ src/sp_base_relay/
 - ⚠️ v2.0 is a breaking change (config format, metrics names)
 - ⚠️ Phase 10 (PyPI packaging) still not started from v1.x
 - ✅ v1.x Sure-Path connection is production-stable
-- ✅ All 799 unit tests passing
+- ✅ All 832 unit tests passing

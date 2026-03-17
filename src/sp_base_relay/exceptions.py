@@ -249,3 +249,92 @@ class ServiceError(SPBaseRelayError):
         full_message = " | ".join(error_parts)
 
         super().__init__(full_message, details)
+
+
+class DestinationError(SPBaseRelayError):
+    """Exception raised for destination-related errors.
+
+    This includes issues with:
+    - Destination connection failures
+    - Send failures to destination servers
+    - Destination configuration errors
+    - Queue overflow or processing errors
+    """
+
+    def __init__(
+        self,
+        message: str,
+        destination_name: str | None = None,
+        destination_type: str | None = None,
+        details: str | None = None,
+    ) -> None:
+        """Initialize destination error.
+
+        Args:
+            message: The error message
+            destination_name: Optional name of the destination that failed
+            destination_type: Optional type of destination (surepath, ntrip, tcp_server)
+            details: Optional additional error details
+        """
+        self.destination_name = destination_name
+        self.destination_type = destination_type
+
+        # Build detailed error message
+        error_parts = [message]
+
+        if destination_name:
+            error_parts.append(f"Destination: {destination_name}")
+        if destination_type:
+            error_parts.append(f"Type: {destination_type}")
+
+        full_message = " | ".join(error_parts)
+
+        super().__init__(full_message, details)
+
+
+class NtripError(DestinationError):
+    """Exception raised for NTRIP-specific errors.
+
+    This includes issues with:
+    - NTRIP caster authentication failures
+    - NTRIP protocol errors (v1.0 or v2.0)
+    - Mountpoint not found or rejected
+    - Caster connection refused
+    """
+
+    def __init__(
+        self,
+        message: str,
+        caster: str | None = None,
+        mountpoint: str | None = None,
+        destination_name: str | None = None,
+        details: str | None = None,
+    ) -> None:
+        """Initialize NTRIP error.
+
+        Args:
+            message: The error message
+            caster: Optional caster hostname that failed
+            mountpoint: Optional mountpoint name that caused the error
+            destination_name: Optional name of the destination
+            details: Optional additional error details
+        """
+        self.caster = caster
+        self.mountpoint = mountpoint
+
+        # Build detailed error message
+        error_parts = [message]
+
+        if caster:
+            error_parts.append(f"Caster: {caster}")
+        if mountpoint:
+            error_parts.append(f"Mountpoint: {mountpoint}")
+        if destination_name:
+            error_parts.append(f"Destination: {destination_name}")
+
+        full_message = " | ".join(error_parts)
+
+        # Call SPBaseRelayError.__init__ directly to avoid double-formatting
+        SPBaseRelayError.__init__(self, full_message, details)
+        self.destination_name = destination_name
+        self.destination_type = "ntrip"

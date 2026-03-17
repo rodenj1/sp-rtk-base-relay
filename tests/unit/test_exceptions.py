@@ -10,6 +10,8 @@ from sp_base_relay.exceptions import (
     InputSourceError,
     DataProcessingError,
     ServiceError,
+    DestinationError,
+    NtripError,
 )
 
 
@@ -271,6 +273,105 @@ class TestServiceError:
         error = ServiceError("Test error")
         assert isinstance(error, SPBaseRelayError)
         assert isinstance(error, Exception)
+
+
+class TestDestinationError:
+    """Test destination exception class."""
+
+    def test_basic_destination_error(self) -> None:
+        """Test basic destination error."""
+        error = DestinationError("Destination failed")
+        assert "Destination failed" in str(error)
+        assert error.destination_name is None
+        assert error.destination_type is None
+
+    def test_destination_error_with_name(self) -> None:
+        """Test destination error with name."""
+        error = DestinationError("Send failed", destination_name="rtk2go")
+        assert "Send failed" in str(error)
+        assert "Destination: rtk2go" in str(error)
+        assert error.destination_name == "rtk2go"
+
+    def test_destination_error_with_type(self) -> None:
+        """Test destination error with type."""
+        error = DestinationError("Send failed", destination_type="ntrip")
+        assert "Send failed" in str(error)
+        assert "Type: ntrip" in str(error)
+        assert error.destination_type == "ntrip"
+
+    def test_destination_error_with_all_fields(self) -> None:
+        """Test destination error with all fields."""
+        error = DestinationError(
+            "Send failed",
+            destination_name="rtk2go",
+            destination_type="ntrip",
+            details="Connection refused",
+        )
+        assert "Send failed" in str(error)
+        assert "Destination: rtk2go" in str(error)
+        assert "Type: ntrip" in str(error)
+        assert error.details == "Connection refused"
+
+    def test_inheritance(self) -> None:
+        """Test inheritance from SPBaseRelayError."""
+        error = DestinationError("Test error")
+        assert isinstance(error, SPBaseRelayError)
+        assert isinstance(error, Exception)
+
+
+class TestNtripError:
+    """Test NTRIP-specific exception class."""
+
+    def test_basic_ntrip_error(self) -> None:
+        """Test basic NTRIP error."""
+        error = NtripError("NTRIP auth failed")
+        assert "NTRIP auth failed" in str(error)
+        assert error.caster is None
+        assert error.mountpoint is None
+        assert error.destination_type == "ntrip"
+
+    def test_ntrip_error_with_caster(self) -> None:
+        """Test NTRIP error with caster."""
+        error = NtripError("Auth failed", caster="rtk2go.com")
+        assert "Auth failed" in str(error)
+        assert "Caster: rtk2go.com" in str(error)
+        assert error.caster == "rtk2go.com"
+
+    def test_ntrip_error_with_mountpoint(self) -> None:
+        """Test NTRIP error with mountpoint."""
+        error = NtripError("Mountpoint rejected", mountpoint="RODEN01")
+        assert "Mountpoint rejected" in str(error)
+        assert "Mountpoint: RODEN01" in str(error)
+        assert error.mountpoint == "RODEN01"
+
+    def test_ntrip_error_with_all_fields(self) -> None:
+        """Test NTRIP error with all fields."""
+        error = NtripError(
+            "Auth failed",
+            caster="rtk2go.com",
+            mountpoint="RODEN01",
+            destination_name="rtk2go",
+            details="Invalid password",
+        )
+        assert "Auth failed" in str(error)
+        assert "Caster: rtk2go.com" in str(error)
+        assert "Mountpoint: RODEN01" in str(error)
+        assert "Destination: rtk2go" in str(error)
+        assert error.details == "Invalid password"
+        assert error.destination_name == "rtk2go"
+        assert error.destination_type == "ntrip"
+
+    def test_inheritance_from_destination_error(self) -> None:
+        """Test inheritance from DestinationError."""
+        error = NtripError("Test error")
+        assert isinstance(error, DestinationError)
+        assert isinstance(error, SPBaseRelayError)
+        assert isinstance(error, Exception)
+
+    def test_destination_type_always_ntrip(self) -> None:
+        """destination_type is always 'ntrip'."""
+        error = NtripError("Test error")
+        assert error.destination_type == "ntrip"
 
 
 class TestExceptionChaining:

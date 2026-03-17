@@ -5,9 +5,10 @@ for testing purposes. The generated data follows the basic RTCM structure
 but contains synthetic positioning data.
 """
 
-import struct
 import time
 from dataclasses import dataclass
+
+from sp_base_relay.rtcm_decoder import RTCMMessageDecoder
 
 
 @dataclass
@@ -32,16 +33,20 @@ class RTCMMessage:
         header = bytearray()
         header.append(0xD3)  # Preamble
 
-        # Length field (10 bits) + reserved bits (6 bits)
-        length_field = (self.length & 0x3FF) << 6
-        header.extend(struct.pack(">H", length_field))
+        # Bytes 1-2: 6 reserved bits (0) + 10-bit length
+        # Decoder reads: ((byte1 & 0x03) << 8) | byte2
+        header.append((self.length >> 8) & 0x03)
+        header.append(self.length & 0xFF)
 
         # Build complete message
         message = header + self.payload
 
-        # Calculate CRC24Q
-        crc = self._calculate_crc24q(message)
-        message.extend(struct.pack(">I", crc)[:3])  # Only use 3 bytes of CRC
+        # Calculate CRC24Q using the canonical decoder implementation
+        crc = RTCMMessageDecoder.calc_crc24q(bytes(message))
+        # Pack 24-bit CRC as 3 bytes (big-endian)
+        message.append((crc >> 16) & 0xFF)
+        message.append((crc >> 8) & 0xFF)
+        message.append(crc & 0xFF)
 
         return bytes(message)
 

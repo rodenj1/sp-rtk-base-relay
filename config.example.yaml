@@ -1,22 +1,13 @@
-# SP-Base-Relay Example Configuration
-# This file demonstrates the new configuration format with single source/destination enforcement
-
-# RTCM Server Configuration (Required - Single Destination)
-server:
-  host: "server.somewhere.com"
-  port: 50010
-  username: "USER01"
-  password: "abc1"
-  connection_timeout: 10
-  read_timeout: 30
-  heartbeat_timeout: 30
-  retry_initial_delay: 1
-  retry_max_delay: 60
-  retry_multiplier: 2.0
+# SP-Base-Relay v2.0 Example Configuration
+# ============================================================================
+# BREAKING CHANGE: The old 'server:' key has been replaced by a 'destinations:'
+# list. Each destination gets its own name, type, filter, and config block.
+# See docs/v2-architecture-plan.md for migration details.
+# ============================================================================
 
 # Input Source Configuration (Required - Single Source)
-# Only ONE source type can be active at a time
-# Choose either TCP or Serial configuration below
+# Only ONE source type can be active at a time.
+# Supported sources: tcp, serial, usb_serial, bluetooth
 
 # Option 1: TCP Input (for RTKBase integration)
 input:
@@ -28,7 +19,7 @@ input:
     buffer_size: 4096
 
 # Option 2: Serial Input (for direct GNSS receiver connection)
-# Uncomment the section below and comment out the TCP section above to use serial
+# Uncomment and replace the TCP section above to use serial:
 #input:
 #  source: "serial"
 #  config:
@@ -41,13 +32,87 @@ input:
 #    rtscts: false
 #    xonxoff: false
 
-# Connection Monitoring Configuration
-monitoring:
-  heartbeat_timeout: 30
-  reconnect_delay_base: 1
-  reconnect_max_delay: 60
-  max_reconnect_attempts: 0  # 0 = unlimited
-  connection_check_interval: 5
+# ============================================================================
+# Destinations (Required - at least one must be enabled)
+# ============================================================================
+# Each destination receives RTCM data from the input source, optionally
+# filtered by message type. Supported types: surepath, ntrip, tcp_server
+#
+# Filter modes:
+#   pass_all  — forward every message (default)
+#   allowlist — only forward message_ids in the list
+#   blocklist — forward everything EXCEPT message_ids in the list
+
+destinations:
+
+  # ---- Sure-Path proprietary server ----
+  - name: surepath
+    type: surepath
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      host: "server.somewhere.com"
+      port: 50010
+      username: "USER01"
+      password: "abc1"
+      connection_timeout: 10
+      read_timeout: 30
+      heartbeat_timeout: 30
+      retry_initial_delay: 1
+      retry_max_delay: 60
+      retry_multiplier: 2.0
+
+  # ---- NTRIP Caster (e.g. RTK2go, Onocoy, RTKDirect) ----
+  - name: rtk2go
+    type: ntrip
+    enabled: false
+    filter:
+      mode: pass_all
+    config:
+      caster: "rtk2go.com"
+      port: 2101
+      mountpoint: "YOUR_MOUNT"
+      password: "your_password"
+      # username: ""          # optional for some casters
+      version: "2.0"          # "1.0" or "2.0"
+      connection_timeout: 15
+      retry_initial_delay: 10
+      retry_max_delay: 120
+      retry_multiplier: 2.0
+
+  # ---- Example: second NTRIP caster with message filtering ----
+  #- name: onocoy
+  #  type: ntrip
+  #  enabled: false
+  #  filter:
+  #    mode: blocklist
+  #    message_ids: [4072]     # drop proprietary messages
+  #  config:
+  #    caster: "servers.onocoy.com"
+  #    port: 2101
+  #    mountpoint: "ONOCOY_MOUNT"
+  #    password: "your_password"
+  #    version: "2.0"
+
+  # ---- Local TCP re-broadcast server ----
+  #- name: local_tcp
+  #  type: tcp_server
+  #  enabled: false
+  #  filter:
+  #    mode: pass_all
+  #  config:
+  #    host: "0.0.0.0"
+  #    port: 5016
+  #    max_clients: 10
+
+# ============================================================================
+# Environment variable overrides (v2.0)
+# ============================================================================
+# Global:   SP_INPUT_SOURCE, SP_METRICS_PORT, SP_LOG_LEVEL, etc.
+# Per-dest: SP_DEST_<NAME>_<FIELD>  (name uppercased)
+#   e.g.  SP_DEST_SUREPATH_HOST=override.example.com
+#         SP_DEST_RTK2GO_PASSWORD=secret
 
 # Prometheus Metrics Configuration
 metrics:
@@ -58,8 +123,8 @@ metrics:
 
 # Logging Configuration
 logging:
-  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
-  format: "json"  # json or text
+  level: "INFO"          # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "json"         # json or text
   file: "/var/log/sp-base-relay.log"
   max_size_mb: 50
   backup_count: 3

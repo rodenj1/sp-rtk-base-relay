@@ -2,6 +2,7 @@
 
 ## Document Status
 - **Created**: March 16, 2026
+- **Updated**: March 16, 2026 (Design review decisions added)
 - **Status**: Approved — Ready for implementation
 - **Version**: 2.0.0 (Major release with breaking changes)
 
@@ -372,3 +373,92 @@ sp_base_relay_rtcm_messages_by_id_total{message_id="..."}
 3. **Module**: `DataPipelineCoordinator` replaced by `BroadcastHub`
 4. **Version**: Bumped to 2.0.0
 5. **Grafana Dashboard**: New template required (old dashboard incompatible)
+
+---
+
+## Detailed Design Review Decisions (March 16, 2026)
+
+The following decisions were made during the pre-implementation design review session.
+
+### DR-1: BroadcastHub Frame Parsing Strategy — Dual-Path Distribution
+
+**Decision**: BroadcastHub uses a dual-path strategy for data distribution:
+
+- If **all** destinations use `pass_all` → skip frame parsing entirely, forward raw chunks to all queues (zero overhead, identical to v1 behavior)
+- If **any** destination uses allowlist/blocklist → parse RTCM frames, then:
+  - `pass_all` destinations still get raw chunks (no overhead for them)
+  - Filtered destinations get only the frames that pass their filter (complete RTCM frames, not raw chunks)
+- **Metrics frame decoding remains post-send** in each destination thread (not in the BroadcastHub). Each destination thread tracks what messages it actually sent.
+
+**Rationale**: Avoids unnecessary frame parsing overhead for `pass_all` destinations while sharing a single parse operation across all filtered destinations.
+
+### DR-2: Queue Overflow Strategy — Drop Newest, Clear on Reconnect
+
+**Decision**:
+- Per-destination queues with `maxsize=100`
+- When queue is full: **silently drop new data** for that destination (non-blocking `put_nowait`, no effect on other destinations)
+- When destination reconnects after outage: **clear the queue** entirely, start fresh with new incoming data
+- Track drops with `sp_base_relay_dest_messages_dropped_total{destination="..."}` metric
+
+**Rationale**: Stale RTCM correction data is useless — a 30-second-old correction has no value. When a destination reconnects, it should receive only fresh data, not drain a backlog of obsolete corrections.
+
+### DR-3: BroadcastHub — Separate Broadcast Thread
+
+**Decision**: Use a dedicated Broadcast Thread between the Input Thread and Destination Threads.
+
+```
+[Input Thread] → input_queue → [Broadcast Thread] → dest_queues → [Dest Threads]
+```
+
+**Rationale**: The separate thread acts as a **central coordinator** that:
+1. Decouples input health from destination health
+2. Manages the "input source is down" state (clears stale queues, logs warnings)
+3. Allows input thread to focus purely on reconnection while broadcast thread manages destination side
+4. Keeps destination connections alive during input outages (caster connections are expensive to re-establish)
+
+### DR-4: Config Migration — Documentation Only
+
+**Decision**: No migration CLI tool. When v2 detects old `server:` key in config:
+- Print clear error message with migration instructions
+- Reference `config.example.yaml` and migration notes in README
+- Provide `config.v2.example.yaml` showing the full new format
+
+**Rationale**: Single primary user, straightforward migration, migration tool adds test/maintenance burden for one-time use.
+
+### DR-5: NTRIP Connection Health — Industry Standard (send() + Backoff)
+
+**Decision**: Follow the same approach as the BKG reference NtripServer implementation:
+1. **Primary detection**: `send()` / `sendall()` failure → immediate reconnect with exponential backoff
+2. **TCP keepalive**: Enable `SO_KEEPALIVE` with OS defaults as safety net (not tuned aggressively)
+3. **No custom watchdog timer** — not needed because we're continuously sending data (1-5 Hz)
+4. Applies to **both NTRIP v1 and v2** (same unidirectional "fire and forget" pattern)
+
+**Research findings**:
+- NTRIP v1.0 spec: *"A loss of the TCP connection will be automatically recognized by the TCP sockets"*
+- BKG reference implementation: reconnects with exponential backoff on TCP error
+- RTK2go/SNIP: caster disconnects "dead" server connections after ~12 seconds of no data
+- All major open-source implementations (BKG, go-gnss, de-bkg) rely on `send()` failure, not keepalive tuning
+
+**Rationale**: Industry-proven approach. Since GPS data flows at 1-5 Hz, a dead connection is detected within seconds by the next `send()` failure. No need for aggressive keepalive or custom watchdog timers.
+
+### DR-6: NTRIP Source Table (STR Records) — Deferred
+
+**Decision**: Defer STR record support to post-v2.0 or Phase 6.
+
+**Rationale**:
+- All three target casters (RTK2go, Onocoy, rtkdirect) accept connections without STR records
+- SNIP/RTK2go auto-generates STR records from the data stream
+- Adding STR records means adding config fields for lat/lon, GNSS systems, etc. — scope creep for v2.0
+- Can be added later as optional config if needed
+
+### DR-7: Input "No Data" Watchdog — Passive Logging
+
+**Decision**: BroadcastHub tracks `last_data_received_time` and provides passive monitoring:
+- Log WARNING after 30 seconds of no data from input source
+- Expose `sp_base_relay_input_seconds_since_last_data` Prometheus gauge
+- **Do not force reconnect** — input source manages its own connection health
+- When input dies, natural cascade handles destination reconnection:
+  1. Input dies → no data flows → casters disconnect us after ~12s → destination threads detect → reconnect loops
+  2. Input reconnects → data resumes → destination threads reconnect → fresh data flows
+
+**Rationale**: Provides operator visibility through logs and Grafana without adding complexity. The natural cascade of disconnections handles recovery without explicit coordination.

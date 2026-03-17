@@ -1,11 +1,11 @@
 # Progress
 
-## Current Status — v2.0 Phase 1 Session 1A Complete (March 17, 2026)
+## Current Status — v2.0 Phase 1 Sessions 1A+1B Complete (March 17, 2026)
 
 **v1.x**: All phases complete (production-running)
-**v2.0**: Phase 1 Session 1A complete. Session 1B (Config v2) ready to begin.
-**Branch**: `feature/v2-multi-destination` (commit `9269df9`)
-**Tests**: 658 passing (102 new), 84.79% overall coverage
+**v2.0**: Phase 1 Sessions 1A + 1B complete. Session 1C (BroadcastHub) next.
+**Branch**: `feature/v2-multi-destination` (commit `0d238ec`)
+**Tests**: 726 passing (170 new), 85.28% overall coverage
 
 Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
@@ -14,13 +14,13 @@ Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 ## v2.0 Development Progress
 
 ### Phase 1: Foundation — Base Destination & Broadcast Hub
-**Status**: IN PROGRESS (Session 1A complete) | **Effort**: 3-4 sessions
+**Status**: IN PROGRESS (Sessions 1A + 1B complete) | **Effort**: 3-4 sessions
 
 - [x] `BaseDestination` ABC with standard interface (88% coverage)
 - [x] `DestinationStats` dataclass
 - [x] `MessageFilter` (pass_all/allowlist/blocklist) (100% coverage)
 - [x] `DestinationError` / `NtripError` exception types (100% coverage)
-- [ ] Config v2 (`destinations:` list parsing) — Session 1B
+- [x] Config v2 — `destinations:` list parsing, `DestinationFilterConfig`, `SurePathDestinationConfig`, `NtripDestinationConfig`, `TcpServerDestinationConfig`, per-dest env overrides, old v1.x format detection (DR-4). 60+ new tests. (Session 1B, commit `0d238ec`)
 - [ ] `BroadcastHub` (replaces DataPipelineCoordinator) — Session 1C
 - [ ] `DestinationFactory` — Session 1D
 - [ ] Test suite for remaining modules

@@ -1,299 +1,244 @@
 # SP-Base-Relay
 
-A Python service that bridges RTK GPS base stations with custom RTCM correction servers, designed for integration with RTKBase and standalone deployments.
+A Python service that relays RTCM correction data from RTK GPS base stations to **multiple destinations** simultaneously — Sure-Path servers, NTRIP casters, and local TCP clients.
 
 [![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Code Coverage](https://img.shields.io/badge/coverage-89.81%25-brightgreen.svg)](htmlcov/index.html)
+[![Code Coverage](https://img.shields.io/badge/coverage-88%25-brightgreen.svg)](htmlcov/index.html)
 
 ## Overview
 
-SP-Base-Relay provides a robust, production-ready solution for relaying RTCM correction data from RTK GPS base stations to custom RTCM servers that use non-standard authentication protocols. It's designed as a Python equivalent to RTKLIB's `str2str` tool with support for custom server protocols.
+SP-Base-Relay v2.0 is a production-ready multi-destination RTCM relay. A single GPS input source (TCP, serial, or Bluetooth) feeds correction data to any combination of destinations — proprietary Sure-Path servers, NTRIP v1.0/v2.0 casters (RTK2go, Onocoy, rtkdirect), and local TCP rebroadcast servers.
 
 ### Key Features
 
+- 🔀 **Multi-Destination Broadcast**: Fan-out RTCM data to 1–N destinations simultaneously
+- 🌐 **NTRIP v1.0 + v2.0**: Push corrections to any NTRIP caster (RTK2go, Onocoy, rtkdirect)
+- 📡 **TCP Rebroadcast Server**: Serve corrections to LAN rovers via TCP
+- 🔐 **Sure-Path Protocol**: Custom `INIT:user:pass*` auth with `$HB$` heartbeat monitoring
 - 🔌 **Multiple Input Sources**: TCP (RTKBase), Serial UART, USB Serial, Bluetooth GPS
-- 🔐 **Custom Authentication**: Support for `INIT:username:password*` protocol with `$HB$` heartbeat monitoring
-- 🔄 **Automatic Recovery**: Exponential backoff retry with intelligent connection management
-- 🔧 **Self-Healing**: Automatic Bluetooth GPS recovery without manual intervention
-- 📊 **Prometheus Metrics**: Comprehensive monitoring and observability
-- ⚡ **Low Latency**: Pass-through mode with minimal processing overhead
-- 🛡️ **Production Ready**: Systemd integration, comprehensive logging, and error handling
-- 🧪 **Well Tested**: 89.81% code coverage with 388 passing tests
+- 🎯 **Per-Destination Filtering**: Pass-all, allowlist, or blocklist RTCM message types per destination
+- 📊 **Per-Destination Prometheus Metrics**: Individual throughput, errors, queue depth per destination
+- 🔄 **Automatic Recovery**: Exponential backoff reconnection per destination — independent fault isolation
+- 🔧 **Self-Healing Bluetooth**: Automatic Bluetooth GPS recovery without manual intervention
+- 🛡️ **Production Ready**: Systemd integration, structured logging, comprehensive error handling
+- 🧪 **Well Tested**: 88% code coverage with 942 passing tests
+
+## Architecture
+
+```
+                              ┌──▶ [SurePath Thread] ──▶ Sure-Path Server
+[Input Source] ──▶ [BroadcastHub] ─┤──▶ [NTRIP Thread]   ──▶ RTK2go / Onocoy / etc.
+  TCP / Serial       Fan-out    │──▶ [NTRIP Thread]   ──▶ rtkdirect
+  / Bluetooth       + Filter    └──▶ [TCP Srv Thread]  ──▶ LAN Rover Clients
+                                        │
+                                [Prometheus Metrics] ◄──── per-destination labels
+```
+
+Each destination runs in its own thread with an independent queue, so a failure in one destination never affects the others.
 
 ## Quick Start
 
 ### Installation
 
-**Automated Installation (Recommended):**
 ```bash
 git clone https://github.com/rodenj1/sp-base-relay.git
 cd sp-base-relay
 sudo ./tools/install.sh
 ```
 
-**Manual Installation:**
-```bash
-pip install sp-base-relay
-```
-
 ### Configuration
 
-Generate a default configuration:
-```bash
-sp-base-relay --generate-config > config.yaml
-```
+Edit `/etc/sp-base-relay/config.yaml` (or see `config.example.yaml`):
 
-Edit the configuration with your settings:
 ```yaml
-server:
-  host: "rtcm.example.com"
-  port: 50010
-  username: "YOUR_USERNAME"
-  password: "YOUR_PASSWORD"
-
 input:
-  source: "tcp"  # or "serial", "usb_serial"
-  tcp:
-    host: "localhost"
-    port: 5015
-    timeout: 30
+  source: "tcp"
+  config:
+    host: "192.168.1.100"
+    port: 3000
+
+destinations:
+  - name: surepath
+    type: surepath
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      host: "server.example.com"
+      port: 50010
+      username: "USER01"
+      password: "abc1"
+
+  - name: rtk2go
+    type: ntrip
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      caster: "rtk2go.com"
+      port: 2101
+      mountpoint: "MY_MOUNT"
+      password: "my_password"
+      version: "2.0"
+
+  - name: local_tcp
+    type: tcp_server
+    enabled: false
+    filter:
+      mode: pass_all
+    config:
+      host: "0.0.0.0"
+      port: 5016
+      max_clients: 10
+
+metrics:
+  enabled: true
+  port: 8080
 
 logging:
   level: "INFO"
   format: "json"
-
-metrics:
-  enabled: true
-  host: "0.0.0.0"
-  port: 8080
 ```
 
-### Running the Service
+### Running
 
-**As a systemd service (after installation):**
 ```bash
-# Edit configuration
-sudo nano /etc/sp-base-relay/config.yaml
-
-# Start service
+# As a systemd service
 sudo systemctl start sp-base-relay
 
-# Check status
-sudo systemctl status sp-base-relay
-
-# View logs
-sudo journalctl -u sp-base-relay -f
-```
-
-**As a foreground process:**
-```bash
+# Or foreground
 sp-base-relay --config config.yaml --foreground
 ```
 
-**Validate configuration:**
-```bash
-sp-base-relay --config config.yaml --validate
-```
+## Destination Types
 
-## Use Cases
+### Sure-Path (`surepath`)
+Custom proprietary protocol with `INIT:user:pass*` authentication and `$HB$` heartbeat monitoring. Wraps the battle-tested v1.x RTCMClient.
 
-### RTKBase Integration
-Connect your RTKBase installation to a custom RTCM correction server:
+### NTRIP (`ntrip`)
+Pushes RTCM corrections to NTRIP casters. Supports both protocol versions:
+- **v2.0** (default): HTTP POST + Basic auth + chunked transfer encoding
+- **v1.0**: SOURCE auth + raw binary streaming
+
+Tested against RTK2go, Onocoy, and rtkdirect.
+
+### TCP Server (`tcp_server`)
+Local TCP rebroadcast server for LAN clients. Multiple rovers can connect and receive corrections simultaneously. Features max_clients enforcement and per-client write timeout for backpressure handling.
+
+## Message Filtering
+
+Each destination can independently filter RTCM messages by type ID:
+
 ```yaml
-input:
-  source: "tcp"
-  tcp:
-    host: "localhost"
-    port: 5015  # RTKBase str2str_tcp service
+filter:
+  mode: pass_all          # Forward everything (zero overhead)
+
+filter:
+  mode: allowlist         # Only forward these message types
+  message_ids: [1005, 1077, 1087, 1097, 1127]
+
+filter:
+  mode: blocklist         # Forward everything except these
+  message_ids: [4072]     # Drop proprietary messages
 ```
 
-### Direct GNSS Connection
-Connect directly to a GNSS receiver via serial:
-```yaml
-input:
-  source: "serial"
-  serial:
-    port: "/dev/ttyUSB0"
-    baudrate: 115200
-```
+## Monitoring
 
-### Network-Based Base Station
-Connect to a network-accessible base station via TCP:
-```yaml
-input:
-  source: "tcp"
-  tcp:
-    host: "192.168.1.100"
-    port: 5015
-```
+### Prometheus Metrics
 
-## Architecture
+Per-destination metrics with `{destination="..."}` labels:
 
-```
-┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
-│ Input Sources       │────│ sp-base-relay       │────│ Custom RTCM Server  │
-│ - Serial UART       │    │ Python Package      │    │ rtcm.example.com    │
-│ - USB Serial        │    │                     │    └─────────────────────┘
-│ - TCP (RTKBase)     │    │ ┌─────────────────┐ │
-└─────────────────────┘    │ │ Input Manager   │ │
-                           │ └─────────────────┘ │
-┌─────────────────────┐    │ ┌─────────────────┐ │
-│ Prometheus Metrics  │◄───│ │ Data Pipeline   │ │
-└─────────────────────┘    │ └─────────────────┘ │
-                           │ ┌─────────────────┐ │
-                           │ │ RTCM Client     │ │
-                           │ └─────────────────┘ │
-                           └─────────────────────┘
-```
+| Metric | Type | Description |
+|--------|------|-------------|
+| `sp_base_relay_dest_bytes_sent_total` | Counter | Bytes sent per destination |
+| `sp_base_relay_dest_messages_sent_total` | Counter | Messages sent per destination |
+| `sp_base_relay_dest_messages_dropped_total` | Counter | Queue overflow drops per destination |
+| `sp_base_relay_dest_connection_status` | Gauge | Connection state (1/0) per destination |
+| `sp_base_relay_dest_errors_total` | Counter | Errors per destination |
+| `sp_base_relay_dest_queue_depth` | Gauge | Queue depth per destination |
+| `sp_base_relay_input_connection_status` | Gauge | Input source connection state |
+| `sp_base_relay_input_seconds_since_last_data` | Gauge | No-data watchdog |
+| `sp_base_relay_tcp_server_connected_clients` | Gauge | TCP server client count |
+| `sp_base_relay_service_uptime_seconds` | Gauge | Service uptime |
 
-## Features in Detail
+### Grafana Dashboard
 
-### Connection Management
-- **Exponential Backoff**: Intelligent retry with 1s → 2s → 4s → 8s → 16s → 32s → 60s progression
-- **Heartbeat Monitoring**: 30-second timeout detection with automatic reconnection
-- **Connection States**: Robust state machine for connection lifecycle management
+Import `templates/grafana_dashboard.json` for a pre-built v2 dashboard with per-destination panels, throughput graphs, and the no-data watchdog.
 
-### Monitoring & Observability
-- **Prometheus Metrics**: 17 comprehensive metrics covering connections, data flow, and health
-- **Structured Logging**: JSON/text formats with log rotation
-- **Grafana Dashboard**: Pre-built dashboard for visualization
-- **Health Checks**: Built-in health monitoring and status reporting
+## Input Sources
 
-### Performance
-- **Pass-Through Mode**: No RTCM validation for minimal latency
-- **Low CPU Usage**: < 5% CPU on modern systems
-- **Memory Efficient**: ~50MB RAM footprint
-- **Thread-Safe**: Proper concurrent operation without race conditions
+| Source | Use Case | Config Key |
+|--------|----------|------------|
+| `tcp` | RTKBase integration, network base stations | `host`, `port`, `timeout` |
+| `serial` | Direct GNSS receiver via UART | `port`, `baudrate` |
+| `usb_serial` | USB-to-serial adapters | `port`, `baudrate` |
+| `bluetooth` | Bluetooth GPS devices | `device_address`, `channel` |
 
-## Bluetooth GPS Self-Healing
-
-When using Bluetooth GPS devices, the system includes **automatic recovery** for Bluetooth connection failures:
-
-**Features:**
-- 🔍 Automatic detection of Bluetooth rfcomm driver hangs
-- 🔧 Automatic reset of frozen Bluetooth connections
-- ⚡ Recovery in < 30 seconds (vs. manual reboot)
-- 📝 Comprehensive recovery logging
-- 🔄 No manual intervention required
-
-**How It Works:**
-1. Detects serial I/O errors (`[Errno 5]`)
-2. Triggers automatic Bluetooth reset script
-3. Reconnects and re-binds rfcomm device
-4. Resumes normal operation
-
-**Setup:**
-```bash
-# Install bluetooth-gps.service (if using Bluetooth GPS)
-sudo cp tools/systemd/bluetooth-gps.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable bluetooth-gps.service
-sudo systemctl start bluetooth-gps.service
-```
-
-**Monitoring Recovery:**
-```bash
-# View recovery logs
-sudo tail -f /var/log/sp-base-relay/bluetooth-recovery.log
-
-# Check service status
-sudo systemctl status bluetooth-gps.service sp-base-relay.service
-```
-
-See **[Bluetooth Recovery Guide](docs/bluetooth-recovery.md)** for complete details.
-
----
-
-## Documentation
-
-- **[Deployment Guide](docs/deployment-guide.md)**: Complete installation and deployment instructions
-- **[Configuration Reference](configuration-reference.md)**: Detailed configuration options
-- **[Metrics Guide](docs/metrics-guide.md)**: Prometheus metrics documentation
-- **[Bluetooth Recovery](docs/bluetooth-recovery.md)**: Automatic recovery for Bluetooth GPS failures
-- **[Bluetooth GPS Setup](docs/bluetooth-gps-setup.md)**: Bluetooth GPS configuration guide
-- **[RTCM Protocol](RTCM_Connection_Protocol.md)**: Custom server protocol specification
-- **[Development Plan](development-plan.md)**: Project development roadmap
-
-## Requirements
-
-- **Python**: 3.10 or higher
-- **Operating System**: Linux with systemd (Ubuntu 20.04+, Debian 11+, RHEL 8+)
-- **Network**: TCP connectivity to RTCM server
-- **Optional**: Serial/USB hardware for direct GNSS connections
-
-## Development
-
-### Setup Development Environment
-
-```bash
-# Clone repository
-git clone https://github.com/rodenj1/sp-base-relay.git
-cd sp-base-relay
-
-# Install with uv (recommended)
-uv sync --all-extras
-
-# Activate virtual environment
-source .venv/bin/activate
-
-# Run tests
-uv run pytest --cov=src/sp_base_relay --cov-report=html
-```
-
-### Project Structure
+## Project Structure
 
 ```
 sp-base-relay/
-├── src/sp_base_relay/          # Main package
-│   ├── main.py                 # CLI entry point
-│   ├── config.py               # Configuration management
-│   ├── logger.py               # Logging setup
-│   ├── metrics.py              # Prometheus metrics
-│   └── core/                   # Core components
-│       ├── rtcm_client.py      # RTCM server connection
-│       ├── data_pipeline.py    # Data relay coordination
-│       └── input_sources/      # Input source implementations
-├── tests/                      # Test suite (388 tests)
-│   ├── unit/                   # Unit tests
-│   ├── integration/            # Integration tests
-│   └── fixtures/               # Test fixtures
-├── tools/                      # Deployment tools
-│   ├── install.sh              # Installation script
-│   ├── uninstall.sh            # Uninstallation script
-│   └── systemd/                # Systemd service definition
-├── docs/                       # Documentation
-└── templates/                  # Grafana dashboards
+├── src/sp_base_relay/
+│   ├── main.py                      # Service orchestration (v2)
+│   ├── config.py                    # YAML config with destinations: list
+│   ├── metrics.py                   # Per-destination Prometheus metrics
+│   ├── exceptions.py                # DestinationError, NtripError, etc.
+│   ├── logger.py                    # Structured logging
+│   ├── rtcm_decoder.py             # RTCM 3.x frame parser
+│   └── core/
+│       ├── broadcast_hub.py         # Fan-out coordinator (input → N queues)
+│       ├── message_filter.py        # Per-destination RTCM filtering
+│       ├── rtcm_client.py           # Sure-Path protocol client
+│       ├── connection_states.py     # Connection state machine
+│       ├── bluetooth_manager.py     # Bluetooth GPS recovery
+│       ├── destinations/
+│       │   ├── base_destination.py       # ABC + queue + stats
+│       │   ├── destination_factory.py    # Registry-based factory
+│       │   ├── surepath_destination.py   # Sure-Path server
+│       │   ├── ntrip_destination.py      # NTRIP v1.0 + v2.0
+│       │   └── tcp_server_destination.py # Async TCP rebroadcast
+│       └── input_sources/
+│           ├── base_input.py        # Input ABC
+│           ├── tcp_input.py         # TCP input
+│           ├── serial_input.py      # Serial input
+│           └── bluetooth_input.py   # Bluetooth input
+├── tests/                           # 942 tests, 88% coverage
+│   ├── unit/                        # Unit tests (26 test files)
+│   ├── integration/                 # Hardware integration tests
+│   ├── manual/                      # Manual production tests
+│   └── fixtures/                    # Mock servers and generators
+├── tools/                           # Install/uninstall, systemd, bluetooth
+├── templates/                       # Grafana dashboard v2
+├── docs/                            # Documentation
+│   ├── v2-architecture-plan.md      # Full architecture + design decisions
+│   ├── deployment-guide.md          # Installation & deployment
+│   ├── metrics-guide.md             # Prometheus metrics reference
+│   └── bluetooth-*.md               # Bluetooth GPS guides
+└── config.example.yaml              # v2 configuration template
 ```
 
-### Running Tests
+## Development
 
 ```bash
-# Run all tests
+# Clone and install
+git clone https://github.com/rodenj1/sp-base-relay.git
+cd sp-base-relay
+uv sync --all-extras
+source .venv/bin/activate
+
+# Run tests
 uv run pytest
 
 # Run with coverage
 uv run pytest --cov=src/sp_base_relay --cov-report=html
-
-# Run specific test file
-uv run pytest tests/unit/test_rtcm_client.py
-
-# Run tests matching pattern
-uv run pytest -k "test_connection"
 ```
 
-### Code Quality
-
-```bash
-# Type checking
-uv run mypy src/sp_base_relay
-
-# Linting
-uv run pylint src/sp_base_relay
-
-# Formatting (if needed)
-uv run black src/sp_base_relay tests
-```
+### Code Quality Standards
+- Python 3.10+ with modern type hints (`dict`, `list`, `X | None`)
+- PEP8 code style, pyright strict mode
+- >88% test coverage (942 tests)
+- UV package management
 
 ## CLI Usage
 
@@ -301,124 +246,47 @@ uv run black src/sp_base_relay tests
 sp-base-relay [OPTIONS]
 
 Options:
-  --version                    Show version and exit
-  -c, --config PATH           Configuration file path [default: /etc/sp-base-relay/config.yaml]
-  --validate                  Validate configuration and exit
-  --generate-config           Generate example configuration and exit
-  --foreground                Run in foreground (don't daemonize)
-  --log-level LEVEL           Override log level [DEBUG|INFO|WARNING|ERROR|CRITICAL]
-
-Examples:
-  # Start with custom config
-  sp-base-relay --config /path/to/config.yaml
-
-  # Validate configuration
-  sp-base-relay --config config.yaml --validate
-
-  # Generate default config
-  sp-base-relay --generate-config > config.yaml
-
-  # Run in foreground with debug logging
-  sp-base-relay --config config.yaml --foreground --log-level DEBUG
+  --version                Show version and exit
+  -c, --config PATH        Configuration file path
+  --validate               Validate configuration and exit
+  --generate-config        Generate example configuration
+  --foreground             Run in foreground
+  --log-level LEVEL        Override log level
 ```
 
-## Monitoring
+## Migration from v1.x
 
-### Prometheus Metrics Endpoint
+v2.0 is a **breaking change**. Key differences:
 
-```bash
-# Access metrics (if enabled)
-curl http://localhost:8080/metrics
-```
+| v1.x | v2.0 |
+|------|------|
+| `server:` config key | `destinations:` list |
+| Single destination | 1–N destinations |
+| Global metrics | Per-destination `{destination="..."}` labels |
+| `DataPipelineCoordinator` | `BroadcastHub` + `DestinationFactory` |
+| v1 Grafana dashboard | v2 dashboard with `$destination` variable |
 
-### Key Metrics
+See `config.example.yaml` for the new format. Old `server:` configs are detected with a clear migration error message.
 
-- `rtcm_connection_status` - Connection state (1=connected, 0=disconnected)
-- `rtcm_messages_sent_total` - Total RTCM messages sent
-- `rtcm_bytes_sent_total` - Total bytes transmitted
-- `rtcm_connection_attempts_total` - Connection attempts
-- `rtcm_authentication_failures_total` - Authentication failures
-- `rtcm_heartbeat_last_received` - Last heartbeat timestamp
-- `pipeline_messages_processed_total` - Messages processed
-- `pipeline_errors_total` - Pipeline errors by type
+## Documentation
 
-See [Metrics Guide](docs/metrics-guide.md) for complete documentation.
-
-## Troubleshooting
-
-### Service Won't Start
-
-```bash
-# Check service status
-sudo systemctl status sp-base-relay
-
-# View recent logs
-sudo journalctl -u sp-base-relay -n 50
-
-# Validate configuration
-sp-base-relay --config /etc/sp-base-relay/config.yaml --validate
-```
-
-### Connection Issues
-
-```bash
-# Test RTCM server connectivity
-telnet rtcm.example.com 50010
-
-# Check input source (for RTKBase)
-sudo systemctl status str2str_tcp
-
-# View connection-related logs
-sudo journalctl -u sp-base-relay | grep -i "connection\|auth"
-```
-
-### Permission Issues
-
-```bash
-# Fix directory permissions
-sudo chown -R sp-base-relay:sp-base-relay /var/lib/sp-base-relay
-sudo chown -R sp-base-relay:sp-base-relay /var/log/sp-base-relay
-
-# Fix serial port permissions (if using serial)
-sudo usermod -a -G dialout sp-base-relay
-sudo systemctl restart sp-base-relay
-```
-
-For more troubleshooting help, see [Deployment Guide](docs/deployment-guide.md#troubleshooting).
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
-
-### Development Standards
-- Python 3.10+ with type hints
-- PEP8 code style
-- >90% test coverage
-- Comprehensive documentation
+- **[Architecture Plan](docs/v2-architecture-plan.md)**: Full v2 design with 7 design review decisions
+- **[Configuration Example](config.example.yaml)**: Complete v2 config template
+- **[Deployment Guide](docs/deployment-guide.md)**: Installation and systemd setup
+- **[Metrics Guide](docs/metrics-guide.md)**: Prometheus metrics reference
+- **[Bluetooth Recovery](docs/bluetooth-recovery.md)**: Self-healing Bluetooth GPS
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Built as an alternative to RTKLIB's `str2str` for custom RTCM server protocols
-- Designed for integration with the [RTKBase](https://github.com/Stefal/rtkbase) project
-- Tested with real-world RTK GPS base station deployments
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/rodenj1/sp-base-relay/issues)
-- **Documentation**: [docs/](docs/)
-- **Examples**: [config.example.yaml](config.example.yaml)
+MIT License — see [LICENSE](LICENSE).
 
 ## Project Status
 
-**Current Version**: 1.0.0 (Phase 7 Complete)
-- ✅ Core functionality (Phases 1-5)
-- ✅ CLI and service management (Phase 7)
-- ✅ 89.81% test coverage (388 tests)
-- 🔨 PyPI packaging (Phase 8 - upcoming)
+**Current Version**: 2.0.0
+- ✅ Multi-destination broadcast (Sure-Path, NTRIP v1.0/v2.0, TCP server)
+- ✅ Per-destination message filtering and Prometheus metrics
+- ✅ BroadcastHub fan-out architecture with independent fault isolation
+- ✅ 942 tests, 88% coverage, production-stable
 
 ---
 

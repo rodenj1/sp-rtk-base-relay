@@ -1,11 +1,11 @@
 # Progress
 
-## Current Status — v2.0 Phase 4 COMPLETE (March 17, 2026)
+## Current Status — v2.0 Phase 5 COMPLETE (March 18, 2026)
 
 **v1.x**: All phases complete (production-running)
-**v2.0**: Phase 4 complete (Metrics v2). Phase 5 (TCP Server) or Phase 6 (Integration) next.
+**v2.0**: Phase 5 complete (TCP Server Destination). Phase 6 (Integration & Polish) next.
 **Branch**: `feature/v2-multi-destination`
-**Tests**: 908 passing (~352 new v2 tests), zero regressions
+**Tests**: 942 passing (~386 new v2 tests), 88.10% coverage, zero regressions
 
 Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
@@ -73,12 +73,18 @@ Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 - [x] Grafana dashboard v2 — `$destination` template variable, per-dest throughput/queue/drops/errors panels, DR-7 watchdog panel
 - [x] 908/908 passing, 88.53% coverage, zero regressions
 
-### Phase 5: TCP Server Destination (Low Priority)
-**Status**: NOT STARTED | **Effort**: 1-2 sessions
+### Phase 5: TCP Server Destination ✅ COMPLETE
+**Status**: COMPLETE (Session 5, commit `bb896df`) | **Effort**: 1 session
 
-- [ ] `TcpServerDestination` (asyncio inside thread)
-- [ ] Multi-client broadcast
-- [ ] Backpressure handling
+- [x] `TcpServerDestination` — asyncio event loop inside destination thread (A+ pattern)
+- [x] Multi-client broadcast with `asyncio.start_server()`
+- [x] Per-client 5-second write timeout (backpressure/dead client handling)
+- [x] `max_clients` enforcement — reject connections at the limit
+- [x] `client_count` property for metrics integration
+- [x] `build_tcp_server_destination` factory builder, auto-registered as "tcp_server"
+- [x] New Prometheus gauge: `tcp_server_connected_clients{destination}` in MetricsCollector
+- [x] 34 new tests (80% coverage on tcp_server_destination.py)
+- [x] 942/942 passing, 88.10% coverage, zero regressions
 
 ### Phase 6: Integration & Polish
 **Status**: NOT STARTED | **Effort**: 1-2 sessions
@@ -89,22 +95,23 @@ Full architecture plan with DR decisions: `docs/v2-architecture-plan.md`
 
 ---
 
-## v2.0 Module Map (Phase 4 Complete)
+## v2.0 Module Map (Phase 5 Complete)
 
 ```
 src/sp_base_relay/
 ├── config.py                    # v2 destination configs + old format detection
-├── metrics.py                   # REWRITTEN — per-destination Prometheus labels
+├── metrics.py                   # REWRITTEN — per-destination Prometheus labels + tcp_server gauge
 ├── exceptions.py                # DestinationError, NtripError added
 ├── core/
 │   ├── message_filter.py        # NEW — FilterConfig + MessageFilter
 │   ├── broadcast_hub.py         # NEW — fan-out coordinator
 │   └── destinations/
-│       ├── __init__.py           # Exports + auto-registers surepath + ntrip
+│       ├── __init__.py           # Exports + auto-registers surepath + ntrip + tcp_server
 │       ├── base_destination.py   # NEW — ABC + queue + stats
 │       ├── destination_factory.py # NEW — registry-based factory
 │       ├── surepath_destination.py # NEW — RTCMClient wrapper
-│       └── ntrip_destination.py  # NEW — NTRIP v1.0 + v2.0 server
+│       ├── ntrip_destination.py  # NEW — NTRIP v1.0 + v2.0 server
+│       └── tcp_server_destination.py # NEW — asyncio TCP server, multi-client broadcast
 ```
 
 ---
@@ -142,4 +149,4 @@ src/sp_base_relay/
 - ⚠️ v2.0 is a breaking change (config format, metrics names)
 - ⚠️ Phase 10 (PyPI packaging) still not started from v1.x
 - ✅ v1.x Sure-Path connection is production-stable
-- ✅ All 908 unit tests passing
+- ✅ All 942 unit tests passing

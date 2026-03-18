@@ -28,10 +28,16 @@ from sp_base_relay.core.destinations.ntrip_destination import (  # noqa: F401
     NtripDestination,
 )
 
+# Import registers the "tcp_server" builder with DestinationFactory
+from sp_base_relay.core.destinations.tcp_server_destination import (  # noqa: F401
+    TcpServerDestination,
+)
+
 __all__ = [
     "BaseDestination",
     "DestinationFactory",
     "DestinationStats",
     "NtripDestination",
     "SurePathDestination",
+    "TcpServerDestination",
 ]

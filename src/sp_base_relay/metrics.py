@@ -94,6 +94,11 @@ class MetricsCollector:
             "Current queue depth per destination",
             ["destination"],
         )
+        self.tcp_server_connected_clients = Gauge(
+            f"{namespace}_tcp_server_connected_clients",
+            "Number of TCP clients connected to a tcp_server destination",
+            ["destination"],
+        )
 
         # ── Global metrics ──────────────────────────────────────────
         self.input_connection_status = Gauge(
@@ -203,6 +208,13 @@ class MetricsCollector:
             self.dest_queue_depth.labels(destination=name).set(
                 stats.queue_depth
             )
+
+            # TCP server client count (only for tcp_server destinations)
+            if dest.destination_type == "tcp_server":
+                client_count = getattr(dest, "client_count", 0)
+                self.tcp_server_connected_clients.labels(
+                    destination=name
+                ).set(client_count)
 
             # Counters — increment by delta since last update
             if prev is not None:

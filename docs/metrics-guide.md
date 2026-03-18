@@ -1,65 +1,62 @@
-# Prometheus Metrics Guide
-
-This guide explains how to use and configure Prometheus metrics for monitoring SP-Base-Relay.
+# Prometheus Metrics Guide — SP-Base-Relay v2.0
 
 ## Overview
 
-SP-Base-Relay exports comprehensive metrics via Prometheus for monitoring connection health, data throughput, errors, and system performance. The metrics system integrates seamlessly with existing Prometheus + Grafana monitoring stacks.
+SP-Base-Relay v2.0 exports **per-destination** Prometheus metrics using `{destination="..."}` labels, plus global metrics for input health and service status. This is a **breaking change** from v1.x — all metric names have changed.
 
 ## Configuration
 
-Metrics are configured in the `config.yaml` file:
-
 ```yaml
 metrics:
-  enabled: true          # Enable/disable metrics collection
-  host: "0.0.0.0"       # Host to bind metrics server to
-  port: 8080            # Port for metrics HTTP endpoint
-  path: "/metrics"      # Metrics endpoint path
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+  path: "/metrics"
 ```
+
+Access: `http://localhost:8080/metrics`
+
+---
 
 ## Available Metrics
 
-### Connection Metrics
+### Per-Destination Metrics
+
+All per-destination metrics carry a `{destination="<name>"}` label matching the destination name in your config.
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `sp_base_relay_rtcm_connection_status` | Gauge | RTCM server connection status (1=connected, 0=disconnected) |
-| `sp_base_relay_input_connection_status` | Gauge | Input source connection status (1=connected, 0=disconnected) |
-| `sp_base_relay_rtcm_connection_attempts_total` | Counter | Total RTCM server connection attempts |
-| `sp_base_relay_rtcm_successful_connections_total` | Counter | Total successful RTCM server connections |
-| `sp_base_relay_rtcm_authentication_failures_total` | Counter | Total RTCM authentication failures |
-| `sp_base_relay_rtcm_heartbeat_timeouts_total` | Counter | Total RTCM heartbeat timeout events |
+| `sp_base_relay_dest_bytes_sent_total` | Counter | Total bytes sent to destination |
+| `sp_base_relay_dest_messages_sent_total` | Counter | Total messages sent to destination |
+| `sp_base_relay_dest_messages_dropped_total` | Counter | Messages dropped due to queue overflow |
+| `sp_base_relay_dest_messages_filtered_total` | Counter | Messages filtered out by allowlist/blocklist |
+| `sp_base_relay_dest_connection_status` | Gauge | Connection state (1=connected, 0=disconnected) |
+| `sp_base_relay_dest_connection_attempts_total` | Counter | Total connection attempts |
+| `sp_base_relay_dest_errors_total` | Counter | Total errors |
+| `sp_base_relay_dest_queue_depth` | Gauge | Current queue depth (0–100) |
+| `sp_base_relay_tcp_server_connected_clients` | Gauge | TCP server client count (tcp_server type only) |
 
-### Data Flow Metrics
-
-| Metric | Type | Description |
-|--------|------|-------------|
-| `sp_base_relay_rtcm_messages_sent_total` | Counter | Total RTCM messages sent to server |
-| `sp_base_relay_rtcm_bytes_sent_total` | Counter | Total bytes sent to RTCM server |
-| `sp_base_relay_pipeline_messages_processed_total` | Counter | Total messages processed through pipeline |
-| `sp_base_relay_pipeline_bytes_processed_total` | Counter | Total bytes processed through pipeline |
-| `sp_base_relay_input_bytes_read_total` | Counter | Total bytes read from input source |
-
-### Pipeline Metrics
+### Global Metrics
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `sp_base_relay_pipeline_running_status` | Gauge | Pipeline running status (1=running, 0=stopped) |
-| `sp_base_relay_pipeline_restarts_total` | Counter | Total pipeline restart attempts |
-| `sp_base_relay_pipeline_errors_total{error_type}` | Counter | Total pipeline errors by type (input, rtcm, coordination) |
-
-### Health Metrics
-
-| Metric | Type | Description |
-|--------|------|-------------|
-| `sp_base_relay_rtcm_heartbeat_last_received_timestamp` | Gauge | Unix timestamp of last RTCM heartbeat received |
+| `sp_base_relay_input_connection_status` | Gauge | Input source connection (1=connected, 0=disconnected) |
+| `sp_base_relay_input_seconds_since_last_data` | Gauge | Seconds since last data from GPS source (DR-7 watchdog; -1 if no data yet) |
 | `sp_base_relay_service_uptime_seconds` | Gauge | Service uptime in seconds |
-| `sp_base_relay_pipeline_uptime_seconds` | Gauge | Current pipeline session uptime in seconds |
+| `sp_base_relay_active_destinations_count` | Gauge | Number of currently connected destinations |
+| `sp_base_relay_hub_running_status` | Gauge | Broadcast hub running (1=running, 0=stopped) |
+
+---
+
+## How Metrics Work
+
+The `MetricsCollector` uses a **pull model**: the main loop calls `update_all()` every ~1 second, which reads `DestinationStats` from each destination and `BroadcastHub` state.
+
+Counter metrics use **delta-based increments** — the collector tracks previous values and only increments by the difference, so Prometheus sees monotonically increasing counters.
+
+---
 
 ## Prometheus Configuration
-
-Add SP-Base-Relay as a scrape target in your Prometheus configuration:
 
 ```yaml
 scrape_configs:
@@ -69,189 +66,199 @@ scrape_configs:
     scrape_interval: 5s
 ```
 
+---
+
 ## Grafana Dashboard
 
-A pre-built Grafana dashboard is available in `templates/grafana_dashboard.json`. The dashboard includes:
+A pre-built v2 dashboard is available at `templates/grafana_dashboard.json`.
 
-- **Connection Status** - Real-time connection state for RTCM server and input source
-- **Pipeline Status** - Pipeline running state
-- **Service & Pipeline Uptime** - Uptime tracking
-- **Data Throughput** - Bytes per second graphs for input, pipeline, and RTCM
-- **Message Rate** - Messages per second processing rate
-- **Connection Attempts** - Success vs failure rates
-- **Error Rates** - Error tracking by type
-- **Pipeline Restarts** - Restart frequency monitoring
-- **Last Heartbeat** - Time since last heartbeat with color-coded alerts
-- **Cumulative Statistics** - Total messages and bytes processed
+### Features
+- **`$destination` template variable** — filter all panels by destination
+- **Per-destination throughput** — bytes/sec and messages/sec per destination
+- **Queue depth** — per-destination queue utilization
+- **Connection status** — per-destination connection state over time
+- **Drops & errors** — per-destination drop and error rates
+- **Input watchdog** — seconds since last data from GPS source (DR-7)
+- **Active destinations** — count of connected destinations
+- **Service uptime** — total service uptime
 
-### Importing the Dashboard
+### Importing
+1. Open Grafana → **+** → **Import**
+2. Upload `templates/grafana_dashboard.json`
+3. Select your Prometheus data source
+4. Click **Import**
 
-1. Open Grafana web interface
-2. Click '+' → 'Import'
-3. Upload `templates/grafana_dashboard.json`
-4. Select your Prometheus data source
-5. Click 'Import'
+---
 
-## Common Prometheus Queries
+## Common PromQL Queries
 
-### Data Throughput Rate
+### Per-Destination Throughput (bytes/sec)
 ```promql
-rate(sp_base_relay_rtcm_bytes_sent_total[1m])
+rate(sp_base_relay_dest_bytes_sent_total{destination="rtk2go"}[1m])
 ```
 
-### Error Rate (errors per minute)
+### All Destinations Throughput
 ```promql
-rate(sp_base_relay_pipeline_errors_total[5m]) * 60
+rate(sp_base_relay_dest_bytes_sent_total[1m])
 ```
 
-### Connection Success Rate
+### Message Drop Rate (per minute)
 ```promql
-sp_base_relay_rtcm_successful_connections_total / sp_base_relay_rtcm_connection_attempts_total
+rate(sp_base_relay_dest_messages_dropped_total[5m]) * 60
 ```
 
-### Time Since Last Heartbeat
+### Error Rate by Destination
 ```promql
-time() - sp_base_relay_rtcm_heartbeat_last_received_timestamp
+rate(sp_base_relay_dest_errors_total[5m]) * 60
 ```
 
-### Pipeline Restart Rate (per hour)
+### Seconds Since Last GPS Data
 ```promql
-rate(sp_base_relay_pipeline_restarts_total[1h]) * 3600
+sp_base_relay_input_seconds_since_last_data
 ```
+
+### Destination Connection Status
+```promql
+sp_base_relay_dest_connection_status
+```
+
+### Queue Utilization (% of max 100)
+```promql
+sp_base_relay_dest_queue_depth / 100 * 100
+```
+
+### TCP Server Client Count
+```promql
+sp_base_relay_tcp_server_connected_clients{destination="local_tcp"}
+```
+
+---
 
 ## Alerting Rules
 
-Example Prometheus alerting rules for SP-Base-Relay:
+Example Prometheus alerting rules for SP-Base-Relay v2:
 
 ```yaml
 groups:
   - name: sp_base_relay
     rules:
-      - alert: RTCMConnectionDown
-        expr: sp_base_relay_rtcm_connection_status == 0
+      # Any destination disconnected for >1 minute
+      - alert: DestinationDown
+        expr: sp_base_relay_dest_connection_status == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "RTCM server connection is down"
-          description: "SP-Base-Relay has lost connection to RTCM server"
-      
+          summary: "Destination {{ $labels.destination }} is disconnected"
+          description: "SP-Base-Relay destination {{ $labels.destination }} has been disconnected for more than 1 minute."
+
+      # Input source disconnected
       - alert: InputSourceDisconnected
         expr: sp_base_relay_input_connection_status == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "Input source disconnected"
-          description: "SP-Base-Relay input source is not connected"
-      
-      - alert: HeartbeatTimeout
-        expr: time() - sp_base_relay_rtcm_heartbeat_last_received_timestamp > 30
+          summary: "GPS input source disconnected"
+          description: "SP-Base-Relay input source has been disconnected for more than 1 minute."
+
+      # No GPS data for >30 seconds (DR-7 watchdog)
+      - alert: NoGPSData
+        expr: sp_base_relay_input_seconds_since_last_data > 30
         for: 30s
         labels:
           severity: warning
         annotations:
-          summary: "RTCM heartbeat timeout"
-          description: "No heartbeat received from RTCM server for {{ $value }}s"
-      
-      - alert: HighErrorRate
-        expr: rate(sp_base_relay_pipeline_errors_total[5m]) > 1
+          summary: "No GPS data for {{ $value | humanize }}s"
+          description: "SP-Base-Relay has not received GPS data for {{ $value | humanize }} seconds."
+
+      # High drop rate on any destination
+      - alert: HighDropRate
+        expr: rate(sp_base_relay_dest_messages_dropped_total[5m]) > 1
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "High error rate detected"
-          description: "Pipeline error rate is {{ $value }} errors/sec"
-      
-      - alert: FrequentPipelineRestarts
-        expr: rate(sp_base_relay_pipeline_restarts_total[1h]) > 2
-        for: 30m
+          summary: "High drop rate on {{ $labels.destination }}"
+          description: "Destination {{ $labels.destination }} is dropping {{ $value }} messages/sec."
+
+      # High error rate on any destination
+      - alert: HighErrorRate
+        expr: rate(sp_base_relay_dest_errors_total[5m]) > 1
+        for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Frequent pipeline restarts"
-          description: "Pipeline is restarting {{ $value }} times per hour"
+          summary: "High error rate on {{ $labels.destination }}"
+          description: "Destination {{ $labels.destination }} has {{ $value }} errors/sec."
+
+      # Broadcast hub stopped
+      - alert: HubStopped
+        expr: sp_base_relay_hub_running_status == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Broadcast hub stopped"
+          description: "SP-Base-Relay broadcast hub is not running."
 ```
 
-## Integration Example
+---
 
-See `examples/metrics_integration.py` for a complete example of integrating metrics collection into a service.
+## Migration from v1.x Metrics
+
+All v1.x metric names are **replaced** in v2.0:
+
+| v1.x Metric | v2.0 Replacement |
+|---|---|
+| `sp_base_relay_rtcm_connection_status` | `sp_base_relay_dest_connection_status{destination="surepath"}` |
+| `sp_base_relay_rtcm_messages_sent_total` | `sp_base_relay_dest_messages_sent_total{destination="..."}` |
+| `sp_base_relay_rtcm_bytes_sent_total` | `sp_base_relay_dest_bytes_sent_total{destination="..."}` |
+| `sp_base_relay_rtcm_connection_attempts_total` | `sp_base_relay_dest_connection_attempts_total{destination="..."}` |
+| `sp_base_relay_pipeline_running_status` | `sp_base_relay_hub_running_status` |
+| `sp_base_relay_pipeline_errors_total` | `sp_base_relay_dest_errors_total{destination="..."}` |
+| `sp_base_relay_rtcm_heartbeat_last_received_timestamp` | Removed (Sure-Path internal) |
+| `sp_base_relay_pipeline_restarts_total` | Removed (hub manages automatically) |
+
+**Action required**: Update Grafana dashboards and Prometheus alerting rules. Use the v2 dashboard at `templates/grafana_dashboard.json`.
+
+---
 
 ## Troubleshooting
 
 ### Metrics Not Available
 
-1. Check metrics are enabled in config:
+1. Verify metrics are enabled:
    ```yaml
    metrics:
      enabled: true
    ```
-
-2. Verify metrics server is running:
+2. Test the endpoint:
    ```bash
    curl http://localhost:8080/metrics
    ```
+3. Check service logs for metrics server startup messages.
 
-3. Check service logs for metrics server startup messages
+### No Per-Destination Labels Appearing
 
-### High Error Rates
-
-Use metrics to diagnose issues:
-- Check `pipeline_errors_total{error_type}` to identify error source
-- Monitor `rtcm_heartbeat_last_received_timestamp` for connection health
-- Review `rtcm_connection_attempts_total` vs `rtcm_successful_connections_total` for connection reliability
+- Ensure destinations are configured and enabled in `config.yaml`
+- Metrics only appear after the first `update_all()` cycle (~1 second after startup)
 
 ### Performance Impact
 
-Metrics collection has minimal performance impact:
-- Metrics updates use delta calculations (efficient)
-- HTTP server runs in separate thread
-- No blocking operations in metric collection
-- Typical overhead: < 1% CPU, < 10MB memory
+Minimal overhead:
+- Pull model reads destination stats once per second
+- Delta-based counter increments (no full recalculation)
+- HTTP server runs in a separate thread
+- Typical: < 1% CPU, < 10MB memory
+
+---
 
 ## Best Practices
 
-1. **Scrape Interval**: Use 5-15 second intervals for real-time monitoring
+1. **Scrape interval**: 5–15 seconds for real-time monitoring
 2. **Retention**: Keep metrics for at least 30 days for trend analysis
-3. **Alerting**: Set up critical alerts for connection status
-4. **Dashboards**: Use the provided Grafana dashboard as a starting point
-5. **Aggregation**: Use rate() for counter metrics to get per-second rates
-6. **Labels**: The `error_type` label allows filtering pipeline errors by category
-
-## Advanced Configuration
-
-### Custom Namespace
-
-The default metric namespace is `sp_base_relay`. This can be customized in code:
-
-```python
-from sp_base_relay.metrics import MetricsCollector
-
-metrics = MetricsCollector(namespace="my_custom_prefix")
-```
-
-### Metric Collection Frequency
-
-Metrics are updated continuously as events occur. For periodic bulk updates:
-
-```python
-import time
-
-prev_stats = (None, None, None)
-while running:
-    # Collect all metrics with delta tracking
-    prev_stats = metrics.collect_all_metrics(
-        rtcm_client,
-        pipeline_coordinator,
-        input_source,
-        *prev_stats
-    )
-    time.sleep(5)  # Update every 5 seconds
-```
-
-## Additional Resources
-
-- [Prometheus Documentation](https://prometheus.io/docs/)
-- [Grafana Documentation](https://grafana.com/docs/)
-- [PromQL Basics](https://prometheus.io/docs/prometheus/latest/querying/basics/)
-- [Alerting Rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/)
+3. **Alerting**: Set up alerts for `DestinationDown` and `InputSourceDisconnected` at minimum
+4. **Use `$destination` variable** in Grafana to filter per-destination panels
+5. **Use `rate()`** for counter metrics — never graph raw counters
+6. **Watch queue depth** — sustained values near 100 indicate a destination can't keep up

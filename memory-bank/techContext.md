@@ -53,6 +53,8 @@ sp-base-relay/
 ├── README.md                # Project documentation
 ├── config.example.yaml      # Example configuration (v2 format)
 ├── docs/
+│   ├── v2.1-architecture-plan.md # v2.1 embeddable relay engine plan
+│   ├── ublox_gps_webui_planning.md # GPS Web UI integration plan
 │   ├── v2-architecture-plan.md  # Full v2.0 architecture document
 │   ├── bluetooth-gps-setup.md
 │   ├── bluetooth-recovery.md

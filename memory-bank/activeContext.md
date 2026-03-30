@@ -2,114 +2,110 @@
 
 ## Current Work Focus
 
-**Primary Objective**: SP-Base-Relay v2.0 — Multi-Destination Architecture (March 2026)
+**Primary Objective**: SP-Base-Relay v2.1 — Embeddable Relay Engine (March 2026)
 
-**Status**: Phase 5 COMPLETE (TCP Server Destination). Phase 6 (Integration & Polish) next.
+**Status**: Planning COMPLETE. Ready to begin implementation.
 
-**Branch**: `feature/v2-multi-destination` (latest: commit bb896df)
+**Previous**: v2.0 Phase 6 COMPLETE. All v2.0 features merged (commit 8f4f79a).
+**Next**: v2.1 development on new feature branch.
 
-### v2.0 Phase 1 — Foundation Complete ✅
+### v2.1 Planning Summary
 
-| Session | Deliverable | Tests | Commit |
+v2.1 enhances sp-base-relay to be usable as a **Python dependency** by the planned GPS Base Station Web UI project (gps-webui). The core purpose remains unchanged: RTCM relay.
+
+Architecture plan: `docs/v2.1-architecture-plan.md`
+UI integration plan: `docs/ublox_gps_webui_planning.md`
+
+### v2.1 Design Decisions (DR-8 through DR-14)
+
+| ID | Decision | Rationale |
+|---|---|---|
+| DR-8 | In-process integration model | UI imports sp-base-relay directly; no IPC/HTTP needed |
+| DR-9 | Programmatic config | UI builds Config/DestinationConfig objects in Python |
+| DR-10 | Polling + Event Bus for status | Snapshot polling + push events for discrete changes |
+| DR-11 | Hot add/remove destinations | Without stopping the hub or other destinations |
+| DR-12 | Per-destination start/stop | Individual destinations controlled independently |
+| DR-13 | RelayEngine facade | Single high-level API class for external consumers |
+| DR-14 | Backward compatibility | CLI, YAML, Prometheus all unchanged |
+
+### v2.1 Development Phases
+
+| Phase | Deliverable | Status | Estimated Sessions |
 |---|---|---|---|
-| 1A | MessageFilter, BaseDestination, DestinationStats, exception types | 78 | (part of 0d238ec) |
-| 1B | Config v2 — destination configs, filter configs, env overrides, old format detection | 60+ | 0d238ec |
-| 1C | BroadcastHub — fan-out coordinator with frame parsing, watchdog, reconnection | 46 | f0e1b4f |
-| 1D | DestinationFactory — registry-based creation from config | 27 | 3064ff9 |
+| P1 | Event Bus system (events.py) | NOT STARTED | 1 |
+| P2 | Typed status snapshots (status.py) | NOT STARTED | 0.5 |
+| P3 | Dynamic destination management (BroadcastHub enhancements) | NOT STARTED | 1-1.5 |
+| P4 | RelayEngine facade (engine.py) + main.py refactor | NOT STARTED | 1.5 |
+| P5 | Integration tests & documentation | NOT STARTED | 1 |
 
-### v2.0 Phase 2A — SurePathDestination Complete ✅ (March 17, 2026)
+### New Files Planned
+- `src/sp_base_relay/engine.py` — RelayEngine facade
+- `src/sp_base_relay/core/events.py` — EventBus, RelayEvent, EventSubscription
+- `src/sp_base_relay/core/status.py` — RelayStatus, DestinationStatus, InputStatus
 
-| Session | Deliverable | Tests | Commit |
-|---|---|---|---|
-| 2A | SurePathDestination — RTCMClient wrapper behind BaseDestination | 31 | 7b3fc9d |
-
-### v2.0 Phase 2B — main.py v2 Refactor Complete ✅ (March 17, 2026)
-
-| Session | Deliverable | Tests | Commit |
-|---|---|---|---|
-| 2B | main.py v2 — BroadcastHub + DestinationFactory orchestration | 53 (rewritten) | b455542 |
-
-### v2.0 Phase 3A — NtripDestination Complete ✅ (March 17, 2026)
-
-| Session | Deliverable | Tests | Commit |
-|---|---|---|---|
-| 3A | NtripDestination — NTRIP v1.0 + v2.0 server, factory registration | 39 | 26fe862 |
-
-### v2.0 Phase 3B — Mock NTRIP Caster Integration Tests ✅ (March 17, 2026)
-
-| Session | Deliverable | Tests | Commit |
-|---|---|---|---|
-| 3B | MockNtripCaster fixture + NTRIP integration tests (real TCP) | 20 | 74805e3 |
-
-### v2.0 Phase 4 — Metrics v2 Complete ✅ (March 17, 2026)
-
-| Session | Deliverable | Tests | Commit |
-|---|---|---|---|
-| 4 | MetricsCollector v2 — per-destination Prometheus labels, Grafana dashboard v2 | 43 (rewritten) | 1912b14 |
-
-### v2.0 Phase 5 — TCP Server Destination Complete ✅ (March 18, 2026)
-
-| Session | Deliverable | Tests | Commit |
-|---|---|---|---|
-| 5 | TcpServerDestination — asyncio TCP server, multi-client broadcast, metrics gauge | 34 | bb896df |
-
-**Total v2 new tests**: ~386 new tests (942 total, up from 556 in v1.x)
-
-### Design Review Decisions (DR-1 through DR-7)
-1. **DR-1**: Dual-path frame parsing — parse only when filtering needed
-2. **DR-2**: Queue overflow — drop newest, clear on reconnect, maxsize=100
-3. **DR-3**: Separate Broadcast Thread between input and destinations
-4. **DR-4**: Config migration — documentation only, no CLI tool
-5. **DR-5**: NTRIP connection health — send() failure + backoff
-6. **DR-6**: NTRIP STR records — deferred to post-v2.0
-7. **DR-7**: Input no-data watchdog — passive logging
-
-### Architecture Document
-Full architecture plan: `docs/v2-architecture-plan.md`
+### Modified Files Planned
+- `src/sp_base_relay/core/broadcast_hub.py` — dynamic dest mgmt, event emissions, dest lock
+- `src/sp_base_relay/core/destinations/base_destination.py` — optional event_bus, event emissions
+- `src/sp_base_relay/core/destinations/destination_factory.py` — passes event_bus
+- `src/sp_base_relay/main.py` — refactored to use RelayEngine internally
+- `src/sp_base_relay/__init__.py` — updated exports
 
 ---
 
-## Next Steps — Phase 6: Integration & Polish
+## GPS Base Station Web UI Project (gps-webui)
 
-**Phase 6: Integration & Polish** (1-2 sessions)
-- End-to-end integration tests
-- Updated docs, README, example configs
-- Version bump to 2.0.0
+### Key Architecture Decisions
+- sp-base-relay is a **dependency** of gps-webui, not renamed or restructured
+- gps-webui owns u-blox device configuration (via PyUBX2), NOT sp-base-relay
+- Serial port handoff: relay owns port when running, PyUBX2 owns it when stopped
+- FastAPI + NiceGUI for web framework
+- In-process integration — gps-webui imports RelayEngine directly
+
+### Dependency Graph
+```
+gps-webui → sp-base-relay (relay engine)
+gps-webui → pyubx2 (u-blox device config)
+gps-webui → pyubxutils (backup/restore)
+gps-webui → fastapi + nicegui (web UI)
+```
 
 ---
 
-## v2.0 Development Phases
+## Previous v2.0 Work (Complete)
 
-### Phase 1: Foundation — COMPLETE ✅
-### Phase 2A: SurePathDestination — COMPLETE ✅
-### Phase 2B: main.py v2 Refactor — COMPLETE ✅
-### Phase 3A: NtripDestination — COMPLETE ✅
-### Phase 3B: Mock NTRIP Caster Testing — COMPLETE ✅
-### Phase 4: Metrics v2 — COMPLETE ✅
-### Phase 5: TCP Server Destination — COMPLETE ✅
-### Phase 6: Integration & Polish — NOT STARTED
+All v2.0 phases complete (Phases 1-6). 956 tests passing. 88.46% coverage.
+See `docs/v2-architecture-plan.md` for v2.0 details.
 
 ---
 
 ## Key Decisions Log
 
-### March 16-17, 2026 — v2.0 Architecture & Phase 1
-- Threading over Asyncio (A+ pattern)
-- NTRIP v2.0 default, v1.0 supported
-- Clean slate metrics with per-destination labels
-- `destinations:` list config format (breaking change from `server:`)
-- DestinationFactory uses registry pattern (same as InputSourceFactory)
-- BroadcastHub has dual-path: raw fast-path for pass_all, parsed for filtered
+### March 26, 2026 — v2.1 Planning
+- DR-8: In-process integration (UI imports sp-base-relay)
+- DR-9: Programmatic config (no YAML required for embedded use)
+- DR-10: Polling + Event Bus (snapshot + push events)
+- DR-11: Hot add/remove destinations (zero interruption)
+- DR-12: Per-destination start/stop
+- DR-13: RelayEngine facade API
+- DR-14: Full backward compatibility
+
+### March 16-17, 2026 — v2.0 Architecture (DR-1 through DR-7)
+- DR-1 through DR-7 unchanged (see v2.0 docs)
 
 ---
 
 ## Important Patterns and Preferences
 
-### v2.0 Architecture Patterns
-- **Strategy Pattern**: Input sources AND destinations (factory + ABC)
-- **Registry Pattern**: DestinationFactory.register() for type discovery
-- **Fan-Out Pattern**: BroadcastHub → N destination queues
-- **A+ Pattern**: Threading for orchestration, asyncio available internally
+### v2.1 New Patterns
+- **Facade Pattern**: RelayEngine wraps BroadcastHub + events + status
+- **Observer/Pub-Sub Pattern**: EventBus with subscriber queues + ring buffer
+- **Copy-on-Read Pattern**: Thread-safe destination list in broadcast loop
+
+### Existing Patterns (Unchanged)
+- Strategy Pattern (InputSource, BaseDestination ABCs)
+- Registry Pattern (DestinationFactory)
+- Fan-Out Pattern (BroadcastHub → N queues)
+- A+ Pattern (Threading + asyncio for TCP server)
 
 ### Code Quality Standards
 - Python 3.10+ with type hints (modern syntax: `dict`, `list`, `X | None`)

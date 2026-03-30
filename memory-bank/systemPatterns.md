@@ -2,6 +2,29 @@
 
 ## Architecture Overview
 
+### v2.1 Embeddable Relay Engine (March 2026 — Planned)
+
+v2.1 adds a `RelayEngine` facade, EventBus, and dynamic destination management so sp-base-relay can be used as a Python dependency by the GPS Base Station Web UI project.
+
+```
+                            ┌─────────────┐
+                            │ RelayEngine  │ ◄── Facade API
+                            │  (engine.py) │
+                            └──────┬───────┘
+                                   │
+                              ┌─ Queue ──▶ [SurePath Thread]  ──▶ Sure-Path Server
+[Input Thread] ──▶ [BroadcastHub] ─┤─ Queue ──▶ [NTRIP Thread]    ──▶ NTRIP Caster(s)
+                   + EventBus      └─ Queue ──▶ [TCP Server Thread] ──▶ Local TCP Clients
+                   + Dynamic Dests
+                   + Status Snapshots
+```
+
+New v2.1 components:
+- **RelayEngine** (`engine.py`) — Facade API for programmatic control
+- **EventBus** (`core/events.py`) — Pub/sub with typed events + ring buffer
+- **RelayStatus** (`core/status.py`) — Frozen typed status snapshots
+- **Dynamic Destinations** — Hot add/remove/start/stop on BroadcastHub
+
 ### v2.0 Multi-Destination Architecture (March 2026)
 
 SP-Base-Relay v2.0 transforms from a single-destination relay into a multi-destination broadcast system using a fan-out pattern:
@@ -98,7 +121,32 @@ class BaseDestination(ABC):
 - Creates appropriate destination type (surepath/ntrip/tcp_server)
 - Validates per-destination config and filter settings
 
-### 6. A+ Pattern — Async Inside Thread (v2 NEW)
+### 6. Facade Pattern — RelayEngine (v2.1 NEW)
+**Purpose**: Single high-level API for programmatic control by external apps
+**Implementation**:
+```python
+class RelayEngine:
+    def start(self, destinations=None) -> None: ...
+    def stop(self) -> None: ...
+    def add_destination(self, config) -> str: ...
+    def remove_destination(self, name) -> None: ...
+    def stop_destination(self, name) -> None: ...
+    def start_destination(self, name) -> None: ...
+    def get_status(self) -> RelayStatus: ...
+    def subscribe_events(self) -> EventSubscription: ...
+```
+- Wraps BroadcastHub + InputSource + DestinationFactory + EventBus
+- Used by gps-webui in-process and by main.py CLI internally
+
+### 7. Observer/Pub-Sub Pattern — EventBus (v2.1 NEW)
+**Purpose**: Real-time event notification for relay state changes
+**Implementation**:
+- `EventBus.emit()` pushes to all subscriber queues + ring buffer
+- `EventSubscription` per subscriber (queue-based, iterable)
+- `deque(maxlen=200)` ring buffer for recent event history
+- Thread-safe with `threading.Lock` for subscriber list
+
+### 8. A+ Pattern — Async Inside Thread (v2 NEW)
 **Purpose**: Use asyncio where beneficial while keeping threading architecture
 **Implementation**:
 - TCP Server destination uses `asyncio.start_server()` inside its own thread

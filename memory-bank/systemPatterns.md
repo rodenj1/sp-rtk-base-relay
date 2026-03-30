@@ -2,9 +2,9 @@
 
 ## Architecture Overview
 
-### v2.1 Embeddable Relay Engine (March 2026 — Planned)
+### v2.1 Embeddable Relay Engine (March 2026 — Phases 0–4 COMPLETE)
 
-v2.1 adds a `RelayEngine` facade, EventBus, and dynamic destination management so sp-base-relay can be used as a Python dependency by the GPS Base Station Web UI project.
+v2.1 adds a `RelayEngine` facade, EventBus, and dynamic destination management so sp-base-relay can be used as a Python dependency by the GPS Base Station Web UI project. **1,106 unit tests passing.**
 
 ```
                             ┌─────────────┐

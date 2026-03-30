@@ -45,10 +45,10 @@ source .venv/bin/activate
 uv run pytest --cov=src/sp_base_relay --cov-report=html
 ```
 
-### Project Structure (v2.0)
+### Project Structure (v2.1)
 ```
 sp-base-relay/
-├── pyproject.toml           # UV/Python project configuration
+├── pyproject.toml           # UV/Python project configuration (version 2.1.0)
 ├── uv.lock                  # Dependency lock file
 ├── README.md                # Project documentation
 ├── config.example.yaml      # Example configuration (v2 format)
@@ -62,7 +62,8 @@ sp-base-relay/
 │   └── metrics-guide.md
 ├── src/
 │   └── sp_base_relay/
-│       ├── __init__.py
+│       ├── __init__.py      # v2.1: exports RelayEngine, EventBus, RelayEvent, RelayStatus
+│       ├── engine.py        # NEW v2.1 — RelayEngine facade API
 │       ├── main.py          # CLI entry point (v2 with BroadcastHub)
 │       ├── config.py        # Config management (v2 destinations: list)
 │       ├── logger.py        # Logging setup
@@ -71,19 +72,21 @@ sp-base-relay/
 │       ├── rtcm_decoder.py  # RTCM frame parsing
 │       └── core/
 │           ├── __init__.py
-│           ├── broadcast_hub.py      # NEW v2 — fan-out to destinations
-│           ├── message_filter.py     # NEW v2 — RTCM message filtering
-│           ├── rtcm_client.py        # Sure-Path TCP client (unchanged)
-│           ├── connection_states.py  # Connection state machine
-│           ├── data_pipeline.py      # DEPRECATED (replaced by broadcast_hub)
-│           ├── bluetooth_manager.py  # Bluetooth SPP management
-│           ├── input_sources/        # Input source strategy pattern
+│           ├── events.py            # NEW v2.1 — EventBus, RelayEvent, EventSubscription
+│           ├── status.py            # NEW v2.1 — RelayStatus, DestinationStatus, InputStatus
+│           ├── broadcast_hub.py     # v2+v2.1 — fan-out + dynamic dest mgmt + event emissions
+│           ├── message_filter.py    # v2 — RTCM message filtering
+│           ├── rtcm_client.py       # Sure-Path TCP client (unchanged)
+│           ├── connection_states.py # Connection state machine
+│           ├── data_pipeline.py     # DEPRECATED (replaced by broadcast_hub)
+│           ├── bluetooth_manager.py # Bluetooth SPP management
+│           ├── input_sources/       # Input source strategy pattern
 │           │   ├── base_input.py
 │           │   ├── serial_input.py
 │           │   ├── tcp_input.py
 │           │   ├── bluetooth_input.py
 │           │   └── input_factory.py
-│           └── destinations/         # NEW v2 — destination strategy pattern
+│           └── destinations/        # v2 — destination strategy pattern
 │               ├── __init__.py
 │               ├── base_destination.py       # ABC for all destinations
 │               ├── destination_factory.py    # Factory from config

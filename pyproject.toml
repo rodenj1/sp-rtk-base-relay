@@ -5,7 +5,7 @@ description = "RTCM relay service for custom GPS correction servers"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-    {name = "SP-Base-Relay Contributors"}
+    { name = "John Roden", email = "rodenj@gmail.com" }
 ]
 license = {text = "MIT"}
 keywords = ["rtcm", "gps", "gnss", "rtk", "base-station", "corrections"]

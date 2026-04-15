@@ -50,7 +50,7 @@ Repository = "https://github.com/rodenj1/sp-base-relay"
 Issues = "https://github.com/rodenj1/sp-base-relay/issues"
 
 [build-system]
-requires = ["uv_build>=0.9.5,<0.10.0"]
+requires = ["uv_build>=0.11.7,<0.12.0"]
 build-backend = "uv_build"
 
 [tool.pytest.ini_options]

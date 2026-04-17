@@ -23,6 +23,18 @@ from dataclasses import dataclass
 from typing import Any
 
 from sp_base_relay.core.destinations.base_destination import BaseDestination
+from sp_base_relay.core.events import (
+    DESTINATION_ADDED,
+    DESTINATION_REMOVED,
+    HUB_STARTED,
+    HUB_STOPPED,
+    INPUT_CONNECTED,
+    INPUT_DISCONNECTED,
+    INPUT_NO_DATA_WARNING,
+    INPUT_RECONNECTED,
+    INPUT_RECONNECTING,
+    EventBus,
+)
 from sp_base_relay.core.input_sources.base_input import InputSource
 from sp_base_relay.rtcm_decoder import RTCMMessageDecoder
 
@@ -73,24 +85,29 @@ class BroadcastHub:
     def __init__(
         self,
         input_source: InputSource,
-        destinations: list[BaseDestination],
+        destinations: list[BaseDestination] | None = None,
         input_queue_size: int = INPUT_QUEUE_SIZE,
+        event_bus: EventBus | None = None,
     ) -> None:
         """Initialise the broadcast hub.
 
         Args:
             input_source: The single GPS data source.
-            destinations: One or more destination instances to fan out to.
+            destinations: Destination instances to fan out to. May be empty
+                or ``None`` if destinations will be added later via
+                :meth:`add_destination`.
             input_queue_size: Internal queue between input and broadcast threads.
+            event_bus: Optional event bus for lifecycle event emissions.
         """
-        if not destinations:
-            raise ValueError("BroadcastHub requires at least one destination")
-
         self._input_source = input_source
-        self._destinations = list(destinations)
+        self._destinations: list[BaseDestination] = list(destinations or [])
+        self._destinations_lock = threading.Lock()
         self._input_queue: queue.Queue[bytes | None] = queue.Queue(
             maxsize=input_queue_size,
         )
+
+        # Event bus (optional — None means no events emitted)
+        self._event_bus = event_bus
 
         # Threading
         self._running = False
@@ -141,7 +158,147 @@ class BroadcastHub:
     @property
     def destinations(self) -> list[BaseDestination]:
         """Registered destinations (read-only copy)."""
-        return list(self._destinations)
+        with self._destinations_lock:
+            return list(self._destinations)
+
+    # ------------------------------------------------------------------
+    # Dynamic destination management (v2.1)
+    # ------------------------------------------------------------------
+
+    def _emit(self, event_type: str, message: str, **payload: Any) -> None:
+        """Emit an event if an event bus is configured."""
+        if self._event_bus is not None:
+            self._event_bus.emit(event_type, message, **payload)
+
+    def add_destination(self, dest: BaseDestination) -> None:
+        """Add a destination while the hub is running (hot-add).
+
+        The destination thread is started immediately if the hub is
+        running. Thread-safe — can be called from any thread.
+
+        Args:
+            dest: The destination to add.
+
+        Raises:
+            ValueError: If a destination with the same name already exists.
+        """
+        with self._destinations_lock:
+            for existing in self._destinations:
+                if existing.name == dest.name:
+                    raise ValueError(
+                        f"Destination '{dest.name}' already exists"
+                    )
+            self._destinations.append(dest)
+            self._recalculate_needs_parsing()
+
+        if self._running:
+            dest.start()
+
+        self._emit(
+            DESTINATION_ADDED,
+            f"Destination '{dest.name}' added",
+            destination=dest.name,
+            destination_type=dest.destination_type,
+        )
+        logger.info("Destination '%s' added (running=%s)", dest.name, self._running)
+
+    def remove_destination(self, name: str) -> BaseDestination | None:
+        """Remove and stop a destination by name (hot-remove).
+
+        Thread-safe — can be called from any thread.
+
+        Args:
+            name: Name of the destination to remove.
+
+        Returns:
+            The removed destination, or None if not found.
+        """
+        removed: BaseDestination | None = None
+        with self._destinations_lock:
+            for i, dest in enumerate(self._destinations):
+                if dest.name == name:
+                    removed = self._destinations.pop(i)
+                    self._recalculate_needs_parsing()
+                    break
+
+        if removed is not None:
+            removed.stop()
+            self._emit(
+                DESTINATION_REMOVED,
+                f"Destination '{name}' removed",
+                destination=name,
+            )
+            logger.info("Destination '%s' removed", name)
+
+        return removed
+
+    def stop_destination(self, name: str) -> bool:
+        """Stop a specific destination's thread (keeps it in the list).
+
+        Sets ``enabled=False`` and stops the thread. The destination
+        remains registered and can be restarted with :meth:`start_destination`.
+
+        Args:
+            name: Name of the destination to stop.
+
+        Returns:
+            True if the destination was found and stopped.
+        """
+        dest = self.get_destination(name)
+        if dest is None:
+            return False
+        dest.enabled = False
+        dest.stop()
+        logger.info("Destination '%s' stopped", name)
+        return True
+
+    def start_destination(self, name: str) -> bool:
+        """Restart a previously stopped destination.
+
+        Sets ``enabled=True`` and starts the thread.
+
+        Args:
+            name: Name of the destination to start.
+
+        Returns:
+            True if the destination was found and started.
+        """
+        dest = self.get_destination(name)
+        if dest is None:
+            return False
+        dest.enabled = True
+        dest.start()
+        logger.info("Destination '%s' started", name)
+        return True
+
+    def get_destination(self, name: str) -> BaseDestination | None:
+        """Look up a destination by name.
+
+        Args:
+            name: Destination name.
+
+        Returns:
+            The destination, or None if not found.
+        """
+        with self._destinations_lock:
+            for dest in self._destinations:
+                if dest.name == name:
+                    return dest
+        return None
+
+    def get_destination_names(self) -> list[str]:
+        """Return names of all registered destinations."""
+        with self._destinations_lock:
+            return [d.name for d in self._destinations]
+
+    def _recalculate_needs_parsing(self) -> None:
+        """Recalculate whether any destination needs RTCM parsing.
+
+        Must be called while holding ``_destinations_lock``.
+        """
+        self._any_needs_parsing = any(
+            d.message_filter.requires_parsing for d in self._destinations
+        )
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -167,10 +324,16 @@ class BroadcastHub:
                     f"Failed to connect input source "
                     f"({self._input_source.source_type})"
                 )
+        self._emit(
+            INPUT_CONNECTED,
+            "Input source connected",
+            source_type=self._input_source.source_type,
+        )
 
         # Start all destination threads
-        for dest in self._destinations:
-            dest.start()
+        with self._destinations_lock:
+            for dest in self._destinations:
+                dest.start()
 
         # Reset state
         self._running = True
@@ -193,6 +356,11 @@ class BroadcastHub:
         self._input_thread.start()
         self._broadcast_thread.start()
 
+        self._emit(
+            HUB_STARTED,
+            "BroadcastHub started",
+            destinations=self.get_destination_names(),
+        )
         logger.info("BroadcastHub started")
 
     def stop(self) -> None:
@@ -221,8 +389,9 @@ class BroadcastHub:
             self._broadcast_thread.join(timeout=5.0)
 
         # Stop destination threads
-        for dest in self._destinations:
-            dest.stop()
+        with self._destinations_lock:
+            for dest in self._destinations:
+                dest.stop()
 
         # Disconnect input source
         try:
@@ -242,6 +411,7 @@ class BroadcastHub:
             self._frame_buffer = b""
 
         self.stats.started_at = None
+        self._emit(HUB_STOPPED, "BroadcastHub stopped")
         logger.info("BroadcastHub stopped")
 
     # ------------------------------------------------------------------
@@ -255,6 +425,11 @@ class BroadcastHub:
         while self._running and not self._stop_event.is_set():
             # Reconnect loop if input is down
             if not self._input_source.is_connected:
+                self._emit(
+                    INPUT_DISCONNECTED,
+                    "Input source disconnected",
+                    source_type=self._input_source.source_type,
+                )
                 self._reconnect_input()
                 if not self._input_source.is_connected:
                     # Reconnect failed — wait before retrying
@@ -296,9 +471,21 @@ class BroadcastHub:
                 self.stats.input_reconnect_attempts,
             )
 
+            self._emit(
+                INPUT_RECONNECTING,
+                f"Attempting input reconnect #{self.stats.input_reconnect_attempts}",
+                attempt=self.stats.input_reconnect_attempts,
+            )
+
             try:
                 if self._input_source.connect():
                     self.stats.input_reconnect_successes += 1
+                    self._emit(
+                        INPUT_RECONNECTED,
+                        "Input source reconnected",
+                        source_type=self._input_source.source_type,
+                        attempt=self.stats.input_reconnect_attempts,
+                    )
                     logger.info("Input source reconnected")
                     return
             except Exception as exc:  # noqa: BLE001
@@ -348,7 +535,9 @@ class BroadcastHub:
 
     def _distribute_raw(self, data: bytes) -> None:
         """Fast path: all destinations use pass_all — forward raw chunks."""
-        for dest in self._destinations:
+        with self._destinations_lock:
+            snapshot = list(self._destinations)
+        for dest in snapshot:
             if dest.enabled:
                 dest.enqueue(data)
 
@@ -363,7 +552,10 @@ class BroadcastHub:
         # Parse frames
         parsed_frames = self._parse_frames(data)
 
-        for dest in self._destinations:
+        with self._destinations_lock:
+            snapshot = list(self._destinations)
+
+        for dest in snapshot:
             if not dest.enabled:
                 continue
 
@@ -462,6 +654,12 @@ class BroadcastHub:
 
         if elapsed >= NO_DATA_WARNING_SECONDS:
             self.stats.no_data_warnings += 1
+            self._emit(
+                INPUT_NO_DATA_WARNING,
+                f"No data for {elapsed:.0f}s",
+                elapsed_seconds=elapsed,
+                warning_count=self.stats.no_data_warnings,
+            )
             # Only log every ~30s to avoid log flooding
             if self.stats.no_data_warnings <= 1 or self.stats.no_data_warnings % 10 == 0:
                 logger.warning(
@@ -482,7 +680,9 @@ class BroadcastHub:
             uptime = time.time() - self.stats.started_at
 
         dest_statuses: list[dict[str, Any]] = []
-        for dest in self._destinations:
+        with self._destinations_lock:
+            snapshot = list(self._destinations)
+        for dest in snapshot:
             s = dest.get_stats()
             dest_statuses.append(
                 {

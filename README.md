@@ -8,7 +8,7 @@ A Python service that relays RTCM correction data from RTK GPS base stations to 
 
 ## Overview
 
-SP-Base-Relay v2.0 is a production-ready multi-destination RTCM relay. A single GPS input source (TCP, serial, or Bluetooth) feeds correction data to any combination of destinations — proprietary Sure-Path servers, NTRIP v1.0/v2.0 casters (RTK2go, Onocoy, rtkdirect), and local TCP rebroadcast servers.
+SP-Base-Relay v2.1 is a production-ready multi-destination RTCM relay and **embeddable Python library**. A single GPS input source (TCP, serial, or Bluetooth) feeds correction data to any combination of destinations — proprietary Sure-Path servers, NTRIP v1.0/v2.0 casters (RTK2go, Onocoy, rtkdirect), and local TCP rebroadcast servers.
 
 ### Key Features
 
@@ -22,7 +22,10 @@ SP-Base-Relay v2.0 is a production-ready multi-destination RTCM relay. A single 
 - 🔄 **Automatic Recovery**: Exponential backoff reconnection per destination — independent fault isolation
 - 🔧 **Self-Healing Bluetooth**: Automatic Bluetooth GPS recovery without manual intervention
 - 🛡️ **Production Ready**: Systemd integration, structured logging, comprehensive error handling
-- 🧪 **Well Tested**: 88% code coverage with 942 passing tests
+- 🧪 **Well Tested**: 88% code coverage with 1,106 passing tests
+- 🧩 **Embeddable Library** (v2.1): `RelayEngine` API for programmatic control by external applications
+- 📢 **Real-Time Events** (v2.1): EventBus with typed events for state change notifications
+- 🔌 **Hot Plug Destinations** (v2.1): Add/remove/start/stop destinations while running
 
 ## Architecture
 
@@ -254,6 +257,59 @@ Options:
   --log-level LEVEL        Override log level
 ```
 
+## Embedded Usage (v2.1)
+
+SP-Base-Relay can be used as a **Python library** by external applications (e.g., GPS configuration UIs). The `RelayEngine` facade provides full programmatic control:
+
+```python
+from sp_base_relay import RelayEngine
+from sp_base_relay.config import InputConfig, DestinationConfig
+
+# 1. Create engine with input source
+engine = RelayEngine(InputConfig(source="tcp", config={"host": "192.168.1.100", "port": 3000}))
+
+# 2. Start with destinations
+engine.start([
+    DestinationConfig(name="rtk2go", type="ntrip", enabled=True,
+                      config={"caster": "rtk2go.com", "port": 2101,
+                              "mountpoint": "MY_MOUNT", "password": "pass"}),
+])
+
+# 3. Hot-add a destination while running
+engine.add_destination(DestinationConfig(
+    name="local_tcp", type="tcp_server", enabled=True,
+    config={"host": "0.0.0.0", "port": 5016}
+))
+
+# 4. Get typed status snapshot
+status = engine.get_status()
+print(f"Running: {status.is_running}, Destinations: {len(status.destinations)}")
+
+# 5. Subscribe to real-time events
+sub = engine.subscribe_events()
+event = sub.get_event(timeout=1.0)
+if event:
+    print(f"Event: {event.event_type} — {event.message}")
+sub.close()
+
+# 6. Stop when done (releases serial port for other tools)
+engine.stop()
+```
+
+### Exported API
+
+| Symbol | Description |
+|--------|-------------|
+| `RelayEngine` | High-level facade — start/stop/manage relay |
+| `EventBus` | Pub/sub event system |
+| `EventSubscription` | Per-subscriber event queue (iterable) |
+| `RelayEvent` | Typed event (event_type, message, timestamp, payload) |
+| `RelayStatus` | Frozen status snapshot |
+| `DestinationStatus` | Per-destination status |
+| `InputStatus` | Input source status |
+
+See **[Relay Engine API Spec](docs/relay-engine-api-spec.md)** for the full technical specification.
+
 ## Migration from v1.x
 
 v2.0 is a **breaking change**. Key differences:
@@ -270,8 +326,10 @@ See `config.example.yaml` for the new format. Old `server:` configs are detected
 
 ## Documentation
 
-- **[Architecture Plan](docs/v2-architecture-plan.md)**: Full v2 design with 7 design review decisions
-- **[Configuration Example](config.example.yaml)**: Complete v2 config template
+- **[Relay Engine API Spec](docs/relay-engine-api-spec.md)**: Full v2.1 programmatic API reference
+- **[v2.1 Architecture Plan](docs/v2.1-architecture-plan.md)**: Embeddable relay engine design
+- **[v2.0 Architecture Plan](docs/v2-architecture-plan.md)**: Multi-destination design with 7 DRs
+- **[Configuration Reference](configuration-reference.md)**: Complete config guide (YAML + programmatic)
 - **[Deployment Guide](docs/deployment-guide.md)**: Installation and systemd setup
 - **[Metrics Guide](docs/metrics-guide.md)**: Prometheus metrics reference
 - **[Bluetooth Recovery](docs/bluetooth-recovery.md)**: Self-healing Bluetooth GPS
@@ -282,11 +340,12 @@ MIT License — see [LICENSE](LICENSE).
 
 ## Project Status
 
-**Current Version**: 2.0.0
+**Current Version**: 2.1.0
 - ✅ Multi-destination broadcast (Sure-Path, NTRIP v1.0/v2.0, TCP server)
 - ✅ Per-destination message filtering and Prometheus metrics
 - ✅ BroadcastHub fan-out architecture with independent fault isolation
-- ✅ 942 tests, 88% coverage, production-stable
+- ✅ Embeddable RelayEngine API with EventBus and typed status (v2.1)
+- ✅ 1,106 tests, 88% coverage, production-stable
 
 ---
 

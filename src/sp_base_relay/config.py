@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 import yaml
 from pathlib import Path
-from typing import Any, cast, TYPE_CHECKING
+from typing import Any, Literal, cast, TYPE_CHECKING
 from dataclasses import dataclass, field
 
 if TYPE_CHECKING:
@@ -450,8 +450,8 @@ class DestinationFilterConfig:
     Bridges the YAML config format to the frozen FilterConfig dataclass.
     """
 
-    mode: str = "pass_all"
-    message_ids: list[int] = field(default_factory=list)
+    mode: Literal["pass_all", "allowlist", "blocklist"] = "pass_all"
+    message_ids: list[int] = field(default_factory=lambda: list[int]())
 
     def __post_init__(self) -> None:
         """Validate filter configuration."""

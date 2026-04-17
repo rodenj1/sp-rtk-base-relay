@@ -167,9 +167,10 @@ def _make_hub(
 class TestBroadcastHubInit:
     """BroadcastHub.__init__ tests."""
 
-    def test_requires_at_least_one_destination(self) -> None:
-        with pytest.raises(ValueError, match="at least one destination"):
-            BroadcastHub(FakeInputSource(), [])
+    def test_allows_empty_destinations(self) -> None:
+        """v2.1: Empty destinations allowed for add_destination() workflow."""
+        hub = BroadcastHub(FakeInputSource(), [])
+        assert hub.destinations == []
 
     def test_stores_destinations(self) -> None:
         hub, _, dests = _make_hub()
@@ -744,6 +745,242 @@ class TestBroadcastStats:
         assert s.last_data_time == 0.0
         assert s.started_at is None
         assert s.no_data_warnings == 0
+
+
+# ============================================================================
+# Tests — Dynamic destination management (v2.1)
+# ============================================================================
+
+
+class TestDynamicDestinationManagement:
+    """Tests for add_destination, remove_destination, etc."""
+
+    def test_add_destination(self) -> None:
+        hub = BroadcastHub(FakeInputSource(), [])
+        dest = FakeDestination("new-dest")
+        hub.add_destination(dest)  # type: ignore[arg-type]
+        assert hub.get_destination_names() == ["new-dest"]
+
+    def test_add_destination_duplicate_raises(self) -> None:
+        hub, _, _ = _make_hub(destinations=[FakeDestination("existing")])
+        with pytest.raises(ValueError, match="already exists"):
+            hub.add_destination(FakeDestination("existing"))  # type: ignore[arg-type]
+
+    def test_add_destination_while_running_starts_it(self) -> None:
+        hub, _, _ = _make_hub()
+        hub.start()
+        try:
+            new_dest = FakeDestination("hot-add")
+            hub.add_destination(new_dest)  # type: ignore[arg-type]
+            assert new_dest.is_running is True
+        finally:
+            hub.stop()
+
+    def test_add_destination_while_stopped_does_not_start(self) -> None:
+        hub = BroadcastHub(FakeInputSource(), [])
+        new_dest = FakeDestination("cold-add")
+        hub.add_destination(new_dest)  # type: ignore[arg-type]
+        assert new_dest.is_running is False
+
+    def test_remove_destination(self) -> None:
+        d1 = FakeDestination("d1")
+        d2 = FakeDestination("d2")
+        hub, _, _ = _make_hub(destinations=[d1, d2])
+        removed = hub.remove_destination("d1")
+        assert removed is d1
+        assert hub.get_destination_names() == ["d2"]
+
+    def test_remove_nonexistent_returns_none(self) -> None:
+        hub, _, _ = _make_hub()
+        result = hub.remove_destination("nonexistent")
+        assert result is None
+
+    def test_remove_destination_stops_it(self) -> None:
+        hub, _, _ = _make_hub()
+        hub.start()
+        try:
+            dest = FakeDestination("to-remove")
+            hub.add_destination(dest)  # type: ignore[arg-type]
+            assert dest.is_running is True
+            hub.remove_destination("to-remove")
+            assert dest.is_running is False
+        finally:
+            hub.stop()
+
+    def test_stop_destination(self) -> None:
+        d1 = FakeDestination("d1")
+        hub, _, _ = _make_hub(destinations=[d1])
+        hub.start()
+        try:
+            assert d1.is_running is True
+            result = hub.stop_destination("d1")
+            assert result is True
+            assert d1.is_running is False
+            assert d1.enabled is False
+        finally:
+            hub.stop()
+
+    def test_stop_destination_nonexistent(self) -> None:
+        hub, _, _ = _make_hub()
+        assert hub.stop_destination("nope") is False
+
+    def test_start_destination(self) -> None:
+        d1 = FakeDestination("d1")
+        hub, _, _ = _make_hub(destinations=[d1])
+        hub.start()
+        try:
+            hub.stop_destination("d1")
+            assert d1.is_running is False
+            result = hub.start_destination("d1")
+            assert result is True
+            assert d1.is_running is True
+            assert d1.enabled is True
+        finally:
+            hub.stop()
+
+    def test_start_destination_nonexistent(self) -> None:
+        hub, _, _ = _make_hub()
+        assert hub.start_destination("nope") is False
+
+    def test_get_destination(self) -> None:
+        d1 = FakeDestination("d1")
+        hub, _, _ = _make_hub(destinations=[d1])
+        assert hub.get_destination("d1") is d1
+        assert hub.get_destination("nope") is None
+
+    def test_get_destination_names(self) -> None:
+        d1 = FakeDestination("alpha")
+        d2 = FakeDestination("beta")
+        hub, _, _ = _make_hub(destinations=[d1, d2])
+        assert hub.get_destination_names() == ["alpha", "beta"]
+
+    def test_add_recalculates_parsing_flag(self) -> None:
+        hub = BroadcastHub(FakeInputSource(), [])
+        assert hub._any_needs_parsing is False
+        filtered = FakeDestination(
+            "filt", filter_config=FilterConfig.allowlist({1005})
+        )
+        hub.add_destination(filtered)  # type: ignore[arg-type]
+        assert hub._any_needs_parsing is True
+
+    def test_remove_recalculates_parsing_flag(self) -> None:
+        filtered = FakeDestination(
+            "filt", filter_config=FilterConfig.allowlist({1005})
+        )
+        hub, _, _ = _make_hub(destinations=[filtered])
+        assert hub._any_needs_parsing is True
+        hub.remove_destination("filt")
+        assert hub._any_needs_parsing is False
+
+
+# ============================================================================
+# Tests — Event emissions (v2.1)
+# ============================================================================
+
+
+def _drain_events(sub: Any, max_events: int = 20, timeout: float = 0.1) -> list[str]:
+    """Drain all pending events from a subscription, returning event types."""
+    collected: list[str] = []
+    for _ in range(max_events):
+        event = sub.get_event(timeout=timeout)
+        if event is None:
+            break
+        collected.append(event.event_type)
+    return collected
+
+
+class TestEventEmissions:
+    """Verify lifecycle events are emitted through the event bus."""
+
+    def test_hub_start_emits_events(self) -> None:
+        from sp_base_relay.core.events import (
+            HUB_STARTED as _HUB_STARTED,
+            INPUT_CONNECTED as _INPUT_CONNECTED,
+            EventBus,
+        )
+        bus = EventBus()
+        sub = bus.subscribe()
+
+        hub, _, _ = _make_hub()
+        hub._event_bus = bus
+        hub.start()
+        try:
+            events = _drain_events(sub)
+            assert _INPUT_CONNECTED in events
+            assert _HUB_STARTED in events
+        finally:
+            hub.stop()
+            sub.close()
+
+    def test_hub_stop_emits_event(self) -> None:
+        from sp_base_relay.core.events import (
+            HUB_STOPPED as _HUB_STOPPED,
+            EventBus,
+        )
+        bus = EventBus()
+        sub = bus.subscribe()
+
+        hub, _, _ = _make_hub()
+        hub._event_bus = bus
+        hub.start()
+        hub.stop()
+        events = _drain_events(sub)
+        assert _HUB_STOPPED in events
+        sub.close()
+
+    def test_add_destination_emits_event(self) -> None:
+        from sp_base_relay.core.events import (
+            DESTINATION_ADDED as _DEST_ADDED,
+            EventBus,
+        )
+        bus = EventBus()
+        sub = bus.subscribe()
+
+        hub = BroadcastHub(FakeInputSource(), [], event_bus=bus)
+        hub.add_destination(FakeDestination("new"))  # type: ignore[arg-type]
+        events = _drain_events(sub)
+        assert _DEST_ADDED in events
+        sub.close()
+
+    def test_remove_destination_emits_event(self) -> None:
+        from sp_base_relay.core.events import (
+            DESTINATION_REMOVED as _DEST_REMOVED,
+            EventBus,
+        )
+        bus = EventBus()
+        sub = bus.subscribe()
+
+        dest = FakeDestination("removeme")
+        hub, _, _ = _make_hub(destinations=[dest])
+        hub._event_bus = bus
+        hub.remove_destination("removeme")
+        events = _drain_events(sub)
+        assert _DEST_REMOVED in events
+        sub.close()
+
+    def test_no_events_without_bus(self) -> None:
+        """No crash when event_bus is None (default)."""
+        hub = BroadcastHub(FakeInputSource(), [])
+        hub.add_destination(FakeDestination("x"))  # type: ignore[arg-type]
+        hub.remove_destination("x")
+        # No exception raised — events silently skipped
+
+    def test_watchdog_emits_no_data_warning(self) -> None:
+        from sp_base_relay.core.events import (
+            INPUT_NO_DATA_WARNING as _NO_DATA,
+            EventBus,
+        )
+        bus = EventBus()
+        sub = bus.subscribe()
+
+        hub, _, _ = _make_hub()
+        hub._event_bus = bus
+        hub.stats.started_at = time.time() - 35
+        hub.stats.last_data_time = 0.0
+        hub._check_no_data_watchdog()
+        events = _drain_events(sub)
+        assert _NO_DATA in events
+        sub.close()
 
 
 if __name__ == "__main__":

@@ -1,8 +1,13 @@
-# Configuration Reference — SP-Base-Relay v2.0
+# Configuration Reference — SP-Base-Relay v2.1
 
 ## Overview
 
-SP-Base-Relay v2.0 uses YAML-based configuration with a `destinations:` list for multi-destination broadcast. This is a **breaking change** from v1.x — the old `server:` key is no longer supported.
+SP-Base-Relay v2.1 supports two configuration modes:
+
+1. **YAML Configuration** (standalone CLI) — `destinations:` list for multi-destination broadcast
+2. **Programmatic Configuration** (v2.1 embedded library) — Python objects via `RelayEngine` API
+
+The YAML format is a **breaking change** from v1.x — the old `server:` key is no longer supported.
 
 ## Configuration File Locations
 
@@ -557,3 +562,87 @@ Configuration values are resolved in this order (later overrides earlier):
 sudo chown sp-base-relay:sp-base-relay /etc/sp-base-relay/config.yaml
 sudo chmod 640 /etc/sp-base-relay/config.yaml
 ```
+
+---
+
+## Programmatic Configuration (v2.1)
+
+When using sp-base-relay as an **embedded Python library**, no YAML file is needed. Configuration is done via Python dataclass objects.
+
+### InputConfig
+
+```python
+from sp_base_relay.config import InputConfig
+
+# TCP input
+input_cfg = InputConfig(source="tcp", config={"host": "192.168.1.100", "port": 3000})
+
+# Serial input
+input_cfg = InputConfig(source="serial", config={"port": "/dev/ttyUSB0", "baudrate": 57600})
+
+# Bluetooth input
+input_cfg = InputConfig(source="bluetooth", config={"device_address": "AA:BB:CC:DD:EE:FF", "channel": 1})
+```
+
+### DestinationConfig
+
+```python
+from sp_base_relay.config import DestinationConfig
+
+# Sure-Path destination
+surepath = DestinationConfig(
+    name="surepath",
+    type="surepath",
+    enabled=True,
+    config={"host": "server.example.com", "port": 50010,
+            "username": "USER01", "password": "abc1"},
+)
+
+# NTRIP destination
+rtk2go = DestinationConfig(
+    name="rtk2go",
+    type="ntrip",
+    enabled=True,
+    filter={"mode": "blocklist", "message_ids": [4072]},
+    config={"caster": "rtk2go.com", "port": 2101,
+            "mountpoint": "MY_MOUNT", "password": "pass", "version": "2.0"},
+)
+
+# TCP server destination
+local_tcp = DestinationConfig(
+    name="local_tcp",
+    type="tcp_server",
+    enabled=True,
+    config={"host": "0.0.0.0", "port": 5016, "max_clients": 10},
+)
+```
+
+### RelayEngine Usage
+
+```python
+from sp_base_relay import RelayEngine
+
+engine = RelayEngine(input_cfg)
+
+# Start with initial destinations
+engine.start([surepath, rtk2go])
+
+# Hot-add destinations while running
+engine.add_destination(local_tcp)
+
+# Hot-remove destinations while running
+engine.remove_destination("local_tcp")
+
+# Per-destination start/stop (pause without removing)
+engine.stop_destination("rtk2go")
+engine.start_destination("rtk2go")
+
+# Status and events
+status = engine.get_status()
+sub = engine.subscribe_events()
+
+# Stop the engine (releases serial port)
+engine.stop()
+```
+
+See **[Relay Engine API Spec](docs/relay-engine-api-spec.md)** for the complete API reference.

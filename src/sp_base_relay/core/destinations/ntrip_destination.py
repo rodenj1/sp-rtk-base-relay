@@ -135,8 +135,8 @@ class NtripDestination(BaseDestination):
             else:
                 self._auth_v2(sock)
 
-            # Switch to blocking mode with no timeout for streaming
-            sock.settimeout(None)
+            # Set a generous send timeout so shutdown isn't blocked forever
+            sock.settimeout(30.0)
             self._socket = sock
 
             logger.info(

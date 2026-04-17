@@ -238,6 +238,65 @@ class TestBluetoothInputSourceConnection:
         assert source.rfcomm_channel is None
         mock_socket.close.assert_called_once()
 
+    def test_disconnect_closes_bluetooth_manager(self):
+        """Test disconnect calls bt_manager.close() to clean up D-Bus resources."""
+        config = BluetoothConfig(device_name="RTK_GPS_BASE")
+        source = BluetoothInputSource(config)
+        
+        # Mock manager
+        mock_manager = MagicMock(spec=BluetoothManager)
+        mock_manager.ensure_device_ready.return_value = ("00:11:22:33:44:55", 1)
+        source.bt_manager = mock_manager
+        
+        mock_socket = Mock()
+        
+        with patch('src.sp_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
+            source.connect()
+            assert source.bt_manager is not None
+            source.disconnect()
+        
+        # bt_manager should be cleaned up (set to None after close)
+        assert source.bt_manager is None
+        mock_manager.close.assert_called_once()
+        mock_manager.disconnect_device.assert_called_once_with("00:11:22:33:44:55")
+
+    def test_disconnect_handles_close_error_gracefully(self):
+        """Test disconnect handles bt_manager.close() error gracefully."""
+        config = BluetoothConfig(device_name="RTK_GPS_BASE")
+        source = BluetoothInputSource(config)
+        
+        # Mock manager that raises on close
+        mock_manager = MagicMock(spec=BluetoothManager)
+        mock_manager.ensure_device_ready.return_value = ("00:11:22:33:44:55", 1)
+        mock_manager.close.side_effect = Exception("close failed")
+        source.bt_manager = mock_manager
+        
+        mock_socket = Mock()
+        
+        with patch('src.sp_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
+            source.connect()
+            # Should not raise despite close() error
+            source.disconnect()
+        
+        assert source.bt_manager is None
+        assert source.is_connected is False
+
+    def test_disconnect_without_connected_mac_still_closes_manager(self):
+        """Test disconnect closes manager even if connected_mac is None."""
+        config = BluetoothConfig(device_name="RTK_GPS_BASE")
+        source = BluetoothInputSource(config)
+        
+        mock_manager = MagicMock(spec=BluetoothManager)
+        source.bt_manager = mock_manager
+        source._connected = True
+        source.connected_mac = None  # No MAC — disconnect_device should NOT be called
+        
+        source.disconnect()
+        
+        assert source.bt_manager is None
+        mock_manager.close.assert_called_once()
+        mock_manager.disconnect_device.assert_not_called()
+
 
 class TestBluetoothInputSourceDataReading:
     """Test data reading operations."""

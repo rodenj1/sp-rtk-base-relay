@@ -124,30 +124,6 @@ SP-Base-Relay v2.0 implements the **NTRIP Server** role (pushes RTCM data to a c
 - Prometheus labels: `{destination="surepath"}`, `{destination="rtk2go"}`, etc.
 - New Grafana dashboard template required
 
-## Hardware Environment (April 2026)
-
-### Test GPS Receiver — u-blox ZED-F9P
-- **Module**: ZED-F9P (High Precision GNSS)
-- **Firmware**: HPG 1.12 (High Precision GNSS firmware)
-- **Protocol Version**: 27.11
-- **Software**: EXT CORE 1.00 (61b2dd)
-- **Hardware Revision**: 00190000
-- **Constellations**: GPS, GLONASS, Galileo, BeiDou, QZSS
-
-### Port Configuration
-- **UBX Config Port**: `/dev/ttyUSB0` via FTDI FT232 USB-to-UART adapter @ 57600 baud
-  - Vendor: 0403 (Future Technology Devices International)
-  - Product: 6001 (FT232 Serial UART IC)
-  - Outputs RTCM + responds to UBX commands
-- **RTCM Relay Port**: Bluetooth SPP (dedicated RTCM output)
-- **ESP Device**: `/dev/ttyACM0` (Espressif USB JTAG — NOT the GPS)
-
-### PyUBX2 Validation
-- PyUBX2 1.2.60 successfully communicates with ZED-F9P
-- UBX-MON-VER poll/response confirmed working
-- Baud rate: 57600 (non-standard — must be configured, not auto-detected at common rates)
-- **PyUBX2 is a gps-webui dependency, NOT sp-base-relay** (DR-15)
-
 ## Technical Constraints
 
 ### Performance Requirements

@@ -4,7 +4,7 @@
 
 **v1.x**: All phases complete (production-running)
 **v2.0**: All phases complete (956 tests, 88.46% coverage, commit 8f4f79a)
-**v2.1**: Phases 0–5 COMPLETE. Ready for cleanup and gps-webui.
+**v2.1**: Phases 0–5 COMPLETE. Ready for cleanup. sp-base consuming RelayEngine API.
 **Version**: 2.1.0
 **Tests**: 1,106 unit tests passing
 **Branch**: `feature/v2.1-relay-engine` (from `feature/v2-multi-destination`)
@@ -20,7 +20,7 @@ Architecture plans:
 ## v2.1 Development — Embeddable Relay Engine
 
 ### Purpose
-Enhance sp-base-relay so it can be used as a Python dependency by the planned GPS Base Station Web UI project (gps-webui). Core relay purpose unchanged.
+Enhance sp-base-relay so it can be used as a Python dependency by the sp-base web UI project. Core relay purpose unchanged.
 
 ### Design Decisions (DR-8 through DR-17)
 - DR-8: In-process integration (UI imports sp-base-relay directly)
@@ -30,7 +30,7 @@ Enhance sp-base-relay so it can be used as a Python dependency by the planned GP
 - DR-12: Per-destination start/stop (independent control)
 - DR-13: RelayEngine facade (single API class for external consumers)
 - DR-14: Full backward compatibility (CLI, YAML, Prometheus unchanged)
-- DR-15: Device info/config lives in gps-webui, NOT sp-base-relay
+- DR-15: Device info/config lives in sp-base, NOT sp-base-relay
 - DR-16: Two-port architecture support (separate UBX + RTCM ports = no relay interruption)
 - DR-17: Serial port handoff for shared-port configs (stop relay → UBX session → restart)
 
@@ -80,47 +80,15 @@ Enhance sp-base-relay so it can be used as a Python dependency by the planned GP
 - [x] Relay Engine API technical spec (`docs/relay-engine-api-spec.md`)
 - [x] Hardware probe: ZED-F9P on /dev/ttyUSB0 @ 57600 baud confirmed
 - [x] Two-port architecture validated (UBX on FTDI UART, RTCM on Bluetooth)
-- [x] Architecture decision: device info/config belongs in gps-webui
+- [x] Architecture decision: device info/config belongs in sp-base
 
 ### Phase 6: sp-base-relay Cleanup — TODO 📋
 - [ ] Remove `tools/probe_gps.py` (dev tool, not needed in sp-base-relay)
-- [ ] Revert `pyubx2` from dev dependencies (belongs in gps-webui)
+- [ ] Revert `pyubx2` from dev dependencies (belongs in sp-base)
 - [ ] Integration tests: full RelayEngine lifecycle with real TCP sockets
 - [ ] README.md: add "Embedded Usage" section
 - [ ] configuration-reference.md: add programmatic config section
 - [ ] Final test pass and coverage check
-
----
-
-## gps-webui Project — Planned Phases
-
-### Phase 7: gps-webui Project Scaffolding — TODO 📋
-- [ ] Create new gps-webui repository
-- [ ] FastAPI + NiceGUI project setup with UV
-- [ ] Add sp-base-relay as dependency
-- [ ] Add pyubx2 + pyubxutils as dependencies
-- [ ] Basic project structure and CI
-
-### Phase 8: Device Info & Identification — TODO 📋
-- [ ] `device_info.py` — query UBX-MON-VER, UBX-MON-HW
-- [ ] `DeviceInfo` dataclass (module, firmware, hardware, protocol, constellations)
-- [ ] Auto-detect port and baud rate
-- [ ] Detect if device is configured as base station
-- [ ] Display device info on dashboard
-
-### Phase 9: GPS Configuration UI — TODO 📋
-- [ ] Survey-in configuration (UBX-CFG-TMODE3)
-- [ ] Base station mode setup
-- [ ] Configuration backup/restore (pyubxutils)
-- [ ] Port protocol configuration (UBX-CFG-PRT)
-- [ ] Serial port handoff coordination with relay
-
-### Phase 10: Relay Dashboard — TODO 📋
-- [ ] Relay start/stop controls using RelayEngine API
-- [ ] Real-time status display (polling RelayStatus)
-- [ ] Event log panel (EventSubscription)
-- [ ] Destination management (add/remove/enable/disable)
-- [ ] Connection topology configuration (which ports for what)
 
 ---
 
@@ -169,21 +137,6 @@ src/sp_base_relay/
 ## v1.x Completed Work (October 2025 — February 2026)
 
 All v1.x phases complete. See previous progress entries.
-
----
-
-## Hardware Findings (April 2026)
-
-### Test GPS Receiver
-- **Module**: u-blox ZED-F9P
-- **Firmware**: HPG 1.12
-- **Software**: EXT CORE 1.00 (61b2dd)
-- **Hardware**: 00190000
-- **Protocol**: 27.11
-- **Constellations**: GPS, GLONASS, Galileo, BeiDou, QZSS
-- **UBX Port**: /dev/ttyUSB0 via FTDI FT232 @ 57600 baud
-- **RTCM Port**: Bluetooth serial (dedicated)
-- **Configuration**: Scenario 2 — separate UBX and RTCM ports
 
 ---
 

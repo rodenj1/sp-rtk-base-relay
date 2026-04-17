@@ -37,14 +37,9 @@ SP-Base-Relay solves integration problems in the RTK GPS ecosystem where existin
 - **Impact**: Single tool handles diverse hardware configurations
 
 ### 7. Embeddable Relay Engine (v2.1 — COMPLETE)
-- **Problem**: The planned GPS Base Station Web UI needs programmatic control over the relay — starting/stopping relay, managing destinations, observing status — but sp-base-relay v2.0 only exposes a CLI/config-file interface
+- **Problem**: The sp-base web UI project needs programmatic control over the relay — starting/stopping relay, managing destinations, observing status — but sp-base-relay v2.0 only exposes a CLI/config-file interface
 - **Solution**: v2.1 adds a `RelayEngine` facade API, EventBus for real-time events, typed status snapshots, and dynamic destination management (hot add/remove/start/stop)
-- **Impact**: sp-base-relay becomes a reusable Python library that external applications can embed and control in-process, without sacrificing its standalone CLI capability
-
-### 8. GPS Device Management (gps-webui — Planned)
-- **Problem**: Base station operators need to identify, configure, and monitor their u-blox GPS receiver (survey-in, RTCM output settings, base station mode) but currently rely on u-center (Windows-only) or manual UBX commands
-- **Solution**: gps-webui provides a web-based interface for device identification, configuration, and backup/restore using PyUBX2, with smart port handling (separate UBX+RTCM ports = no relay interruption; shared port = serial handoff)
-- **Impact**: Complete browser-based management of the GPS base station — from initial configuration through ongoing monitoring — without needing Windows or u-center
+- **Impact**: sp-base-relay becomes a reusable Python library that external applications (sp-base) can embed and control in-process, without sacrificing its standalone CLI capability
 
 ## User Experience Goals
 

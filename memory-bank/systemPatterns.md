@@ -4,7 +4,7 @@
 
 ### v2.1 Embeddable Relay Engine (March 2026 — Phases 0–4 COMPLETE)
 
-v2.1 adds a `RelayEngine` facade, EventBus, and dynamic destination management so sp-base-relay can be used as a Python dependency by the GPS Base Station Web UI project. **1,106 unit tests passing.**
+v2.1 adds a `RelayEngine` facade, EventBus, and dynamic destination management so sp-base-relay can be used as a Python dependency by the sp-base web UI project. **1,106 unit tests passing.**
 
 ```
                             ┌─────────────┐
@@ -136,7 +136,7 @@ class RelayEngine:
     def subscribe_events(self) -> EventSubscription: ...
 ```
 - Wraps BroadcastHub + InputSource + DestinationFactory + EventBus
-- Used by gps-webui in-process and by main.py CLI internally
+- Used by sp-base in-process and by main.py CLI internally
 
 ### 7. Observer/Pub-Sub Pattern — EventBus (v2.1 NEW)
 **Purpose**: Real-time event notification for relay state changes
@@ -237,37 +237,6 @@ Input Thread → BroadcastHub → [per-dest MessageFilter] → Queue → Destina
 ```
 Detect failure → Log error → Close connections → Wait (exponential backoff) → Retry
 ```
-
-## Two-Port Architecture Pattern (April 2026)
-
-### Problem
-The GPS Base Station Web UI (gps-webui) needs to query and configure the u-blox GPS receiver via UBX protocol (PyUBX2), while sp-base-relay simultaneously relays RTCM data from the same or a different port. Sharing a serial port is mutually exclusive.
-
-### Solution: Two Configuration Modes
-
-#### Config A: Separate Ports (Preferred — No Relay Interruption)
-```
-UBX Config Port: /dev/ttyUSB0 (FTDI FT232 @ 57600)  →  PyUBX2 (anytime)
-RTCM Relay Port: Bluetooth serial                     →  sp-base-relay (continuous)
-```
-- gps-webui can query/configure GPS at any time without stopping relay
-- Relay runs uninterrupted on a dedicated RTCM output port
-- This is the current test hardware configuration
-
-#### Config B: Shared Port (Requires Serial Handoff)
-```
-Shared Port: /dev/ttyACM0 @ 115200  →  Either PyUBX2 OR sp-base-relay
-```
-- gps-webui must: `engine.stop()` → PyUBX2 session → `engine.start()`
-- RelayEngine.stop() is synchronous, releases port immediately
-- Documented in API spec with code examples
-
-### Design Decision (DR-15/16/17)
-- All PyUBX2 interaction lives in gps-webui, NOT sp-base-relay
-- sp-base-relay has no knowledge of u-blox or PyUBX2
-- gps-webui detects port configuration and adapts behavior
-
----
 
 ## Integration Points
 

@@ -24,9 +24,9 @@ SP-Base-Relay is a Python package that serves as a multi-destination broadcast r
 ## Project Goals
 1. **Primary Goal (v1.x ✅)**: Create a Python equivalent to RTKLIB's `str2str` tool for the custom RTCM server protocol
 2. **Primary Goal (v2.0 ✅)**: Expand to multi-destination broadcast supporting NTRIP casters and local TCP
-3. **Primary Goal (v2.1)**: Make sp-base-relay embeddable as a Python dependency for the GPS Base Station Web UI project
+3. **Primary Goal (v2.1)**: Make sp-base-relay embeddable as a Python dependency for the sp-base web UI project
 4. **Integration Goal**: Design for eventual integration with the Stefal/rtkbase project as a service
-5. **Integration Goal (v2.1)**: Provide `RelayEngine` facade API, EventBus, and dynamic destination management for programmatic control by external applications (gps-webui)
+5. **Integration Goal (v2.1)**: Provide `RelayEngine` facade API, EventBus, and dynamic destination management for programmatic control by external applications (sp-base)
 6. **Operational Goal**: Provide reliable, low-latency RTCM message relay with per-destination monitoring
 7. **Development Goal**: Maintain >90% unit test coverage following Python 3.10+ standards
 

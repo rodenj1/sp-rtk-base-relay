@@ -348,3 +348,190 @@ class TestBluetoothManagerHelpers:
                 manager.ensure_device_ready()
             
             assert "Must provide either device_name or mac_address" in str(exc_info.value)
+
+    def test_ensure_device_ready_with_mac(self):
+        """Test ensure_device_ready with MAC address (uses _pair_and_trust)."""
+        bus_type, _, dbus_error = create_mock_dbus_fast()
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("98:D3:51:FE:FE:E4", "RTK_BASE_ROD")
+        
+        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+            
+            manager = BluetoothManager()
+            mac, channel = manager.ensure_device_ready(mac_address="98:D3:51:FE:FE:E4")
+            
+            assert mac == "98:D3:51:FE:FE:E4"
+            assert channel == 1
+            device_data = mock_bus.get_device_data("98:D3:51:FE:FE:E4")
+            assert device_data["Paired"] is True
+            assert device_data["Trusted"] is True
+
+
+class TestBluetoothManagerCacheInvalidation:
+    """Test introspection cache invalidation."""
+
+    def test_invalidate_device_cache_removes_entry(self):
+        """Test that _invalidate_device_cache removes a cached device path."""
+        bus_type, _, dbus_error = create_mock_dbus_fast()
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("98:D3:51:FE:FE:E4", "RTK_BASE_ROD")
+        
+        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+            
+            manager = BluetoothManager()
+            device_path = "/org/bluez/hci0/dev_98_D3_51_FE_FE_E4"
+            
+            # Manually populate the cache
+            manager._introspection_cache[device_path] = "fake_node"  # type: ignore[assignment]
+            assert device_path in manager._introspection_cache
+            
+            # Invalidate
+            manager._invalidate_device_cache(device_path)
+            assert device_path not in manager._introspection_cache
+
+    def test_invalidate_device_cache_noop_when_not_cached(self):
+        """Test that _invalidate_device_cache is safe when path not in cache."""
+        bus_type, _, dbus_error = create_mock_dbus_fast()
+        mock_bus = create_mock_message_bus()
+        
+        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+            
+            manager = BluetoothManager()
+            # Should not raise
+            manager._invalidate_device_cache("/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF")
+
+    def test_pair_device_invalidates_cache_before_introspection(self):
+        """Test that pair_device invalidates the device cache before introspecting.
+        
+        This is the core fix: if there's a stale cached introspection for a device,
+        pair_device should evict it and re-introspect fresh from D-Bus.
+        """
+        bus_type, _, dbus_error = create_mock_dbus_fast()
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("98:D3:51:FE:FE:E4", "RTK_BASE_ROD", paired=False)
+        
+        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+            
+            manager = BluetoothManager()
+            device_path = "/org/bluez/hci0/dev_98_D3_51_FE_FE_E4"
+            
+            # Inject a stale "bad" cache entry
+            manager._introspection_cache[device_path] = "stale_data"  # type: ignore[assignment]
+            
+            # pair_device should invalidate and re-introspect
+            result = manager.pair_device("98:D3:51:FE:FE:E4")
+            
+            assert result is True
+            # Cache should now contain fresh introspection, not "stale_data"
+            assert manager._introspection_cache.get(device_path) != "stale_data"
+
+    def test_trust_device_invalidates_cache_before_introspection(self):
+        """Test that trust_device invalidates the device cache before introspecting."""
+        bus_type, _, dbus_error = create_mock_dbus_fast()
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("98:D3:51:FE:FE:E4", "RTK_BASE_ROD")
+        
+        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+            
+            manager = BluetoothManager()
+            device_path = "/org/bluez/hci0/dev_98_D3_51_FE_FE_E4"
+            
+            # Inject a stale cache entry
+            manager._introspection_cache[device_path] = "stale_data"  # type: ignore[assignment]
+            
+            # trust_device should invalidate and re-introspect
+            result = manager.trust_device("98:D3:51:FE:FE:E4")
+            
+            assert result is True
+            assert manager._introspection_cache.get(device_path) != "stale_data"
+
+
+class TestBluetoothManagerRecovery:
+    """Test recovery scan and ensure_device_ready retry logic."""
+
+    def test_ensure_device_ready_retries_after_failure(self):
+        """Test that ensure_device_ready retries with recovery scan on failure."""
+        bus_type, _, dbus_error = create_mock_dbus_fast()
+        mock_bus = create_mock_message_bus()
+        # Device NOT added initially — first pair attempt will fail
+        
+        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
+             patch('asyncio.sleep'):
+            
+            manager = BluetoothManager()
+            
+            call_count = 0
+            original_pair = manager._pair_and_trust
+            
+            def _pair_and_trust_with_side_effect(mac: str) -> None:
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    # First call fails (simulating stale state)
+                    raise BluetoothError("Pairing failed: interface not found")
+                # Second call: add the device so it succeeds
+                mock_bus.add_device("98:D3:51:FE:FE:E4", "RTK_BASE_ROD")
+                original_pair(mac)
+            
+            manager._pair_and_trust = _pair_and_trust_with_side_effect  # type: ignore[assignment]
+            
+            mac, channel = manager.ensure_device_ready(mac_address="98:D3:51:FE:FE:E4")
+            
+            assert mac == "98:D3:51:FE:FE:E4"
+            assert channel == 1
+            assert call_count == 2  # First attempt failed, second succeeded
+
+    def test_ensure_device_ready_fails_after_retry(self):
+        """Test that ensure_device_ready raises after both attempts fail."""
+        bus_type, _, dbus_error = create_mock_dbus_fast()
+        mock_bus = create_mock_message_bus()
+        # Device never added — both attempts will fail
+        
+        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
+             patch('asyncio.sleep'):
+            
+            manager = BluetoothManager()
+            
+            with pytest.raises(BluetoothError) as exc_info:
+                manager.ensure_device_ready(mac_address="98:D3:51:FE:FE:E4")
+            
+            assert "Device setup failed after recovery scan" in str(exc_info.value)
+
+    def test_recovery_scan_is_non_fatal_on_failure(self):
+        """Test that recovery_scan swallows errors gracefully."""
+        bus_type, _, dbus_error = create_mock_dbus_fast()
+        mock_bus = create_mock_message_bus()
+        
+        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
+             patch('asyncio.sleep'):
+            
+            manager = BluetoothManager()
+            # Force adapter to None so scan fails
+            manager._adapter = None
+            
+            # Should not raise
+            manager._recovery_scan("98:D3:51:FE:FE:E4", scan_seconds=1)

@@ -194,7 +194,12 @@ class BluetoothInputSource(InputSource):
             return None
 
     def disconnect(self) -> None:
-        """Disconnect from Bluetooth device and cleanup resources."""
+        """Disconnect from Bluetooth device and cleanup resources.
+
+        Closes the RFCOMM socket, disconnects the D-Bus device, and shuts
+        down the BluetoothManager's background event loop so that the next
+        connect() creates a fresh manager with an empty introspection cache.
+        """
         logger.info("Disconnecting from Bluetooth device")
 
         # Close socket first
@@ -212,6 +217,17 @@ class BluetoothInputSource(InputSource):
                 self.bt_manager.disconnect_device(self.connected_mac)
             except Exception as e:
                 logger.warning(f"Error disconnecting Bluetooth D-Bus: {e}")
+
+        # Clean up the BluetoothManager's background event loop and D-Bus
+        # connection.  The next connect() will create a fresh manager with
+        # an empty introspection cache, avoiding stale cache issues.
+        if self.bt_manager is not None:
+            try:
+                self.bt_manager.close()
+            except Exception as e:
+                logger.warning(f"Error closing BluetoothManager: {e}")
+            finally:
+                self.bt_manager = None
 
         self.connected_mac = None
         self.rfcomm_channel = None

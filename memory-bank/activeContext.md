@@ -2,126 +2,55 @@
 
 ## Current Work Focus
 
-**Primary Objective**: SP-Base-Relay v2.0 — Multi-Destination Architecture (March 2026)
+**Primary Objective**: SP-Base-Relay v2.1 COMPLETE → Next: sp-base integration (April 2026)
 
-**Status**: Planning complete, ready for Phase 1 implementation
+**Status**: v2.1 Phases 0–5 COMPLETE. Phase 6 (cleanup) pending. sp-base integration next.
 
-### v2.0 Planning Session (March 16, 2026)
-Comprehensive architecture planning session completed with the following decisions:
+**Previous**: v2.0 Phase 6 COMPLETE. All v2.0 features merged (commit 8f4f79a).
+**Branch**: `feature/v2.1-relay-engine` (branched from `feature/v2-multi-destination`)
 
-1. **Concurrency Model**: A+ Threading — per-destination queues with async-ready interface. TCP server destination uses asyncio internally inside its own thread.
-2. **NTRIP Protocol**: Both v1.0 and v2.0 supported, v2.0 as default. Target casters: RTK2go, Onocoy, rtkdirect.
-3. **Message Filtering**: Per-destination RTCM message type ID filtering with pass_all/allowlist/blocklist modes.
-4. **Metrics**: Clean slate v2.0 — per-destination Prometheus labels replacing global metrics entirely.
-5. **TCP Server**: Multi-client async inside thread (A+ pattern), low priority.
-6. **Configuration**: `destinations:` list format replacing `server:` section. Breaking change with migration message.
+### v2.1 Implementation Summary
 
-### Architecture Document
-Full architecture plan: `docs/v2-architecture-plan.md`
+v2.1 enhances sp-base-relay to be usable as a **Python dependency** by the sp-base web UI project. The core purpose remains unchanged: RTCM relay.
 
----
+Architecture plan: `docs/v2.1-architecture-plan.md`
+UI integration plan: `docs/ublox_gps_webui_planning.md` (historical — plans now in sp-base memory bank)
+API spec: `docs/relay-engine-api-spec.md`
 
-## Previous Work (Completed)
+### v2.1 Development Phases
 
-### v1.x Development (October 2025 — February 2026) - ALL COMPLETE
-- ✅ Phase 1: Core Foundation (config, logging, exceptions)
-- ✅ Phase 2: RTCM Server Connection (RTCMClient, heartbeat, auth)
-- ✅ Phase 3: Input Source Management (serial, tcp, bluetooth)
-- ✅ Phase 4: Data Pipeline (DataPipelineCoordinator)
-- ✅ Phase 5: Prometheus Metrics & Monitoring
-- ✅ Phase 6: Testing Infrastructure (556 tests, ~90% coverage)
-- ✅ Phase 7: CLI & Service Management (main.py)
-- ✅ Phase 8: Bluetooth GPS Integration
-- ✅ Phase 9.5: dbus-fast Migration (type safety)
-- ✅ Production logging optimization, socket cleanup, long-term outage handling
+| Phase | Deliverable | Status | Tests |
+|---|---|---|---|
+| P0 | Feature branch + version bump 2.1.0 | ✅ COMPLETE | — |
+| P1 | Event Bus system (`events.py`) | ✅ COMPLETE | 31 tests |
+| P2 | Typed status snapshots (`status.py`) | ✅ COMPLETE | 16 tests |
+| P3 | Dynamic destination management (`broadcast_hub.py`) | ✅ COMPLETE | 67 tests |
+| P4 | RelayEngine facade (`engine.py`) + `__init__.py` exports | ✅ COMPLETE | 27 tests |
+| P5 | Documentation & API spec | ✅ COMPLETE | — |
+| P6 | Cleanup (remove probe tools, docs polish) | 📋 TODO | — |
 
----
+**Total unit tests**: 1,106 passing
 
-## v2.0 Development Phases
-
-### Phase 1: Foundation — Base Destination & Broadcast Hub
-**Status**: NOT STARTED | **Effort**: 3-4 sessions | **Dependencies**: None
-
-Deliverables:
-1. `BaseDestination` ABC (`core/destinations/base_destination.py`)
-2. `DestinationStats` dataclass
-3. `MessageFilter` (`core/message_filter.py`) — pass_all/allowlist/blocklist
-4. `BroadcastHub` (`core/broadcast_hub.py`) — input thread → frame parsing → filtered fanout
-5. `DestinationFactory` (`core/destinations/destination_factory.py`)
-6. Config v2 — `DestinationConfig` parsing, `destinations:` list
-7. Full test suite
-
-### Phase 2: Sure-Path Destination Refactor
-**Status**: NOT STARTED | **Effort**: 1-2 sessions | **Dependencies**: Phase 1
-
-Deliverables:
-1. `SurePathDestination` (`core/destinations/surepath_destination.py`)
-2. `main.py` v2 — refactored with broadcast hub
-3. Regression testing vs v1 behavior
-
-### Phase 3: NTRIP Destination
-**Status**: NOT STARTED | **Effort**: 2-3 sessions | **Dependencies**: Phase 1
-
-Deliverables:
-1. `NtripDestination` (`core/destinations/ntrip_destination.py`)
-2. NTRIP v1.0 protocol (SOURCE auth + raw streaming)
-3. NTRIP v2.0 protocol (HTTP POST + chunked encoding)
-4. Mock NTRIP caster for testing
-5. Real-world testing against RTK2go
-
-### Phase 4: Metrics v2
-**Status**: NOT STARTED | **Effort**: 1-2 sessions | **Dependencies**: Phase 1, 2
-
-Deliverables:
-1. `MetricsCollector` v2 with per-destination labels
-2. Grafana dashboard v2 template
-3. Alerting rules
-
-### Phase 5: TCP Server Destination (Low Priority)
-**Status**: NOT STARTED | **Effort**: 1-2 sessions | **Dependencies**: Phase 1
-
-Deliverables:
-1. `TcpServerDestination` (`core/destinations/tcp_server_destination.py`)
-2. asyncio.start_server() inside thread
-3. Multi-client broadcast, backpressure
-
-### Phase 6: Integration & Polish
-**Status**: NOT STARTED | **Effort**: 1-2 sessions | **Dependencies**: All above
-
-Deliverables:
-1. End-to-end integration tests
-2. Updated docs, README, example configs
-3. Version bump to 2.0.0
-
----
-
-## Key Decisions Log
-
-### March 16, 2026 — v2.0 Architecture Planning
-- **Threading over Asyncio**: Chosen for minimal migration risk, natural isolation, and compatibility with blocking serial/Bluetooth I/O
-- **A+ Pattern**: Async-ready design allowing asyncio internally for TCP server destination
-- **NTRIP v2.0 Default**: HTTP-compliant, better firewall traversal, recommended by casters
-- **Clean Slate Metrics**: Breaking change acceptable for major version — per-destination labels essential for 4-5 simultaneous destinations
-- **3 NTRIP Casters**: User currently uses Onocoy, RTK2go, rtkdirect (mixture of v1 and v2)
-
-### Previous Decisions (v1.x)
-- Threading over async (initial decision, reaffirmed for v2.0)
-- YAML configuration with env var overrides
-- Prometheus metrics for monitoring
-- No RTCM validation (pass-through for latency)
-- Exponential backoff retry pattern
+### Next Steps
+1. **Phase 6**: sp-base-relay cleanup (remove probe_gps.py, revert pyubx2, README, integration tests)
 
 ---
 
 ## Important Patterns and Preferences
 
-### v2.0 Architecture Patterns
-- **Strategy Pattern**: Used for both input sources AND destinations (factory + ABC)
-- **Observer Pattern**: Per-destination metrics collection via stats polling
-- **Fan-Out Pattern**: BroadcastHub distributes data to N destination queues
-- **A+ Pattern**: Threading for orchestration, asyncio available internally for specific destinations
+### v2.1 Implemented Patterns
+- **Facade Pattern**: RelayEngine wraps BroadcastHub + events + status
+- **Observer/Pub-Sub Pattern**: EventBus with subscriber queues + ring buffer
+- **Copy-on-Read Pattern**: Thread-safe destination list in broadcast loop
+- **Builder Pattern**: `build_relay_status()` constructs frozen snapshots
 
-### Code Quality Standards (Maintained)
+### Existing Patterns (Unchanged)
+- Strategy Pattern (InputSource, BaseDestination ABCs)
+- Registry Pattern (DestinationFactory)
+- Fan-Out Pattern (BroadcastHub → N queues)
+- A+ Pattern (Threading + asyncio for TCP server)
+
+### Code Quality Standards
 - Python 3.10+ with type hints (modern syntax: `dict`, `list`, `X | None`)
 - >90% unit test coverage using Pytest
 - Zero pylance/pyright issues in strict mode

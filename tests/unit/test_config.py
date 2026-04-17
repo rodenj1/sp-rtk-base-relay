@@ -544,11 +544,104 @@ class TestLoggingConfig:
             LoggingConfig(backup_count=-1)
 
 
+def _v2_surepath_dest(
+    host: str = "example.com",
+    port: int = 50010,
+    username: str = "user",
+    password: str = "pass",
+    **overrides: Any,
+) -> dict[str, Any]:
+    """Helper to create a v2 surepath destination dict."""
+    dest: dict[str, Any] = {
+        "name": "surepath",
+        "type": "surepath",
+        "enabled": True,
+        "filter": {"mode": "pass_all"},
+        "config": {
+            "host": host,
+            "port": port,
+            "username": username,
+            "password": password,
+        },
+    }
+    dest["config"].update(overrides)
+    return dest
+
+
+def _v2_config_data(
+    destinations: list[dict[str, Any]] | None = None,
+    input_data: dict[str, Any] | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
+    """Helper to build a complete v2 config dict."""
+    data: dict[str, Any] = {
+        "input": input_data or {
+            "source": "tcp",
+            "config": {"host": "127.0.0.1", "port": 5015},
+        },
+        "destinations": destinations or [_v2_surepath_dest()],
+    }
+    data.update(extra)
+    return data
+
+
 class TestConfig:
-    """Test complete configuration."""
+    """Test complete configuration (v2.0 destinations format)."""
 
     def test_config_from_dict_minimal(self):
-        """Test config creation from minimal dict."""
+        """Test config creation from minimal v2 dict."""
+        data = _v2_config_data()
+        config = Config.from_dict(data)
+        assert config.input.source == "tcp"
+        assert len(config.destinations) == 1
+        assert config.destinations[0].name == "surepath"
+        assert config.destinations[0].type == "surepath"
+
+    def test_config_from_dict_complete(self):
+        """Test config creation from complete v2 dict."""
+        data = _v2_config_data(
+            input_data={
+                "source": "serial",
+                "config": {"port": "/dev/ttyS0", "baudrate": 38400},
+            },
+            metrics={"enabled": False, "port": 9090},
+            logging={"level": "DEBUG", "format": "text"},
+            service={"daemon": True, "user": "myuser"},
+        )
+        config = Config.from_dict(data)
+        assert config.input.source == "serial"
+        assert config.input.config["port"] == "/dev/ttyS0"
+        assert config.input.config["baudrate"] == 38400
+        assert config.metrics.enabled is False
+        assert config.logging.level == "DEBUG"
+        assert config.service.daemon is True
+
+    def test_config_from_dict_missing_destinations(self):
+        """Test config creation with missing destinations section."""
+        data = {
+            "input": {"source": "tcp", "config": {"host": "127.0.0.1", "port": 5015}}
+        }
+        with pytest.raises(
+            ConfigurationError, match="destinations list is required"
+        ):
+            Config.from_dict(data)
+
+    def test_config_from_dict_missing_input_source(self):
+        """Test config creation with missing input.source."""
+        data = _v2_config_data(
+            input_data={"config": {"host": "127.0.0.1", "port": 5015}},
+        )
+        with pytest.raises(ConfigurationError, match="input.source is required"):
+            Config.from_dict(data)
+
+    def test_config_from_dict_missing_input_config(self):
+        """Test config creation with missing input.config."""
+        data = _v2_config_data(input_data={"source": "tcp"})
+        with pytest.raises(ConfigurationError, match="input.config is required"):
+            Config.from_dict(data)
+
+    def test_config_from_dict_old_server_format_rejected(self):
+        """Test that old v1.x server: format is rejected (DR-4)."""
         data = {
             "server": {
                 "host": "example.com",
@@ -557,95 +650,23 @@ class TestConfig:
                 "password": "pass",
             },
             "input": {"source": "tcp", "config": {"host": "127.0.0.1", "port": 5015}},
-        }
-        config = Config.from_dict(data)
-        assert config.server.host == "example.com"
-        assert config.server.port == 8080
-        assert config.input.source == "tcp"
-
-    def test_config_from_dict_complete(self):
-        """Test config creation from complete dict."""
-        data = {
-            "server": {
-                "host": "example.com",
-                "port": 8080,
-                "username": "user",
-                "password": "pass",
-            },
-            "input": {
-                "source": "serial",
-                "config": {"port": "/dev/ttyS0", "baudrate": 38400},
-            },
-            "monitoring": {"heartbeat_timeout": 45, "reconnect_delay_base": 2},
-            "metrics": {"enabled": False, "port": 9090},
-            "logging": {"level": "DEBUG", "format": "text"},
-            "service": {"daemon": True, "user": "myuser"},
-        }
-        config = Config.from_dict(data)
-        assert config.server.host == "example.com"
-        assert config.input.source == "serial"
-        assert config.input.config["port"] == "/dev/ttyS0"
-        assert config.input.config["baudrate"] == 38400
-        assert config.monitoring.heartbeat_timeout == 45
-        assert config.metrics.enabled is False
-        assert config.logging.level == "DEBUG"
-        assert config.service.daemon is True
-
-    def test_config_from_dict_missing_server(self):
-        """Test config creation with missing server section."""
-        data = {
-            "input": {"source": "tcp", "config": {"host": "127.0.0.1", "port": 5015}}
+            "destinations": [_v2_surepath_dest()],
         }
         with pytest.raises(
-            ConfigurationError, match="server configuration is required"
+            ConfigurationError, match="Old v1.x configuration format detected"
         ):
             Config.from_dict(data)
 
-    def test_config_from_dict_missing_input_source(self):
-        """Test config creation with missing input.source."""
-        data = {
-            "server": {
-                "host": "example.com",
-                "port": 8080,
-                "username": "user",
-                "password": "pass",
-            },
-            "input": {"config": {"host": "127.0.0.1", "port": 5015}},
-        }
-        with pytest.raises(ConfigurationError, match="input.source is required"):
-            Config.from_dict(data)
-
-    def test_config_from_dict_missing_input_config(self):
-        """Test config creation with missing input.config."""
-        data = {
-            "server": {
-                "host": "example.com",
-                "port": 8080,
-                "username": "user",
-                "password": "pass",
-            },
-            "input": {"source": "tcp"},
-        }
-        with pytest.raises(ConfigurationError, match="input.config is required"):
-            Config.from_dict(data)
-
-    def test_config_from_dict_old_format_rejected(self):
-        """Test that old configuration format is rejected."""
-        data = {
-            "server": {
-                "host": "example.com",
-                "port": 8080,
-                "username": "user",
-                "password": "pass",
-            },
-            "input": {
-                "type": "tcp",  # Old format
+    def test_config_from_dict_old_input_format_rejected(self):
+        """Test that old input type/tcp/serial format is rejected."""
+        data = _v2_config_data(
+            input_data={
+                "type": "tcp",
                 "tcp": {"host": "192.168.1.1", "port": 9090},
-                "serial": {"port": "/dev/ttyS0", "baudrate": 38400},
             },
-        }
+        )
         with pytest.raises(
-            ConfigurationError, match="Old configuration format detected"
+            ConfigurationError, match="Old input configuration format detected"
         ):
             Config.from_dict(data)
 
@@ -659,85 +680,95 @@ class TestConfigManager:
     """Test configuration manager."""
 
     def test_generate_default_config(self):
-        """Test default configuration generation."""
+        """Test default configuration generation (v2 format)."""
         config_yaml = ConfigManager.generate_default_config()
         data = yaml.safe_load(config_yaml)
 
-        assert "server" in data
         assert "input" in data
-        assert "monitoring" in data
+        assert "destinations" in data
         assert "metrics" in data
         assert "logging" in data
         assert "service" in data
+        assert "server" not in data  # v1 key removed
 
-        assert data["server"]["host"] == "rtcm.example.com"
-        assert data["server"]["port"] == 50010
         assert data["input"]["source"] == "tcp"
         assert data["input"]["config"]["host"] == "127.0.0.1"
+        assert len(data["destinations"]) == 2
+        assert data["destinations"][0]["name"] == "surepath"
+        assert data["destinations"][0]["type"] == "surepath"
 
     @patch(
         "builtins.open",
         new_callable=mock_open,
         read_data="""
-server:
-  host: "test.example.com"
-  port: 8080
-  username: "testuser"
-  password: "testpass"
 input:
   source: "tcp"
   config:
     host: "127.0.0.1"
     port: 5015
+destinations:
+  - name: surepath
+    type: surepath
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      host: "test.example.com"
+      port: 50010
+      username: "testuser"
+      password: "testpass"
 """,
     )
     @patch("pathlib.Path.exists")
     def test_load_config_from_file(self, mock_exists: Any, mock_file: Any) -> None:
-        """Test loading configuration from file."""
+        """Test loading configuration from file (v2 format)."""
         mock_exists.return_value = True
 
         config = ConfigManager.load_config("/test/config.yaml")
-        assert config.server.host == "test.example.com"
-        assert config.server.port == 8080
+        assert len(config.destinations) == 1
+        from sp_base_relay.config import SurePathDestinationConfig
+        assert isinstance(config.destinations[0].config, SurePathDestinationConfig)
+        assert config.destinations[0].config.host == "test.example.com"
 
-    @patch.dict(os.environ, {"SP_RTCM_HOST": "env.example.com", "SP_RTCM_PORT": "9090"})
+    @patch.dict(os.environ, {"SP_DEST_SUREPATH_HOST": "env.example.com", "SP_DEST_SUREPATH_PORT": "9090"})
     @patch(
         "builtins.open",
         new_callable=mock_open,
         read_data="""
-server:
-  host: "file.example.com"
-  port: 8080
-  username: "testuser"
-  password: "testpass"
 input:
   source: "tcp"
   config:
     host: "127.0.0.1"
     port: 5015
+destinations:
+  - name: surepath
+    type: surepath
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      host: "file.example.com"
+      port: 50010
+      username: "testuser"
+      password: "testpass"
 """,
     )
     @patch("pathlib.Path.exists")
     def test_env_overrides(self, mock_exists: Any, mock_file: Any) -> None:
-        """Test environment variable overrides."""
+        """Test dynamic per-destination environment variable overrides."""
         mock_exists.return_value = True
 
         config = ConfigManager.load_config("/test/config.yaml")
-        assert config.server.host == "env.example.com"  # From environment
-        assert config.server.port == 9090  # From environment
+        from sp_base_relay.config import SurePathDestinationConfig
+        assert isinstance(config.destinations[0].config, SurePathDestinationConfig)
+        assert config.destinations[0].config.host == "env.example.com"
+        assert config.destinations[0].config.port == 9090
 
     def test_env_overrides_data_types(self):
         """Test environment variable type conversions."""
-        data = {
-            "server": {
-                "host": "test",
-                "port": 8080,
-                "username": "user",
-                "password": "pass",
-            },
-            "input": {"source": "tcp", "config": {"host": "127.0.0.1", "port": 5015}},
-            "metrics": {"enabled": False, "port": 8080},
-        }
+        data = _v2_config_data(
+            metrics={"enabled": False, "port": 8080},
+        )
 
         with patch.dict(
             os.environ, {"SP_METRICS_ENABLED": "true", "SP_METRICS_PORT": "9090"}
@@ -773,47 +804,23 @@ input:
             ConfigManager.load_config("/test/config.yaml")
 
     def test_validate_config_file(self):
-        """Test configuration file validation."""
+        """Test configuration file validation (v2 format)."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(
-                {
-                    "server": {
-                        "host": "example.com",
-                        "port": 8080,
-                        "username": "user",
-                        "password": "pass",
-                    },
-                    "input": {
-                        "source": "tcp",
-                        "config": {"host": "127.0.0.1", "port": 5015},
-                    },
-                },
-                f,
-            )
+            yaml.dump(_v2_config_data(), f)
             config_path = f.name
 
         try:
-            # Should not raise
             ConfigManager.validate_config_file(config_path)
         finally:
             os.unlink(config_path)
 
     def test_validate_invalid_config_file(self):
-        """Test validation of invalid configuration file."""
+        """Test validation of invalid configuration file (v2 format)."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(
-                {
-                    "server": {
-                        "host": "",  # Invalid empty host
-                        "port": 8080,
-                        "username": "user",
-                        "password": "pass",
-                    },
-                    "input": {
-                        "source": "tcp",
-                        "config": {"host": "127.0.0.1", "port": 5015},
-                    },
-                },
+                _v2_config_data(
+                    destinations=[_v2_surepath_dest(host="")]  # Invalid empty host
+                ),
                 f,
             )
             config_path = f.name

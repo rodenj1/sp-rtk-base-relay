@@ -1,330 +1,470 @@
-# Configuration Reference
+# Configuration Reference — SP-Base-Relay v2.1
 
 ## Overview
 
-SP-Base-Relay uses YAML-based configuration with validation, environment variable overrides, and clear error reporting. This document provides complete configuration reference and examples.
+SP-Base-Relay v2.1 supports two configuration modes:
 
-## Configuration File Structure
+1. **YAML Configuration** (standalone CLI) — `destinations:` list for multi-destination broadcast
+2. **Programmatic Configuration** (v2.1 embedded library) — Python objects via `RelayEngine` API
 
-### Default Configuration Locations
-1. **Command line specified**: `--config /path/to/config.yaml`
+The YAML format is a **breaking change** from v1.x — the old `server:` key is no longer supported.
+
+## Configuration File Locations
+
+Configuration is loaded from the first found location:
+
+1. **Command line**: `--config /path/to/config.yaml`
 2. **Environment variable**: `SP_BASE_RELAY_CONFIG=/path/to/config.yaml`
 3. **User directory**: `~/.config/sp-base-relay/config.yaml`
 4. **System directory**: `/etc/sp-base-relay/config.yaml`
+5. **Current directory**: `./config.yaml`
 
-### Example Configuration File
-```yaml
-# SP-Base-Relay Configuration
-# This file configures the RTCM relay service for custom GPS correction servers
+---
 
-# RTCM Server Configuration
-server:
-  host: "rtcm.example.com"      # RTCM server hostname or IP address
-  port: 50010                   # RTCM server port
-  username: "your_username"     # Authentication username
-  password: "your_password"     # Authentication password
-  
-# Input Source Configuration  
-input:
-  type: "tcp"                   # Options: tcp, serial, usb_serial
-  
-  # TCP Input (RTKBase integration)
-  tcp:
-    host: "127.0.0.1"           # RTKBase str2str_tcp host
-    port: 5015                  # RTKBase str2str_tcp port
-    timeout: 5.0                # Connection timeout (seconds)
-    
-  # Serial Input (Direct GNSS receiver connection)
-  serial:
-    port: "/dev/ttyUSB0"        # Serial port device
-    baudrate: 115200            # Baud rate (9600, 19200, 38400, 57600, 115200)
-    bytesize: 8                 # Data bits (5, 6, 7, 8)
-    parity: "N"                 # Parity (N=None, E=Even, O=Odd, M=Mark, S=Space)
-    stopbits: 1                 # Stop bits (1, 1.5, 2)
-    timeout: 1.0                # Read timeout (seconds)
-    rtscts: false               # Hardware flow control
-    xonxoff: false              # Software flow control
+## Complete Example Configuration
 
-# Connection Monitoring Configuration
-monitoring:
-  heartbeat_timeout: 30         # Heartbeat timeout (seconds)
-  reconnect_delay_base: 1       # Initial reconnection delay (seconds)
-  reconnect_max_delay: 60       # Maximum reconnection delay (seconds)
-  max_reconnect_attempts: 0     # Maximum attempts (0 = unlimited)
-  connection_check_interval: 5  # Connection health check interval (seconds)
-  
-# Metrics Configuration
-metrics:
-  enabled: true                 # Enable Prometheus metrics export
-  host: "0.0.0.0"              # Metrics server bind address
-  port: 8080                   # Metrics server port
-  path: "/metrics"             # Metrics endpoint path
-  
-# Logging Configuration
-logging:
-  level: "INFO"                 # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-  format: "json"                # Log format (json, text)
-  file: "/var/log/sp-base-relay.log"  # Log file path (null for console only)
-  max_size_mb: 50              # Maximum log file size (MB)
-  backup_count: 3              # Number of backup files to keep
-  
-# Service Configuration
-service:
-  daemon: false                # Run as daemon
-  pid_file: "/var/run/sp-base-relay.pid"  # PID file location
-  user: "sp-base-relay"        # Service user (for systemd)
-  group: "sp-base-relay"       # Service group (for systemd)
-```
+See `config.example.yaml` for a full annotated example. Below is a minimal production configuration:
 
-## Configuration Sections
-
-### Server Configuration
-Controls connection to the custom RTCM server.
-
-```yaml
-server:
-  host: "rtcm.example.com" # Required: RTCM server hostname or IP
-  port: 50010              # Required: RTCM server port
-  username: "your_username" # Required: Authentication username
-  password: "your_password" # Required: Authentication password
-```
-
-**Environment Variable Overrides:**
-- `SP_RTCM_HOST`: Override server host
-- `SP_RTCM_PORT`: Override server port  
-- `SP_RTCM_USERNAME`: Override username
-- `SP_RTCM_PASSWORD`: Override password
-
-### Input Source Configuration
-Configures how RTCM data is read from the base station.
-
-#### TCP Input (RTKBase Integration)
 ```yaml
 input:
-  type: "tcp"
-  tcp:
-    host: "127.0.0.1"      # RTKBase str2str_tcp host
-    port: 5015             # RTKBase str2str_tcp port
-    timeout: 5.0           # Connection timeout
-    buffer_size: 4096      # Read buffer size
-```
+  source: "tcp"
+  config:
+    host: "192.168.1.100"
+    port: 3000
+    timeout: 5.0
 
-#### Serial Input (Direct Connection)
-```yaml
-input:
-  type: "serial"  
-  serial:
-    port: "/dev/ttyUSB0"   # Serial device path
-    baudrate: 115200       # Communication speed
-    bytesize: 8            # Data bits per character
-    parity: "N"            # Parity checking
-    stopbits: 1            # Stop bits
-    timeout: 1.0           # Read timeout
-    rtscts: false          # Hardware flow control
-    xonxoff: false         # Software flow control
-```
+destinations:
+  - name: surepath
+    type: surepath
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      host: "server.example.com"
+      port: 50010
+      username: "USER01"
+      password: "abc1"
 
-**Common Serial Configurations:**
-```yaml
-# High-speed u-blox receivers
-serial:
-  port: "/dev/ttyUSB0"
-  baudrate: 115200
-  
-# Standard GNSS receivers  
-serial:
-  port: "/dev/ttyUSB0"
-  baudrate: 38400
-  
-# Legacy receivers
-serial:
-  port: "/dev/ttyS0"
-  baudrate: 9600
-```
+  - name: rtk2go
+    type: ntrip
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      caster: "rtk2go.com"
+      port: 2101
+      mountpoint: "MY_MOUNT"
+      password: "my_password"
+      version: "2.0"
 
-### Monitoring Configuration
-Controls connection health monitoring and retry behavior.
-
-```yaml
-monitoring:
-  heartbeat_timeout: 30         # Server heartbeat timeout
-  reconnect_delay_base: 1       # Initial retry delay  
-  reconnect_max_delay: 60       # Maximum retry delay
-  max_reconnect_attempts: 0     # Retry limit (0 = unlimited)
-  connection_check_interval: 5  # Health check frequency
-```
-
-**Retry Behavior:**
-- **Exponential Backoff**: Delays follow sequence 1s, 2s, 4s, 8s, 16s, 32s, 60s (max)
-- **Unlimited Retries**: Set `max_reconnect_attempts: 0` for continuous retry
-- **Limited Retries**: Set positive value to limit retry attempts
-
-### Metrics Configuration
-Configures Prometheus metrics export.
-
-```yaml
-metrics:
-  enabled: true            # Enable/disable metrics export
-  host: "0.0.0.0"         # Bind address (0.0.0.0 = all interfaces)
-  port: 8080              # HTTP server port
-  path: "/metrics"        # Metrics endpoint URL path
-```
-
-**Access Examples:**
-- Local: `http://localhost:8080/metrics`
-- Remote: `http://your-server-ip:8080/metrics`
-
-### Logging Configuration  
-Controls application logging behavior.
-
-```yaml
-logging:
-  level: "INFO"                    # Minimum log level
-  format: "json"                   # Output format
-  file: "/var/log/sp-base-relay.log"  # Log file path
-  max_size_mb: 50                  # File size limit
-  backup_count: 3                  # Backup file count
-```
-
-**Log Levels:**
-- `DEBUG`: Detailed debugging information
-- `INFO`: General operational information  
-- `WARNING`: Warning messages and recoverable errors
-- `ERROR`: Error conditions that don't stop operation
-- `CRITICAL`: Critical errors that may stop operation
-
-**Log Formats:**
-- `json`: Structured JSON logs (recommended for log aggregation)
-- `text`: Human-readable text format
-
-## Environment Variable Overrides
-
-All configuration values can be overridden using environment variables with the `SP_` prefix:
-
-```bash
-# Server configuration
-export SP_RTCM_HOST="192.168.1.100" 
-export SP_RTCM_PORT="50010"
-export SP_RTCM_USERNAME="myuser"
-export SP_RTCM_PASSWORD="mypass"
-
-# Input configuration  
-export SP_INPUT_TYPE="serial"
-export SP_SERIAL_PORT="/dev/ttyUSB1"
-export SP_SERIAL_BAUDRATE="38400"
-
-# Monitoring configuration
-export SP_HEARTBEAT_TIMEOUT="45"
-export SP_RECONNECT_MAX_DELAY="120"
-
-# Metrics configuration
-export SP_METRICS_ENABLED="true"
-export SP_METRICS_PORT="9090"
-
-# Logging configuration
-export SP_LOG_LEVEL="DEBUG"
-export SP_LOG_FORMAT="json"
-```
-
-## Configuration Validation
-
-### Required Fields
-These fields must be present and valid:
-- `server.host`: Valid hostname or IP address
-- `server.port`: Valid port number (1-65535)
-- `server.username`: Non-empty string
-- `server.password`: Non-empty string
-- `input.type`: One of: tcp, serial, usb_serial
-
-### Validation Rules
-```python
-class ConfigSchema:
-    """Configuration validation schema"""
-    
-    VALID_INPUT_TYPES = {"tcp", "serial", "usb_serial"}
-    VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
-    VALID_LOG_FORMATS = {"json", "text"}
-    VALID_PARITY = {"N", "E", "O", "M", "S"}
-    VALID_BYTESIZE = {5, 6, 7, 8}
-    VALID_STOPBITS = {1, 1.5, 2}
-    
-    def validate_server_config(self, config: dict) -> None:
-        """Validate server configuration"""
-        if not config.get("host"):
-            raise ValueError("server.host is required")
-        
-        port = config.get("port", 50010)
-        if not isinstance(port, int) or not (1 <= port <= 65535):
-            raise ValueError("server.port must be 1-65535")
-            
-        if not config.get("username"):
-            raise ValueError("server.username is required")
-            
-        if not config.get("password"):
-            raise ValueError("server.password is required")
-    
-    def validate_input_config(self, config: dict) -> None:
-        """Validate input configuration"""
-        input_type = config.get("type", "tcp")
-        if input_type not in self.VALID_INPUT_TYPES:
-            raise ValueError(f"input.type must be one of: {self.VALID_INPUT_TYPES}")
-        
-        if input_type == "tcp":
-            tcp_config = config.get("tcp", {})
-            if not tcp_config.get("host"):
-                raise ValueError("input.tcp.host is required")
-                
-        elif input_type in ("serial", "usb_serial"):
-            serial_config = config.get("serial", {})
-            if not serial_config.get("port"):
-                raise ValueError("input.serial.port is required")
-```
-
-## Configuration Examples
-
-### Minimal Configuration
-```yaml
-# Minimal working configuration
-server:
-  host: "rtcm.example.com"
-  port: 50010
-  username: "your_username"
-  password: "your_password"
-  
-input:
-  type: "tcp"
-  tcp:
-    host: "127.0.0.1"
-    port: 5015
-```
-
-### Production Configuration
-```yaml
-# Production configuration with full monitoring
-server:
-  host: "rtcm.example.com"
-  port: 50010
-  username: "PROD_USER"
-  password: "secure_password"
-  
-input:
-  type: "tcp"
-  tcp:
-    host: "127.0.0.1"
-    port: 5015
-    timeout: 10.0
-    
-monitoring:
-  heartbeat_timeout: 30
-  reconnect_delay_base: 2
-  reconnect_max_delay: 300
-  connection_check_interval: 10
-  
 metrics:
   enabled: true
   host: "0.0.0.0"
   port: 8080
-  
+
+logging:
+  level: "INFO"
+  format: "json"
+  file: "/var/log/sp-base-relay.log"
+  max_size_mb: 50
+  backup_count: 3
+
+service:
+  daemon: false
+```
+
+---
+
+## Configuration Sections
+
+### Input Source (`input:`)
+
+Configures the single GPS data source. Only one source type can be active.
+
+```yaml
+input:
+  source: "<type>"          # Required: tcp, serial, usb_serial, bluetooth
+  config:                    # Required: source-specific parameters
+    <key>: <value>
+```
+
+#### TCP Input (RTKBase / Network Base Station)
+```yaml
+input:
+  source: "tcp"
+  config:
+    host: "192.168.1.100"   # Required: Host to connect to
+    port: 3000              # Required: Port (1-65535)
+    timeout: 5.0            # Connection/read timeout in seconds (>0)
+    buffer_size: 4096       # Read buffer size in bytes
+```
+
+#### Serial Input (Direct GNSS Receiver)
+```yaml
+input:
+  source: "serial"           # or "usb_serial"
+  config:
+    port: "/dev/ttyUSB0"    # Required: Serial device path
+    baudrate: 115200         # Required: 9600-921600
+    bytesize: 8             # Data bits: 5, 6, 7, 8
+    parity: "N"             # N=None, E=Even, O=Odd, M=Mark, S=Space
+    stopbits: 1             # 1, 1.5, or 2
+    timeout: 1.0            # Read timeout in seconds (>0)
+    rtscts: false           # Hardware flow control
+    xonxoff: false          # Software flow control
+```
+
+#### Bluetooth Input
+```yaml
+input:
+  source: "bluetooth"
+  config:
+    device_address: "AA:BB:CC:DD:EE:FF"
+    channel: 1
+```
+
+---
+
+### Destinations (`destinations:`)
+
+A list of 1 or more destinations. Each destination receives RTCM data from the input source. At least one must be `enabled: true`.
+
+Every destination entry has the same top-level structure:
+
+```yaml
+destinations:
+  - name: "<unique_name>"      # Required: alphanumeric + underscores/hyphens
+    type: "<destination_type>"  # Required: surepath, ntrip, or tcp_server
+    enabled: true               # Optional: default true
+    filter:                     # Optional: default pass_all
+      mode: "pass_all"          # pass_all, allowlist, or blocklist
+      message_ids: []           # Required if allowlist/blocklist
+    config:                     # Required: type-specific parameters
+      <key>: <value>
+```
+
+**Duplicate names are not allowed.** Names are used as Prometheus metric labels.
+
+#### Filter Configuration
+
+| Mode | Description | `message_ids` Required? |
+|------|-------------|------------------------|
+| `pass_all` | Forward all messages (zero overhead — no frame parsing) | No (must be empty) |
+| `allowlist` | Only forward messages with these RTCM type IDs | Yes |
+| `blocklist` | Forward all messages except these RTCM type IDs | Yes |
+
+```yaml
+# Examples:
+filter:
+  mode: pass_all
+
+filter:
+  mode: allowlist
+  message_ids: [1005, 1077, 1087, 1097, 1127, 1230]
+
+filter:
+  mode: blocklist
+  message_ids: [4072]          # Drop proprietary messages
+```
+
+---
+
+#### Sure-Path Destination (`type: surepath`)
+
+Custom proprietary protocol with `INIT:user:pass*` authentication and `$HB$` heartbeat monitoring.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `host` | string | — | **Required.** Server hostname or IP |
+| `port` | int | 50010 | Server port (1-65535) |
+| `username` | string | — | **Required.** Authentication username |
+| `password` | string | — | **Required.** Authentication password |
+| `connection_timeout` | int | 10 | TCP connection timeout (seconds, >0) |
+| `read_timeout` | int | 30 | Socket read timeout (seconds, >0) |
+| `heartbeat_timeout` | int | 30 | `$HB$` heartbeat timeout (seconds, >0) |
+| `retry_initial_delay` | int | 15 | Initial reconnect delay (seconds, >0) |
+| `retry_max_delay` | int | 60 | Max reconnect delay (≥ initial) |
+| `retry_multiplier` | float | 2.0 | Backoff multiplier (>1.0) |
+
+```yaml
+- name: surepath
+  type: surepath
+  enabled: true
+  filter:
+    mode: pass_all
+  config:
+    host: "server.example.com"
+    port: 50010
+    username: "USER01"
+    password: "abc1"
+    heartbeat_timeout: 30
+    retry_initial_delay: 15
+    retry_max_delay: 60
+```
+
+#### NTRIP Destination (`type: ntrip`)
+
+Pushes RTCM corrections to an NTRIP caster. Supports v1.0 and v2.0 protocols.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `caster` | string | — | **Required.** Caster hostname (e.g. `rtk2go.com`) |
+| `port` | int | 2101 | Caster port (1-65535) |
+| `mountpoint` | string | — | **Required.** Mount point name |
+| `password` | string | — | **Required.** Caster password |
+| `username` | string | `""` | Optional username (some casters require it) |
+| `version` | string | `"2.0"` | Protocol version: `"1.0"` or `"2.0"` |
+| `connection_timeout` | int | 15 | TCP connection timeout (seconds, >0) |
+| `retry_initial_delay` | int | 10 | Initial reconnect delay (seconds, >0) |
+| `retry_max_delay` | int | 120 | Max reconnect delay (≥ initial) |
+| `retry_multiplier` | float | 2.0 | Backoff multiplier (>1.0) |
+
+```yaml
+- name: rtk2go
+  type: ntrip
+  enabled: true
+  filter:
+    mode: blocklist
+    message_ids: [4072]
+  config:
+    caster: "rtk2go.com"
+    port: 2101
+    mountpoint: "MY_MOUNT"
+    password: "my_password"
+    version: "2.0"
+    retry_initial_delay: 10
+    retry_max_delay: 120
+```
+
+#### TCP Server Destination (`type: tcp_server`)
+
+Local TCP rebroadcast server for LAN clients (rovers, logging tools, etc.).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `host` | string | `"0.0.0.0"` | Bind address |
+| `port` | int | 5016 | Listen port (1-65535) |
+| `max_clients` | int | 10 | Maximum simultaneous clients (≥1) |
+
+```yaml
+- name: local_tcp
+  type: tcp_server
+  enabled: false
+  filter:
+    mode: pass_all
+  config:
+    host: "0.0.0.0"
+    port: 5016
+    max_clients: 10
+```
+
+---
+
+### Metrics (`metrics:`)
+
+Prometheus metrics HTTP endpoint configuration.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `true` | Enable/disable metrics server |
+| `host` | string | `"0.0.0.0"` | Bind address |
+| `port` | int | 8080 | HTTP server port (1-65535) |
+| `path` | string | `"/metrics"` | Endpoint URL path (must start with `/`) |
+
+```yaml
+metrics:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+  path: "/metrics"
+```
+
+Access: `http://localhost:8080/metrics`
+
+---
+
+### Logging (`logging:`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `level` | string | `"INFO"` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
+| `format` | string | `"json"` | `json` (structured) or `text` (human-readable) |
+| `file` | string\|null | `"/var/log/sp-base-relay.log"` | Log file path (`null` for console only) |
+| `max_size_mb` | int | 50 | Max log file size in MB (>0) |
+| `backup_count` | int | 3 | Rotated backup files to keep (≥0) |
+
+---
+
+### Service (`service:`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `daemon` | bool | `false` | Run as background daemon |
+| `pid_file` | string | `"/var/run/sp-base-relay.pid"` | PID file location |
+| `user` | string | `"sp-base-relay"` | Service user |
+| `group` | string | `"sp-base-relay"` | Service group |
+
+---
+
+## Environment Variable Overrides
+
+### Global Overrides
+
+| Environment Variable | Config Path |
+|---------------------|-------------|
+| `SP_INPUT_SOURCE` | `input.source` |
+| `SP_INPUT_TCP_HOST` | `input.config.host` |
+| `SP_INPUT_TCP_PORT` | `input.config.port` |
+| `SP_INPUT_TCP_TIMEOUT` | `input.config.timeout` |
+| `SP_INPUT_SERIAL_PORT` | `input.config.port` |
+| `SP_INPUT_SERIAL_BAUDRATE` | `input.config.baudrate` |
+| `SP_METRICS_ENABLED` | `metrics.enabled` |
+| `SP_METRICS_PORT` | `metrics.port` |
+| `SP_LOG_LEVEL` | `logging.level` |
+| `SP_LOG_FORMAT` | `logging.format` |
+
+### Per-Destination Overrides
+
+Use the pattern `SP_DEST_<NAME>_<FIELD>` where `<NAME>` is the destination name (uppercased):
+
+```bash
+# Override surepath destination host
+export SP_DEST_SUREPATH_HOST="override.example.com"
+
+# Override rtk2go destination password
+export SP_DEST_RTK2GO_PASSWORD="secret123"
+
+# Override NTRIP port
+export SP_DEST_ONOCOY_PORT="2102"
+```
+
+---
+
+## Configuration Validation
+
+### CLI Validation
+
+```bash
+# Validate configuration file
+sp-base-relay --config config.yaml --validate
+
+# Generate default config
+sp-base-relay --generate-config > config.yaml
+```
+
+### Key Validation Rules
+
+- **Old format detection**: If `server:` key is present, a clear migration error is shown (DR-4)
+- **Old input format**: `input.type`, `input.tcp`, `input.serial` patterns are detected and rejected
+- **At least one enabled destination** is required
+- **Duplicate destination names** are not allowed
+- **Filter consistency**: `pass_all` mode must have empty `message_ids`; `allowlist`/`blocklist` require non-empty `message_ids`
+
+---
+
+## Migration from v1.x
+
+v2.0 uses `destinations:` list instead of `server:` key. When a v1.x config is detected, a clear error message with migration instructions is displayed.
+
+**v1.x format (no longer supported):**
+```yaml
+server:
+  host: "server.example.com"
+  port: 50010
+  username: "USER01"
+  password: "abc1"
+
+input:
+  type: "tcp"
+  tcp:
+    host: "127.0.0.1"
+    port: 5015
+```
+
+**v2.0 equivalent:**
+```yaml
+input:
+  source: "tcp"
+  config:
+    host: "127.0.0.1"
+    port: 5015
+
+destinations:
+  - name: surepath
+    type: surepath
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      host: "server.example.com"
+      port: 50010
+      username: "USER01"
+      password: "abc1"
+```
+
+---
+
+## Configuration Examples
+
+### Multi-Destination Production
+```yaml
+input:
+  source: "tcp"
+  config:
+    host: "192.168.1.100"
+    port: 3000
+
+destinations:
+  - name: surepath
+    type: surepath
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      host: "rtcm.example.com"
+      port: 50010
+      username: "PROD_USER"
+      password: "secure_pass"
+
+  - name: rtk2go
+    type: ntrip
+    enabled: true
+    filter:
+      mode: blocklist
+      message_ids: [4072]
+    config:
+      caster: "rtk2go.com"
+      port: 2101
+      mountpoint: "MY_MOUNT"
+      password: "rtk2go_pass"
+      version: "2.0"
+
+  - name: onocoy
+    type: ntrip
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      caster: "servers.onocoy.com"
+      port: 2101
+      mountpoint: "ONOCOY_MOUNT"
+      password: "onocoy_pass"
+      version: "2.0"
+
+  - name: local_tcp
+    type: tcp_server
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      host: "0.0.0.0"
+      port: 5016
+      max_clients: 10
+
+metrics:
+  enabled: true
+  port: 8080
+
 logging:
   level: "INFO"
   format: "json"
@@ -333,128 +473,176 @@ logging:
   backup_count: 7
 ```
 
-### Serial Direct Connection
+### Direct Serial Connection
 ```yaml
-# Direct serial connection to GNSS receiver
-server:
-  host: "rtcm.example.com"
-  port: 50010
-  username: "SERIAL_USER"
-  password: "serial_pass"
-  
 input:
-  type: "serial"
-  serial:
+  source: "serial"
+  config:
     port: "/dev/ttyUSB0"
     baudrate: 115200
     bytesize: 8
     parity: "N"
     stopbits: 1
     timeout: 2.0
-    
+
+destinations:
+  - name: surepath
+    type: surepath
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      host: "server.example.com"
+      port: 50010
+      username: "SERIAL_USER"
+      password: "serial_pass"
+
 logging:
-  level: "DEBUG"  # More verbose for troubleshooting
+  level: "DEBUG"
   format: "text"
-  file: "/tmp/sp-base-relay-debug.log"
 ```
 
-### Container Configuration
+### Container Deployment
 ```yaml
-# Configuration optimized for container deployment
-server:
-  host: "rtcm-server.example.com"
-  port: 50010
-  username: "${RTCM_USERNAME}"
-  password: "${RTCM_PASSWORD}"
-  
 input:
-  type: "tcp"
-  tcp:
-    host: "rtkbase"  # Container hostname
+  source: "tcp"
+  config:
+    host: "rtkbase"           # Container hostname
     port: 5015
-    
+
+destinations:
+  - name: surepath
+    type: surepath
+    enabled: true
+    filter:
+      mode: pass_all
+    config:
+      host: "rtcm-server.example.com"
+      port: 50010
+      username: "container_user"
+      password: "container_pass"
+
 metrics:
   enabled: true
-  host: "0.0.0.0"
   port: 8080
-  
+
 logging:
   level: "INFO"
   format: "json"
-  file: null  # Console only for container logs
+  file: null                  # Console only for container logs
 ```
 
-## Configuration Management
+---
 
-### Loading Priority
-Configuration is loaded in this order (later sources override earlier):
-1. Default values
-2. Configuration file  
-3. Environment variables
-4. Command line arguments
+## Loading Priority
 
-### Configuration Validation
-```python
-def load_and_validate_config(config_path: str) -> dict:
-    """Load and validate configuration file"""
-    try:
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
-        
-        # Validate configuration
-        validator = ConfigSchema()
-        validator.validate_all(config)
-        
-        # Apply environment variable overrides
-        config = apply_env_overrides(config)
-        
-        return config
-        
-    except FileNotFoundError:
-        raise ConfigError(f"Configuration file not found: {config_path}")
-    except yaml.YAMLError as e:
-        raise ConfigError(f"Invalid YAML syntax: {e}")
-    except ValueError as e:
-        raise ConfigError(f"Configuration validation error: {e}")
-```
+Configuration values are resolved in this order (later overrides earlier):
 
-### Runtime Configuration Changes
-Currently, configuration changes require service restart. Future versions may support:
-- Hot reload for non-critical settings (logging level, metrics)
-- SIGHUP signal handling for configuration refresh
-- Runtime API for configuration updates
+1. Default values (from dataclass defaults)
+2. Configuration file (YAML)
+3. Environment variables (`SP_*`)
+4. Command line arguments (`--log-level`, etc.)
 
-## Troubleshooting Configuration Issues
+---
 
-### Common Configuration Errors
+## Troubleshooting
+
+### Common Errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Old v1.x configuration format detected` | Config has `server:` key | Migrate to `destinations:` list format |
+| `Old input configuration format detected` | Config uses `input.type` or `input.tcp` | Use `input.source` + `input.config` |
+| `destinations list is required` | Missing `destinations:` key | Add at least one destination |
+| `At least one destination must be enabled` | All destinations have `enabled: false` | Enable at least one |
+| `Duplicate destination name` | Two destinations share a name | Use unique names |
+
+### File Permissions
 ```bash
-# Check configuration syntax
-sp-base-relay --config config.yaml --validate-config
-
-# Test configuration with dry run
-sp-base-relay --config config.yaml --dry-run
-
-# Show effective configuration (with overrides)
-sp-base-relay --config config.yaml --show-config
-```
-
-### Configuration File Permissions
-```bash
-# Set secure permissions for configuration file
 sudo chown sp-base-relay:sp-base-relay /etc/sp-base-relay/config.yaml
 sudo chmod 640 /etc/sp-base-relay/config.yaml
-
-# Verify permissions
-ls -la /etc/sp-base-relay/config.yaml
 ```
 
-### Environment Variable Debugging
-```bash
-# Show all SP_ environment variables
-env | grep ^SP_
+---
 
-# Test environment variable override
-SP_LOG_LEVEL=DEBUG sp-base-relay --config config.yaml --show-config
+## Programmatic Configuration (v2.1)
+
+When using sp-base-relay as an **embedded Python library**, no YAML file is needed. Configuration is done via Python dataclass objects.
+
+### InputConfig
+
+```python
+from sp_base_relay.config import InputConfig
+
+# TCP input
+input_cfg = InputConfig(source="tcp", config={"host": "192.168.1.100", "port": 3000})
+
+# Serial input
+input_cfg = InputConfig(source="serial", config={"port": "/dev/ttyUSB0", "baudrate": 57600})
+
+# Bluetooth input
+input_cfg = InputConfig(source="bluetooth", config={"device_address": "AA:BB:CC:DD:EE:FF", "channel": 1})
 ```
 
-This configuration reference provides complete documentation for all configuration options, validation rules, and usage examples for SP-Base-Relay.
+### DestinationConfig
+
+```python
+from sp_base_relay.config import DestinationConfig
+
+# Sure-Path destination
+surepath = DestinationConfig(
+    name="surepath",
+    type="surepath",
+    enabled=True,
+    config={"host": "server.example.com", "port": 50010,
+            "username": "USER01", "password": "abc1"},
+)
+
+# NTRIP destination
+rtk2go = DestinationConfig(
+    name="rtk2go",
+    type="ntrip",
+    enabled=True,
+    filter={"mode": "blocklist", "message_ids": [4072]},
+    config={"caster": "rtk2go.com", "port": 2101,
+            "mountpoint": "MY_MOUNT", "password": "pass", "version": "2.0"},
+)
+
+# TCP server destination
+local_tcp = DestinationConfig(
+    name="local_tcp",
+    type="tcp_server",
+    enabled=True,
+    config={"host": "0.0.0.0", "port": 5016, "max_clients": 10},
+)
+```
+
+### RelayEngine Usage
+
+```python
+from sp_base_relay import RelayEngine
+
+engine = RelayEngine(input_cfg)
+
+# Start with initial destinations
+engine.start([surepath, rtk2go])
+
+# Hot-add destinations while running
+engine.add_destination(local_tcp)
+
+# Hot-remove destinations while running
+engine.remove_destination("local_tcp")
+
+# Per-destination start/stop (pause without removing)
+engine.stop_destination("rtk2go")
+engine.start_destination("rtk2go")
+
+# Status and events
+status = engine.get_status()
+sub = engine.subscribe_events()
+
+# Stop the engine (releases serial port)
+engine.stop()
+```
+
+See **[Relay Engine API Spec](docs/relay-engine-api-spec.md)** for the complete API reference.

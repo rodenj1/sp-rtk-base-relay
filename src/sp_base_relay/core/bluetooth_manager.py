@@ -153,6 +153,25 @@ class BluetoothManager:
         except Exception as e:
             raise BluetoothError(f"Failed to initialize Bluetooth adapter: {e}")
 
+    def _invalidate_device_cache(self, device_path: str) -> None:
+        """Remove a device path from the introspection cache.
+
+        BlueZ may remove and re-create device D-Bus objects when a device
+        disconnects and reconnects. Cached introspection XML from a previous
+        session can become stale, causing ``InterfaceNotFoundError`` when
+        the proxy tries to look up ``org.bluez.Device1``.
+
+        This method evicts only device-specific paths (``/dev_`` prefix).
+        Adapter and root paths are stable and kept cached.
+
+        Args:
+            device_path: D-Bus object path to invalidate (e.g.,
+                ``/org/bluez/hci0/dev_00_11_22_33_44_55``).
+        """
+        if device_path in self._introspection_cache:
+            logger.debug("Invalidating stale introspection cache for %s", device_path)
+            del self._introspection_cache[device_path]
+
     async def _get_introspection(self, path: str) -> "Node":
         """Get introspection with caching (hybrid approach).
 
@@ -359,6 +378,10 @@ class BluetoothManager:
             if self._bus is None:
                 raise BluetoothError("Bus not initialized")
 
+            # Invalidate stale cache — BlueZ may have removed/recreated
+            # the device object since the last session
+            self._invalidate_device_cache(device_path)
+
             # Get device introspection and proxy
             device_intro = await self._get_introspection(device_path)
             device_proxy = self._bus.get_proxy_object(
@@ -408,6 +431,9 @@ class BluetoothManager:
         try:
             if self._bus is None:
                 raise BluetoothError("Bus not initialized")
+
+            # Invalidate stale cache — device object may have changed
+            self._invalidate_device_cache(device_path)
 
             # Get device introspection and proxy
             device_intro = await self._get_introspection(device_path)
@@ -576,12 +602,55 @@ class BluetoothManager:
         logger.info(f"Using RFCOMM channel 1 for SPP on {mac_address}")
         return 1
 
+    def _recovery_scan(self, mac_address: str, scan_seconds: int = 5) -> None:
+        """Run a short HCI scan to re-register a device with BlueZ.
+
+        When BlueZ loses track of a device (e.g., after disconnect or power
+        cycle), its D-Bus object may be removed. A brief discovery scan
+        causes BlueZ to re-create the device object so subsequent pair/trust
+        operations can succeed.
+
+        Args:
+            mac_address: Device MAC address (for logging).
+            scan_seconds: Duration of the scan in seconds (default: 5).
+        """
+        logger.info(
+            "Running recovery scan to re-register %s with BlueZ (%ds)…",
+            mac_address,
+            scan_seconds,
+        )
+        try:
+            self._run_async(
+                self._async_recovery_scan(scan_seconds),
+                timeout=max(scan_seconds + 15, _DEFAULT_ASYNC_TIMEOUT),
+            )
+        except Exception as exc:
+            logger.warning("Recovery scan failed (non-fatal): %s", exc)
+
+    async def _async_recovery_scan(self, scan_seconds: int) -> None:
+        """Async implementation of recovery_scan."""
+        if self._adapter is None:
+            return
+        try:
+            await self._adapter.call_start_discovery()  # type: ignore[attr-defined]
+            await asyncio.sleep(scan_seconds)
+        except Exception:
+            pass
+        try:
+            await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
     def ensure_device_ready(
         self, device_name: str | None = None, mac_address: str | None = None
     ) -> tuple[str, int]:
         """Ensure device is discovered, paired, trusted, and return connection info.
 
-        This is a convenience method that orchestrates the full device setup workflow.
+        This is a convenience method that orchestrates the full device setup
+        workflow.  If the initial pair attempt fails (e.g. because BlueZ
+        dropped the device D-Bus object after a previous disconnect), a
+        short recovery scan is performed and the pair/trust sequence is
+        retried once.
 
         Args:
             device_name: Name to search for (e.g., "RTK_GPS_BASE")
@@ -591,7 +660,7 @@ class BluetoothManager:
             Tuple of (mac_address, rfcomm_channel)
 
         Raises:
-            BluetoothError: If any step fails
+            BluetoothError: If any step fails after retry
         """
         # Discover device if only name provided
         if mac_address is None and device_name:
@@ -602,13 +671,27 @@ class BluetoothManager:
         if not mac_address:
             raise BluetoothError("Must provide either device_name or mac_address")
 
-        # Ensure paired
-        if not self.pair_device(mac_address):
-            raise BluetoothError(f"Failed to pair with {mac_address}")
+        # Attempt pair + trust with one retry on failure
+        try:
+            self._pair_and_trust(mac_address)
+        except BluetoothError as first_error:
+            logger.warning(
+                "Initial pair/trust failed for %s: %s — attempting recovery scan",
+                mac_address,
+                first_error,
+            )
+            # Recovery: run a short scan to re-register the device with BlueZ,
+            # invalidate the device cache, then retry once
+            self._recovery_scan(mac_address)
+            device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
+            self._invalidate_device_cache(device_path)
 
-        # Ensure trusted
-        if not self.trust_device(mac_address):
-            raise BluetoothError(f"Failed to trust {mac_address}")
+            try:
+                self._pair_and_trust(mac_address)
+            except BluetoothError as retry_error:
+                raise BluetoothError(
+                    f"Device setup failed after recovery scan: {retry_error}"
+                ) from first_error
 
         # NOTE: We do NOT call connect_device() for SPP (Serial Port Profile) devices!
         # SPP devices (like GPS receivers) reject D-Bus Connect() calls with NotAvailable error.
@@ -623,6 +706,21 @@ class BluetoothManager:
 
         logger.info(f"Device {mac_address} ready on channel {channel}")
         return mac_address, channel
+
+    def _pair_and_trust(self, mac_address: str) -> None:
+        """Pair and trust a device (helper for ensure_device_ready).
+
+        Args:
+            mac_address: Device MAC address.
+
+        Raises:
+            BluetoothError: If pairing or trusting fails.
+        """
+        if not self.pair_device(mac_address):
+            raise BluetoothError(f"Failed to pair with {mac_address}")
+
+        if not self.trust_device(mac_address):
+            raise BluetoothError(f"Failed to trust {mac_address}")
 
     def close(self) -> None:
         """Clean up the background event loop and D-Bus connection.

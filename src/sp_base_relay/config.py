@@ -10,11 +10,16 @@ This module provides comprehensive configuration management including:
 # pyright: reportUnnecessaryIsInstance=false
 # Note: isinstance checks are necessary for runtime validation of YAML-loaded data
 
+from __future__ import annotations
+
 import os
 import yaml
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast, TYPE_CHECKING
 from dataclasses import dataclass, field
+
+if TYPE_CHECKING:
+    from .core.message_filter import FilterConfig
 
 from .exceptions import ConfigurationError
 
@@ -431,17 +436,295 @@ class ServiceConfig:
     group: str = "sp-base-relay"
 
 
+# ============================================================================
+# v2.0 Destination Configuration Dataclasses
+# ============================================================================
+
+VALID_DESTINATION_TYPES = {"surepath", "ntrip", "tcp_server"}
+
+
+@dataclass
+class DestinationFilterConfig:
+    """Filter configuration parsed from YAML destination filter block.
+
+    Bridges the YAML config format to the frozen FilterConfig dataclass.
+    """
+
+    mode: Literal["pass_all", "allowlist", "blocklist"] = "pass_all"
+    message_ids: list[int] = field(default_factory=lambda: list[int]())
+
+    def __post_init__(self) -> None:
+        """Validate filter configuration."""
+        valid_modes = {"pass_all", "allowlist", "blocklist"}
+        if self.mode not in valid_modes:
+            raise ConfigurationError(
+                f"filter.mode must be one of: {valid_modes}",
+                config_key="filter.mode",
+            )
+        if self.mode == "pass_all" and self.message_ids:
+            raise ConfigurationError(
+                "filter.message_ids must be empty when mode is 'pass_all'",
+                config_key="filter.message_ids",
+            )
+        if self.mode in ("allowlist", "blocklist") and not self.message_ids:
+            raise ConfigurationError(
+                f"filter.message_ids is required when mode is '{self.mode}'",
+                config_key="filter.message_ids",
+            )
+
+    def to_filter_config(self) -> FilterConfig:
+        """Convert to frozen FilterConfig for use in MessageFilter.
+
+        Returns:
+            FilterConfig instance matching the configured mode.
+        """
+        from .core.message_filter import FilterConfig as _FilterConfig
+
+        if self.mode == "pass_all":
+            return _FilterConfig.pass_all()
+        elif self.mode == "allowlist":
+            return _FilterConfig.allowlist(self.message_ids)
+        else:
+            return _FilterConfig.blocklist(self.message_ids)
+
+
+@dataclass
+class SurePathDestinationConfig:
+    """Sure-Path destination-specific configuration."""
+
+    host: str = ""
+    port: int = 50010
+    username: str = ""
+    password: str = ""
+    connection_timeout: int = 10
+    read_timeout: int = 30
+    heartbeat_timeout: int = 30
+    retry_initial_delay: int = 15
+    retry_max_delay: int = 60
+    retry_multiplier: float = 2.0
+
+    def __post_init__(self) -> None:
+        """Validate Sure-Path destination configuration."""
+        if not self.host:
+            raise ConfigurationError(
+                "destinations[surepath].config.host cannot be empty",
+                config_key="config.host",
+            )
+        if not isinstance(self.port, int) or self.port < 1 or self.port > 65535:
+            raise ConfigurationError(
+                "destinations[surepath].config.port must be 1-65535",
+                config_key="config.port",
+            )
+        if not self.username:
+            raise ConfigurationError(
+                "destinations[surepath].config.username cannot be empty",
+                config_key="config.username",
+            )
+        if not self.password:
+            raise ConfigurationError(
+                "destinations[surepath].config.password cannot be empty",
+                config_key="config.password",
+            )
+        if self.connection_timeout <= 0:
+            raise ConfigurationError(
+                "destinations[surepath].config.connection_timeout must be positive",
+                config_key="config.connection_timeout",
+            )
+        if self.read_timeout <= 0:
+            raise ConfigurationError(
+                "destinations[surepath].config.read_timeout must be positive",
+                config_key="config.read_timeout",
+            )
+        if self.heartbeat_timeout <= 0:
+            raise ConfigurationError(
+                "destinations[surepath].config.heartbeat_timeout must be positive",
+                config_key="config.heartbeat_timeout",
+            )
+        if self.retry_initial_delay <= 0:
+            raise ConfigurationError(
+                "destinations[surepath].config.retry_initial_delay must be positive",
+                config_key="config.retry_initial_delay",
+            )
+        if self.retry_max_delay < self.retry_initial_delay:
+            raise ConfigurationError(
+                "destinations[surepath].config.retry_max_delay "
+                "must be >= retry_initial_delay",
+                config_key="config.retry_max_delay",
+            )
+        if self.retry_multiplier <= 1.0:
+            raise ConfigurationError(
+                "destinations[surepath].config.retry_multiplier must be > 1.0",
+                config_key="config.retry_multiplier",
+            )
+
+    def to_rtcm_server_config(self) -> RTCMServerConfig:
+        """Convert to RTCMServerConfig for use with RTCMClient.
+
+        Returns:
+            RTCMServerConfig with matching field values.
+        """
+        return RTCMServerConfig(
+            host=self.host,
+            port=self.port,
+            username=self.username,
+            password=self.password,
+            connection_timeout=self.connection_timeout,
+            read_timeout=self.read_timeout,
+            heartbeat_timeout=self.heartbeat_timeout,
+            retry_initial_delay=self.retry_initial_delay,
+            retry_max_delay=self.retry_max_delay,
+            retry_multiplier=self.retry_multiplier,
+        )
+
+
+@dataclass
+class NtripDestinationConfig:
+    """NTRIP destination-specific configuration."""
+
+    caster: str = ""
+    port: int = 2101
+    mountpoint: str = ""
+    password: str = ""
+    username: str = ""
+    version: str = "2.0"
+    connection_timeout: int = 15
+    retry_initial_delay: int = 10
+    retry_max_delay: int = 120
+    retry_multiplier: float = 2.0
+
+    def __post_init__(self) -> None:
+        """Validate NTRIP destination configuration."""
+        if not self.caster:
+            raise ConfigurationError(
+                "destinations[ntrip].config.caster cannot be empty",
+                config_key="config.caster",
+            )
+        if not isinstance(self.port, int) or self.port < 1 or self.port > 65535:
+            raise ConfigurationError(
+                "destinations[ntrip].config.port must be 1-65535",
+                config_key="config.port",
+            )
+        if not self.mountpoint:
+            raise ConfigurationError(
+                "destinations[ntrip].config.mountpoint cannot be empty",
+                config_key="config.mountpoint",
+            )
+        if not self.password:
+            raise ConfigurationError(
+                "destinations[ntrip].config.password cannot be empty",
+                config_key="config.password",
+            )
+        valid_versions = {"1.0", "2.0"}
+        if self.version not in valid_versions:
+            raise ConfigurationError(
+                f"destinations[ntrip].config.version must be one of: {valid_versions}",
+                config_key="config.version",
+            )
+        if self.connection_timeout <= 0:
+            raise ConfigurationError(
+                "destinations[ntrip].config.connection_timeout must be positive",
+                config_key="config.connection_timeout",
+            )
+        if self.retry_initial_delay <= 0:
+            raise ConfigurationError(
+                "destinations[ntrip].config.retry_initial_delay must be positive",
+                config_key="config.retry_initial_delay",
+            )
+        if self.retry_max_delay < self.retry_initial_delay:
+            raise ConfigurationError(
+                "destinations[ntrip].config.retry_max_delay "
+                "must be >= retry_initial_delay",
+                config_key="config.retry_max_delay",
+            )
+        if self.retry_multiplier <= 1.0:
+            raise ConfigurationError(
+                "destinations[ntrip].config.retry_multiplier must be > 1.0",
+                config_key="config.retry_multiplier",
+            )
+
+
+@dataclass
+class TcpServerDestinationConfig:
+    """TCP server destination-specific configuration."""
+
+    host: str = "0.0.0.0"
+    port: int = 5016
+    max_clients: int = 10
+
+    def __post_init__(self) -> None:
+        """Validate TCP server destination configuration."""
+        if not isinstance(self.port, int) or self.port < 1 or self.port > 65535:
+            raise ConfigurationError(
+                "destinations[tcp_server].config.port must be 1-65535",
+                config_key="config.port",
+            )
+        if self.max_clients < 1:
+            raise ConfigurationError(
+                "destinations[tcp_server].config.max_clients must be >= 1",
+                config_key="config.max_clients",
+            )
+
+
+# Type alias for destination-specific configs
+DestinationSpecificConfig = (
+    SurePathDestinationConfig | NtripDestinationConfig | TcpServerDestinationConfig
+)
+
+
+@dataclass
+class DestinationConfig:
+    """Configuration for a single destination in the destinations list."""
+
+    name: str
+    type: str
+    enabled: bool
+    filter: DestinationFilterConfig
+    config: DestinationSpecificConfig
+
+    def __post_init__(self) -> None:
+        """Validate destination configuration."""
+        if not self.name:
+            raise ConfigurationError(
+                "destination.name cannot be empty",
+                config_key="destinations[].name",
+            )
+        if not self.name.replace("_", "").replace("-", "").isalnum():
+            raise ConfigurationError(
+                f"destination.name '{self.name}' must be alphanumeric "
+                "(with underscores/hyphens allowed)",
+                config_key="destinations[].name",
+            )
+        if self.type not in VALID_DESTINATION_TYPES:
+            raise ConfigurationError(
+                f"destination.type '{self.type}' must be one of: "
+                f"{VALID_DESTINATION_TYPES}",
+                config_key="destinations[].type",
+            )
+
+
 @dataclass
 class Config:
-    """Complete SP-Base-Relay configuration."""
+    """Complete SP-Base-Relay v2.0 configuration.
 
-    server: ServerConfig
+    v2.0 breaking change: ``server`` replaced by ``destinations`` list.
+    """
+
     input: InputConfig
-    monitoring: MonitoringConfig = field(default_factory=MonitoringConfig)
+    destinations: list[DestinationConfig]
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
-    pipeline_restart: PipelineRestartConfig = field(default_factory=PipelineRestartConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     service: ServiceConfig = field(default_factory=ServiceConfig)
+
+    def get_enabled_destinations(self) -> list[DestinationConfig]:
+        """Return only enabled destinations."""
+        return [d for d in self.destinations if d.enabled]
+
+    def get_destination_by_name(self, name: str) -> DestinationConfig | None:
+        """Find a destination by name."""
+        for d in self.destinations:
+            if d.name == name:
+                return d
+        return None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Config":
@@ -463,33 +746,34 @@ class Config:
                     "Invalid configuration format: expected dictionary"
                 )
 
-            # Parse server configuration (required)
-            if "server" not in data:
-                raise ConfigurationError("server configuration is required")
+            # ---- Detect old v1.x format (DR-4) ----
+            if "server" in data:
+                raise ConfigurationError(
+                    "Old v1.x configuration format detected: 'server:' is no longer "
+                    "supported. Please migrate to v2.0 'destinations:' list format.\n"
+                    "See config.example.yaml for the new format.\n"
+                    "Migration: move server settings into a destination entry:\n"
+                    "  destinations:\n"
+                    "    - name: surepath\n"
+                    "      type: surepath\n"
+                    "      enabled: true\n"
+                    "      filter:\n"
+                    "        mode: pass_all\n"
+                    "      config:\n"
+                    "        host: <your_host>\n"
+                    "        port: <your_port>\n"
+                    "        username: <your_username>\n"
+                    "        password: <your_password>",
+                    config_key="server",
+                )
 
-            server_data = data["server"]
-            server = ServerConfig(
-                host=server_data.get("host", ""),
-                port=server_data.get("port", 50010),
-                username=server_data.get("username", ""),
-                password=server_data.get("password", ""),
-                connection_timeout=server_data.get("connection_timeout", 10),
-                read_timeout=server_data.get("read_timeout", 30),
-                heartbeat_timeout=server_data.get("heartbeat_timeout", 30),
-                retry_initial_delay=server_data.get("retry_initial_delay", 15),
-                retry_max_delay=server_data.get("retry_max_delay", 60),
-                retry_multiplier=server_data.get("retry_multiplier", 2.0),
-            )
-
-            # Parse input configuration (NEW FORMAT)
+            # ---- Parse input configuration ----
             input_data = data.get("input", {})
 
-            # Check for old format and reject it
             if "type" in input_data or "tcp" in input_data or "serial" in input_data:
                 raise ConfigurationError(
-                    "Old configuration format detected. "
-                    "Please update your config file to use 'source' and 'config' instead of 'type', 'tcp', and 'serial'. "
-                    "Example:\n"
+                    "Old input configuration format detected. "
+                    "Please use 'source' and 'config' keys.\n"
                     "  input:\n"
                     "    source: tcp\n"
                     "    config:\n"
@@ -498,16 +782,15 @@ class Config:
                     config_key="input",
                 )
 
-            # Validate new format structure
             if "source" not in input_data:
                 raise ConfigurationError(
-                    "input.source is required (must be one of: tcp, serial, usb_serial)",
+                    "input.source is required (tcp, serial, usb_serial, bluetooth)",
                     config_key="input.source",
                 )
 
             if "config" not in input_data:
                 raise ConfigurationError(
-                    "input.config is required (source-specific configuration parameters)",
+                    "input.config is required (source-specific parameters)",
                     config_key="input.config",
                 )
 
@@ -515,41 +798,168 @@ class Config:
                 source=input_data["source"], config=input_data["config"]
             )
 
-            # Parse monitoring configuration
-            monitoring_data = data.get("monitoring", {})
-            monitoring = MonitoringConfig(**monitoring_data)
+            # ---- Parse destinations list (v2.0) ----
+            if "destinations" not in data:
+                raise ConfigurationError(
+                    "destinations list is required (at least one destination)",
+                    config_key="destinations",
+                )
 
-            # Parse metrics configuration
+            raw_destinations = data["destinations"]
+            if not isinstance(raw_destinations, list) or len(
+                cast(list[Any], raw_destinations)
+            ) == 0:
+                raise ConfigurationError(
+                    "destinations must be a non-empty list",
+                    config_key="destinations",
+                )
+
+            dest_list = cast(list[Any], raw_destinations)
+            destinations: list[DestinationConfig] = []
+            seen_names: set[str] = set()
+
+            for i, raw_dest in enumerate(dest_list):
+                if not isinstance(raw_dest, dict):
+                    raise ConfigurationError(
+                        f"destinations[{i}] must be a dictionary",
+                        config_key=f"destinations[{i}]",
+                    )
+
+                dest = _parse_destination(
+                    cast(dict[str, Any], raw_dest), i
+                )
+                if dest.name in seen_names:
+                    raise ConfigurationError(
+                        f"Duplicate destination name: '{dest.name}'",
+                        config_key=f"destinations[{i}].name",
+                    )
+                seen_names.add(dest.name)
+                destinations.append(dest)
+
+            # Validate at least one enabled destination
+            enabled = [d for d in destinations if d.enabled]
+            if not enabled:
+                raise ConfigurationError(
+                    "At least one destination must be enabled",
+                    config_key="destinations",
+                )
+
+            # ---- Parse global settings ----
             metrics_data = data.get("metrics", {})
             metrics = MetricsConfig(**metrics_data)
 
-            # Parse pipeline restart configuration
-            pipeline_data = data.get("pipeline", {})
-            restart_data = pipeline_data.get("restart", {})
-            pipeline_restart = PipelineRestartConfig(**restart_data)
-
-            # Parse logging configuration
             logging_data = data.get("logging", {})
             logging_config = LoggingConfig(**logging_data)
 
-            # Parse service configuration
             service_data = data.get("service", {})
             service = ServiceConfig(**service_data)
 
             return cls(
-                server=server,
                 input=input_config,
-                monitoring=monitoring,
+                destinations=destinations,
                 metrics=metrics,
-                pipeline_restart=pipeline_restart,
                 logging=logging_config,
                 service=service,
             )
 
+        except ConfigurationError:
+            raise
         except Exception as e:
-            if isinstance(e, ConfigurationError):
-                raise
             raise ConfigurationError(f"Invalid configuration format: {e}")
+
+
+def _parse_destination(raw: dict[str, Any], index: int) -> DestinationConfig:
+    """Parse a single destination entry from the YAML destinations list.
+
+    Args:
+        raw: Raw dictionary from YAML.
+        index: Index in the destinations list (for error messages).
+
+    Returns:
+        Validated DestinationConfig.
+
+    Raises:
+        ConfigurationError: If destination is invalid.
+    """
+    prefix = f"destinations[{index}]"
+
+    # Required fields
+    name = raw.get("name")
+    if not name or not isinstance(name, str):
+        raise ConfigurationError(
+            f"{prefix}.name is required and must be a string",
+            config_key=f"{prefix}.name",
+        )
+
+    dest_type = raw.get("type")
+    if not dest_type or not isinstance(dest_type, str):
+        raise ConfigurationError(
+            f"{prefix}.type is required and must be a string",
+            config_key=f"{prefix}.type",
+        )
+    if dest_type not in VALID_DESTINATION_TYPES:
+        raise ConfigurationError(
+            f"{prefix}.type '{dest_type}' must be one of: {VALID_DESTINATION_TYPES}",
+            config_key=f"{prefix}.type",
+        )
+
+    enabled = raw.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise ConfigurationError(
+            f"{prefix}.enabled must be a boolean",
+            config_key=f"{prefix}.enabled",
+        )
+
+    # Parse filter block
+    raw_filter = raw.get("filter", {})
+    if not isinstance(raw_filter, dict):
+        raise ConfigurationError(
+            f"{prefix}.filter must be a dictionary",
+            config_key=f"{prefix}.filter",
+        )
+    filter_data = cast(dict[str, Any], raw_filter)
+    filter_config = DestinationFilterConfig(
+        mode=str(filter_data.get("mode", "pass_all")),
+        message_ids=list(filter_data.get("message_ids", [])),
+    )
+
+    # Parse type-specific config block
+    raw_config = raw.get("config", {})
+    if not isinstance(raw_config, dict):
+        raise ConfigurationError(
+            f"{prefix}.config must be a dictionary",
+            config_key=f"{prefix}.config",
+        )
+    config_data = cast(dict[str, Any], raw_config)
+
+    typed_config: DestinationSpecificConfig
+    try:
+        if dest_type == "surepath":
+            typed_config = SurePathDestinationConfig(**config_data)
+        elif dest_type == "ntrip":
+            typed_config = NtripDestinationConfig(**config_data)
+        elif dest_type == "tcp_server":
+            typed_config = TcpServerDestinationConfig(**config_data)
+        else:
+            raise ConfigurationError(
+                f"{prefix}.type '{dest_type}' is not supported",
+                config_key=f"{prefix}.type",
+            )
+    except ConfigurationError:
+        raise
+    except TypeError as e:
+        raise ConfigurationError(
+            f"{prefix}.config has invalid fields: {e}",
+            config_key=f"{prefix}.config",
+        )
+
+    return DestinationConfig(
+        name=name,
+        type=dest_type,
+        enabled=enabled,
+        filter=filter_config,
+        config=typed_config,
+    )
 
 
 class ConfigManager:
@@ -644,9 +1054,24 @@ class ConfigManager:
                 e.config_path = str(config_file)
             raise
 
+    # Fields that should be converted to int from env vars
+    _INT_FIELDS = {
+        "port", "baudrate", "bytesize", "heartbeat_timeout",
+        "reconnect_max_delay", "connection_timeout", "read_timeout",
+        "retry_initial_delay", "retry_max_delay", "max_clients",
+    }
+    # Fields that should be converted to float from env vars
+    _FLOAT_FIELDS = {"retry_multiplier", "timeout", "stopbits"}
+    # Fields that should be converted to bool from env vars
+    _BOOL_FIELDS = {"enabled", "rtscts", "xonxoff"}
+
     @classmethod
     def _apply_env_overrides(cls, data: dict[str, Any]) -> dict[str, Any]:
         """Apply environment variable overrides to configuration data.
+
+        v2.0 supports two categories of env overrides:
+        - Global: SP_INPUT_*, SP_METRICS_*, SP_LOG_*
+        - Per-destination: SP_DEST_<NAME>_<FIELD> (dynamic, based on names in config)
 
         Args:
             data: Configuration data dictionary
@@ -654,24 +1079,8 @@ class ConfigManager:
         Returns:
             Configuration data with environment overrides applied
         """
-        # Environment variable mappings (updated for new format)
-        env_mappings = {
-            f"{cls.ENV_PREFIX}RTCM_HOST": ("server", "host"),
-            f"{cls.ENV_PREFIX}RTCM_PORT": ("server", "port"),
-            f"{cls.ENV_PREFIX}RTCM_USERNAME": ("server", "username"),
-            f"{cls.ENV_PREFIX}RTCM_PASSWORD": ("server", "password"),
-            f"{cls.ENV_PREFIX}RTCM_CONNECTION_TIMEOUT": (
-                "server",
-                "connection_timeout",
-            ),
-            f"{cls.ENV_PREFIX}RTCM_READ_TIMEOUT": ("server", "read_timeout"),
-            f"{cls.ENV_PREFIX}RTCM_HEARTBEAT_TIMEOUT": ("server", "heartbeat_timeout"),
-            f"{cls.ENV_PREFIX}RTCM_RETRY_INITIAL_DELAY": (
-                "server",
-                "retry_initial_delay",
-            ),
-            f"{cls.ENV_PREFIX}RTCM_RETRY_MAX_DELAY": ("server", "retry_max_delay"),
-            f"{cls.ENV_PREFIX}RTCM_RETRY_MULTIPLIER": ("server", "retry_multiplier"),
+        # --- Global env mappings (input, metrics, logging) ---
+        global_mappings: dict[str, tuple[str, ...]] = {
             f"{cls.ENV_PREFIX}INPUT_SOURCE": ("input", "source"),
             f"{cls.ENV_PREFIX}INPUT_TCP_HOST": ("input", "config", "host"),
             f"{cls.ENV_PREFIX}INPUT_TCP_PORT": ("input", "config", "port"),
@@ -682,56 +1091,69 @@ class ConfigManager:
             f"{cls.ENV_PREFIX}INPUT_SERIAL_PARITY": ("input", "config", "parity"),
             f"{cls.ENV_PREFIX}INPUT_SERIAL_STOPBITS": ("input", "config", "stopbits"),
             f"{cls.ENV_PREFIX}INPUT_SERIAL_TIMEOUT": ("input", "config", "timeout"),
-            f"{cls.ENV_PREFIX}HEARTBEAT_TIMEOUT": ("monitoring", "heartbeat_timeout"),
-            f"{cls.ENV_PREFIX}RECONNECT_MAX_DELAY": (
-                "monitoring",
-                "reconnect_max_delay",
-            ),
             f"{cls.ENV_PREFIX}METRICS_ENABLED": ("metrics", "enabled"),
             f"{cls.ENV_PREFIX}METRICS_PORT": ("metrics", "port"),
             f"{cls.ENV_PREFIX}LOG_LEVEL": ("logging", "level"),
             f"{cls.ENV_PREFIX}LOG_FORMAT": ("logging", "format"),
         }
 
-        for env_var, config_path in env_mappings.items():
+        for env_var, config_path in global_mappings.items():
             env_value = os.getenv(env_var)
             if env_value is not None:
-                # Navigate to the nested configuration
-                current = data
-                for key in config_path[:-1]:
-                    if key not in current:
-                        current[key] = {}
-                    current = current[key]
+                cls._set_nested(data, config_path, env_value)
 
-                # Convert value to appropriate type
-                final_key = config_path[-1]
-                if final_key in [
-                    "port",
-                    "baudrate",
-                    "bytesize",
-                    "heartbeat_timeout",
-                    "reconnect_max_delay",
-                    "metrics_port",
-                    "connection_timeout",
-                    "read_timeout",
-                    "retry_initial_delay",
-                    "retry_max_delay",
-                ]:
-                    try:
-                        current[final_key] = int(env_value)
-                    except ValueError:
-                        pass  # Keep original value if conversion fails
-                elif final_key in ["retry_multiplier", "timeout", "stopbits"]:
-                    try:
-                        current[final_key] = float(env_value)
-                    except ValueError:
-                        pass  # Keep original value if conversion fails
-                elif final_key in ["enabled", "rtscts", "xonxoff"]:
-                    current[final_key] = env_value.lower() in ("true", "1", "yes", "on")
-                else:
-                    current[final_key] = env_value
+        # --- Dynamic per-destination env overrides: SP_DEST_<NAME>_<FIELD> ---
+        raw_destinations = data.get("destinations")
+        if isinstance(raw_destinations, list):
+            for dest_data in cast(list[Any], raw_destinations):
+                if not isinstance(dest_data, dict):
+                    continue
+                dest_dict = cast(dict[str, Any], dest_data)
+                name = dest_dict.get("name")
+                if not isinstance(name, str):
+                    continue
+                env_prefix = f"{cls.ENV_PREFIX}DEST_{name.upper()}_"
+                for env_key, env_value in os.environ.items():
+                    if env_key.startswith(env_prefix):
+                        field_name = env_key[len(env_prefix):].lower()
+                        if "config" not in dest_dict:
+                            dest_dict["config"] = {}
+                        config_dict = cast(dict[str, Any], dest_dict["config"])
+                        config_dict[field_name] = cls._convert_env_value(
+                            field_name, env_value
+                        )
 
         return data
+
+    @classmethod
+    def _set_nested(
+        cls, data: dict[str, Any], path: tuple[str, ...], value: str
+    ) -> None:
+        """Set a value in a nested dict, creating intermediate dicts as needed."""
+        current: dict[str, Any] = data
+        for key in path[:-1]:
+            if key not in current:
+                current[key] = {}
+            current = current[key]
+        final_key = path[-1]
+        current[final_key] = cls._convert_env_value(final_key, value)
+
+    @classmethod
+    def _convert_env_value(cls, field_name: str, value: str) -> str | int | float | bool:
+        """Convert a string env value to the appropriate Python type."""
+        if field_name in cls._INT_FIELDS:
+            try:
+                return int(value)
+            except ValueError:
+                return value
+        elif field_name in cls._FLOAT_FIELDS:
+            try:
+                return float(value)
+            except ValueError:
+                return value
+        elif field_name in cls._BOOL_FIELDS:
+            return value.lower() in ("true", "1", "yes", "on")
+        return value
 
     @classmethod
     def generate_default_config(cls) -> str:
@@ -740,19 +1162,7 @@ class ConfigManager:
         Returns:
             Default configuration as YAML string
         """
-        default_config = {
-            "server": {
-                "host": "rtcm.example.com",
-                "port": 50010,
-                "username": "your_username",
-                "password": "your_password",
-                "connection_timeout": 10,
-                "read_timeout": 30,
-                "heartbeat_timeout": 30,
-                "retry_initial_delay": 15,
-                "retry_max_delay": 60,
-                "retry_multiplier": 2.0,
-            },
+        default_config: dict[str, Any] = {
             "input": {
                 "source": "tcp",
                 "config": {
@@ -762,13 +1172,38 @@ class ConfigManager:
                     "buffer_size": 4096,
                 },
             },
-            "monitoring": {
-                "heartbeat_timeout": 30,
-                "reconnect_delay_base": 1,
-                "reconnect_max_delay": 60,
-                "max_reconnect_attempts": 0,
-                "connection_check_interval": 5,
-            },
+            "destinations": [
+                {
+                    "name": "surepath",
+                    "type": "surepath",
+                    "enabled": True,
+                    "filter": {"mode": "pass_all"},
+                    "config": {
+                        "host": "rtcm.example.com",
+                        "port": 50010,
+                        "username": "your_username",
+                        "password": "your_password",
+                        "connection_timeout": 10,
+                        "heartbeat_timeout": 30,
+                        "retry_initial_delay": 15,
+                        "retry_max_delay": 60,
+                        "retry_multiplier": 2.0,
+                    },
+                },
+                {
+                    "name": "rtk2go",
+                    "type": "ntrip",
+                    "enabled": False,
+                    "filter": {"mode": "pass_all"},
+                    "config": {
+                        "caster": "rtk2go.com",
+                        "port": 2101,
+                        "mountpoint": "YOUR_MOUNT",
+                        "password": "your_password",
+                        "version": "2.0",
+                    },
+                },
+            ],
             "metrics": {
                 "enabled": True,
                 "host": "0.0.0.0",

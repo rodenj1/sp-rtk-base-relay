@@ -36,6 +36,11 @@ SP-Base-Relay solves integration problems in the RTK GPS ecosystem where existin
 - **Solution**: Unified interface supporting serial, USB, TCP, and Bluetooth inputs
 - **Impact**: Single tool handles diverse hardware configurations
 
+### 7. Embeddable Relay Engine (v2.1 — COMPLETE)
+- **Problem**: The sp-base web UI project needs programmatic control over the relay — starting/stopping relay, managing destinations, observing status — but sp-base-relay v2.0 only exposes a CLI/config-file interface
+- **Solution**: v2.1 adds a `RelayEngine` facade API, EventBus for real-time events, typed status snapshots, and dynamic destination management (hot add/remove/start/stop)
+- **Impact**: sp-base-relay becomes a reusable Python library that external applications (sp-base) can embed and control in-process, without sacrificing its standalone CLI capability
+
 ## User Experience Goals
 
 ### For RTK Base Station Operators

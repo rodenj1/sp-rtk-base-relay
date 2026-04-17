@@ -1,20 +1,22 @@
-"""SP-Base-Relay main entry point and service orchestration."""
+"""SP-Base-Relay v2 main entry point and service orchestration.
+
+Uses BroadcastHub + DestinationFactory for multi-destination fan-out.
+"""
 
 import argparse
 import signal
 import sys
-import threading
 import time
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from sp_base_relay import __version__
 from sp_base_relay.config import Config, ConfigManager
-from sp_base_relay.core.data_pipeline import DataPipelineCoordinator
+from sp_base_relay.core.broadcast_hub import BroadcastHub
+from sp_base_relay.core.destinations.base_destination import BaseDestination
+from sp_base_relay.core.destinations.destination_factory import DestinationFactory
 from sp_base_relay.core.input_sources.base_input import InputSource
 from sp_base_relay.core.input_sources.input_factory import InputSourceFactory
-from sp_base_relay.core.rtcm_client import RTCMClient
 from sp_base_relay.exceptions import (
     ConfigurationError,
     ServiceError,
@@ -23,20 +25,25 @@ from sp_base_relay.exceptions import (
 from sp_base_relay.logger import LoggerManager, get_logger
 from sp_base_relay.metrics import MetricsCollector
 
+# Ensure destination builders are registered on import
+import sp_base_relay.core.destinations as _destinations_registry  # noqa: F401  # pyright: ignore[reportUnusedImport]
+
+_ = _destinations_registry  # Keep pyright happy
+
 
 class SPBaseRelayService:
-    """Main service orchestration class for SP-Base-Relay.
+    """Main service orchestration class for SP-Base-Relay v2.
 
-    Coordinates all components including configuration, logging, metrics,
-    input sources, RTCM client, and data pipeline. Handles graceful startup
-    and shutdown with proper signal handling.
+    Coordinates input source → BroadcastHub → multiple destinations.
+    BroadcastHub handles input reading, RTCM frame parsing, filtering,
+    reconnection, and fan-out distribution internally.
     """
 
     def __init__(self, config: Config) -> None:
         """Initialize service with configuration.
 
         Args:
-            config: Complete service configuration
+            config: Complete service configuration (v2 format with destinations list)
         """
         self.config = config
         self.logger = get_logger(__name__)
@@ -46,25 +53,13 @@ class SPBaseRelayService:
         # Components (initialized in start())
         self.metrics: MetricsCollector | None = None
         self.input_source: InputSource | None = None
-        self.rtcm_client: RTCMClient | None = None
-        self.pipeline: DataPipelineCoordinator | None = None
-        self._pipeline_thread: threading.Thread | None = None
-
-        # Previous stats for delta calculations
-        self._prev_rtcm_stats: Any | None = None
-        self._prev_pipeline_stats: Any | None = None
-        self._prev_input_stats: Any | None = None
-
-        # Restart tracking
-        self._restart_count = 0
-        self._max_restart_attempts = 60  # Allow ~60 minutes of retries (60 attempts × 60s avg)
-        self._last_restart_time: float = 0.0
-        self._min_uptime_for_reset = 300.0  # 5 minutes
+        self.destinations: list[BaseDestination] = []
+        self.hub: BroadcastHub | None = None
 
     def start(self) -> None:
         """Start the relay service.
 
-        Initializes all components and starts the data relay pipeline.
+        Initializes all components: input source, destinations, broadcast hub.
 
         Raises:
             ServiceError: If service fails to start
@@ -73,7 +68,7 @@ class SPBaseRelayService:
             raise ServiceError("Service is already running")
 
         self.logger.info(
-            "Starting SP-Base-Relay service",
+            "Starting SP-Base-Relay v2 service",
             extra={"version": __version__, "input_source": self.config.input.source},
         )
 
@@ -82,17 +77,20 @@ class SPBaseRelayService:
             if self.config.metrics.enabled:
                 self._start_metrics_server()
 
-            # Create input source
+            # Create input source (unchanged from v1)
             self._create_input_source()
 
-            # Create RTCM client
-            self._create_rtcm_client()
+            # Create destinations from config
+            self._create_destinations()
 
-            # Create and start data pipeline
-            self._start_pipeline()
+            # Create and start the broadcast hub
+            self._start_hub()
 
             self._running = True
-            self.logger.info("SP-Base-Relay service started successfully")
+            self.logger.info(
+                "SP-Base-Relay v2 service started successfully",
+                extra={"destination_count": len(self.destinations)},
+            )
 
         except Exception as e:
             self.logger.error(f"Failed to start service: {e}", exc_info=True)
@@ -102,30 +100,25 @@ class SPBaseRelayService:
     def stop(self) -> None:
         """Stop the relay service gracefully.
 
-        Stops all components in reverse order and ensures proper cleanup.
+        Stops broadcast hub (which stops all destinations and input reading).
         """
         if not self._running:
             self.logger.warning("Service is not running")
             return
 
-        self.logger.info("Stopping SP-Base-Relay service")
+        self.logger.info("Stopping SP-Base-Relay v2 service")
         self._shutdown_requested = True
 
         try:
-            # Stop pipeline first (stops data flow)
-            if self.pipeline:
-                self.logger.info("Stopping data pipeline")
-                self.pipeline.stop_relay()
+            # Stop hub (stops broadcast thread, destination threads, input thread)
+            if self.hub:
+                self.logger.info("Stopping broadcast hub")
+                self.hub.stop()
 
             # Disconnect input source
             if self.input_source:
                 self.logger.info("Disconnecting input source")
                 self.input_source.disconnect()
-
-            # Disconnect RTCM client
-            if self.rtcm_client:
-                self.logger.info("Disconnecting RTCM client")
-                self.rtcm_client.disconnect()
 
             # Stop metrics server
             if self.metrics:
@@ -133,7 +126,7 @@ class SPBaseRelayService:
                 self.metrics.stop_metrics_server()
 
             self._running = False
-            self.logger.info("SP-Base-Relay service stopped successfully")
+            self.logger.info("SP-Base-Relay v2 service stopped successfully")
 
         except Exception as e:
             self.logger.error(f"Error during service shutdown: {e}", exc_info=True)
@@ -142,7 +135,8 @@ class SPBaseRelayService:
     def run(self) -> int:
         """Run the service until shutdown is requested.
 
-        Monitors service health and handles graceful shutdown.
+        BroadcastHub handles input reading, reconnection, and distribution
+        internally. This loop just monitors health and updates metrics.
 
         Returns:
             Exit code (0 for success, non-zero for error)
@@ -153,60 +147,15 @@ class SPBaseRelayService:
         self.logger.info("Service running, press Ctrl+C to stop")
 
         try:
-            # Main service loop
             while not self._shutdown_requested:
-                # Check if pipeline thread has stopped (indicates restart needed)
-                if self._pipeline_thread and not self._pipeline_thread.is_alive():
-                    # Log at INFO for first restart (expected), WARNING for retries (problems)
-                    if self._restart_count == 0:
-                        self.logger.info("Pipeline thread stopped, initiating reconnection")
-                    else:
-                        self.logger.warning(
-                            f"Pipeline thread stopped again, initiating restart (retry {self._restart_count + 1})"
-                        )
-                    
-                    # Check restart limits
-                    if self._restart_count >= self._max_restart_attempts:
-                        self.logger.error(
-                            f"Maximum restart attempts ({self._max_restart_attempts}) reached, stopping service"
-                        )
-                        return 1
-                    
-                    # Attempt pipeline restart
-                    if not self._restart_pipeline():
-                        self.logger.warning(
-                            f"Pipeline restart attempt {self._restart_count}/{self._max_restart_attempts} failed, "
-                            "will retry on next iteration"
-                        )
-                        # Don't exit - continue loop to retry
-                        # The restart counter is already incremented in _restart_pipeline()
-                        # Next iteration will try again after the sleep delay
-                    else:
-                        # Restart succeeded, continue monitoring
-                        pass
-                    
-                    continue
-
                 # Check service health
                 if not self._check_health():
                     self.logger.warning("Service health check failed")
 
-                # Reset restart counter if we've been running successfully for a while
-                if (self._restart_count > 0 and 
-                    self.pipeline and 
-                    self.pipeline.pipeline_statistics.uptime_start is not None):
-                    uptime = time.time() - self.pipeline.pipeline_statistics.uptime_start
-                    if uptime >= self._min_uptime_for_reset:
-                        self.logger.info(
-                            f"Pipeline stable for {uptime:.0f}s, resetting restart counter"
-                        )
-                        self._restart_count = 0
-
                 # Update metrics if enabled
-                if self.metrics and self.pipeline:
+                if self.metrics:
                     self._update_metrics()
 
-                # Sleep to avoid busy waiting
                 time.sleep(1.0)
 
             return 0
@@ -220,25 +169,27 @@ class SPBaseRelayService:
         finally:
             self.stop()
 
+    # ------------------------------------------------------------------
+    # Component creation
+    # ------------------------------------------------------------------
+
     def _start_metrics_server(self) -> None:
         """Start Prometheus metrics server."""
         self.logger.info(
             "Starting metrics server",
             extra={"host": self.config.metrics.host, "port": self.config.metrics.port},
         )
-
         self.metrics = MetricsCollector()
         self.metrics.start_metrics_server(
             port=self.config.metrics.port, host=self.config.metrics.host
         )
 
     def _create_input_source(self) -> None:
-        """Create input source from configuration."""
+        """Create input source from configuration (unchanged from v1)."""
         self.logger.info(f"Creating input source: {self.config.input.source}")
 
-        # Get input config dict
         if self.config.input.source == "tcp":
-            input_config = {
+            input_config: dict[str, Any] = {
                 "host": self.config.input.get_tcp_config().host,
                 "port": self.config.input.get_tcp_config().port,
                 "timeout": self.config.input.get_tcp_config().timeout,
@@ -254,14 +205,12 @@ class SPBaseRelayService:
                 "stopbits": serial_cfg.stopbits,
             }
         elif self.config.input.source == "bluetooth":
-            # Bluetooth config is already in the right format
             input_config = self.config.input.config
         else:
             raise ConfigurationError(
                 f"Unsupported input source: {self.config.input.source}"
             )
 
-        # Use 'serial' as the type for both serial and usb_serial
         source_type = (
             "serial"
             if self.config.input.source in ("serial", "usb_serial")
@@ -272,240 +221,98 @@ class SPBaseRelayService:
             source_type, input_config
         )
 
-    def _create_rtcm_client(self) -> None:
-        """Create RTCM client from configuration."""
-        self.logger.info(
-            "Creating RTCM client",
-            extra={"host": self.config.server.host, "port": self.config.server.port},
-        )
+    def _create_destinations(self) -> None:
+        """Create destinations from v2 config using DestinationFactory.
 
-        self.rtcm_client = RTCMClient(self.config.server)
+        Raises:
+            ConfigurationError: If no enabled destinations are configured
+        """
+        if not hasattr(self.config, "destinations") or not self.config.destinations:
+            raise ConfigurationError(
+                "No destinations configured. Use 'destinations:' list in config.",
+                config_key="destinations",
+            )
 
-    def _start_pipeline(self) -> None:
-        """Start data pipeline coordinator in a separate thread."""
-        self.logger.info("Starting data pipeline")
+        self.destinations = DestinationFactory.create_all(self.config.destinations)
 
-        if not self.input_source or not self.rtcm_client:
-            raise ServiceError("Input source and RTCM client must be created first")
+        if not self.destinations:
+            raise ConfigurationError(
+                "No enabled destinations found in configuration.",
+                config_key="destinations",
+            )
 
-        self.pipeline = DataPipelineCoordinator(
+        for dest in self.destinations:
+            self.logger.info(
+                f"Created destination: {dest.name} ({dest.destination_type})"
+            )
+
+    def _start_hub(self) -> None:
+        """Create and start the BroadcastHub.
+
+        Raises:
+            ServiceError: If input source or destinations not ready
+        """
+        if not self.input_source:
+            raise ServiceError("Input source must be created first")
+        if not self.destinations:
+            raise ServiceError("Destinations must be created first")
+
+        self.logger.info("Starting broadcast hub")
+
+        self.hub = BroadcastHub(
             input_source=self.input_source,
-            rtcm_client=self.rtcm_client,
-            metrics_collector=self.metrics,
+            destinations=self.destinations,
         )
+        self.hub.start()
 
-        # Start pipeline in a separate thread (start_relay blocks)
-        self._pipeline_thread = threading.Thread(
-            target=self.pipeline.start_relay,
-            name="DataPipeline",
-            daemon=False
-        )
-        self._pipeline_thread.start()
-
-        # Wait for pipeline to start (longer timeout for Bluetooth)
-        # Bluetooth needs: 10s scan + 5s settle + up to 10s connection attempts = ~25s
-        max_wait = 30.0  # Maximum wait time in seconds
-        check_interval = 0.5  # Check every 0.5 seconds
-        elapsed = 0.0
-        
-        while elapsed < max_wait:
-            time.sleep(check_interval)
-            elapsed += check_interval
-            
-            if self.pipeline.is_running:
-                self.logger.debug(f"Pipeline started successfully after {elapsed:.1f}s")
-                break
-                
-            # Check if thread died unexpectedly
-            if not self._pipeline_thread.is_alive():
-                raise ServiceError("Pipeline thread terminated unexpectedly")
-        else:
-            # Timeout reached without pipeline starting
-            raise ServiceError(f"Pipeline failed to start within {max_wait}s")
+    # ------------------------------------------------------------------
+    # Health & metrics
+    # ------------------------------------------------------------------
 
     def _check_health(self) -> bool:
         """Check service health.
 
         Returns:
-            True if service is healthy, False otherwise
+            True if hub is running, False otherwise
         """
-        if not self.pipeline:
+        if not self.hub:
             return False
-
-        return self.pipeline.is_healthy
+        return self.hub.is_running
 
     def _update_metrics(self) -> None:
-        """Update Prometheus metrics from component stats."""
-        if not self.metrics or not self.pipeline:
+        """Update all Prometheus metrics (v2 per-destination + global).
+
+        Reads DestinationStats from each destination and BroadcastHub
+        health data. Called once per main-loop iteration (~1 s).
+        """
+        if not self.metrics or not self.hub:
             return
 
         try:
-            # Get current stats (properties, not methods)
-            pipeline_stats = self.pipeline.pipeline_statistics
-
-            # Update metrics with previous stats for delta calculations
-            self.metrics.update_from_pipeline_stats(
-                pipeline_stats, self._prev_pipeline_stats
-            )
-
-            if self.input_source:
-                input_stats = self.input_source.connection_statistics
-                self.metrics.update_from_input_stats(input_stats, self._prev_input_stats)
-                # Store COPY of current stats as previous for next iteration
-                try:
-                    self._prev_input_stats = replace(input_stats)
-                except (TypeError, AttributeError):
-                    # Fallback for non-dataclass objects (e.g., in tests)
-                    self._prev_input_stats = input_stats
-
-            if self.rtcm_client:
-                rtcm_stats = self.rtcm_client.connection_statistics
-                self.metrics.update_from_rtcm_stats(rtcm_stats, self._prev_rtcm_stats)
-                # Store COPY of current stats as previous for next iteration
-                try:
-                    self._prev_rtcm_stats = replace(rtcm_stats)
-                except (TypeError, AttributeError):
-                    # Fallback for non-dataclass objects (e.g., in tests)
-                    self._prev_rtcm_stats = rtcm_stats
-
-            # Store COPY of current pipeline stats as previous for next iteration
-            try:
-                self._prev_pipeline_stats = replace(pipeline_stats)
-            except (TypeError, AttributeError):
-                # Fallback for non-dataclass objects (e.g., in tests)
-                self._prev_pipeline_stats = pipeline_stats
-
-            # Update connection status (properties, not methods)
-            rtcm_connected = (
-                self.rtcm_client.is_connected if self.rtcm_client else False
-            )
             input_connected = (
                 self.input_source.is_connected if self.input_source else False
             )
-            self.metrics.update_connection_status(
-                rtcm_connected=rtcm_connected, input_connected=input_connected
+
+            self.metrics.update_all(
+                destinations=self.destinations,
+                hub=self.hub,
+                input_connected=input_connected,
             )
-
-            # Update pipeline status (property, not method)
-            self.metrics.update_pipeline_status(running=self.pipeline.is_running)
-
-            # Update service uptime
-            self.metrics.update_service_uptime()
 
         except Exception as e:
             self.logger.warning(f"Failed to update metrics: {e}")
 
-    def _restart_pipeline(self) -> bool:
-        """Restart the data pipeline with fresh connections.
-
-        Returns:
-            True if restart successful, False otherwise
-        """
-        self._restart_count += 1
-        self.logger.info(
-            f"Attempting pipeline restart (attempt {self._restart_count}/{self._max_restart_attempts})"
-        )
-
-        try:
-            # Wait for pipeline thread to fully stop
-            if self._pipeline_thread and self._pipeline_thread.is_alive():
-                self._pipeline_thread.join(timeout=5.0)
-                if self._pipeline_thread.is_alive():
-                    self.logger.error("Pipeline thread did not stop cleanly")
-                    return False
-
-            # Reset and get retry delay from RTCM client (ensures initial delay is used)
-            if self.rtcm_client:
-                self.rtcm_client.reset_retry_delay()
-                retry_delay = self.rtcm_client.get_retry_delay()
-                self.logger.info(f"Waiting {retry_delay}s before reconnection attempt")
-                time.sleep(retry_delay)
-
-            # Cleanup old connections with verification
-            self.logger.debug("Cleaning up old connections")
-            try:
-                if self.input_source:
-                    self.input_source.disconnect()
-                    time.sleep(0.1)  # Let OS release resources
-            except Exception as e:
-                self.logger.debug(f"Input source cleanup error (expected if already disconnected): {e}")
-
-            try:
-                if self.rtcm_client:
-                    # Verify socket is cleared before disconnect
-                    if self.rtcm_client.socket is not None:
-                        self.logger.warning("Socket still exists before disconnect - disconnect() will handle cleanup")
-                    
-                    self.rtcm_client.disconnect()
-                    
-                    # Extra time after disconnect for OS to release FD
-                    time.sleep(0.2)
-                    
-                    # Verify socket is now None
-                    if self.rtcm_client.socket is not None:
-                        self.logger.error("Socket cleanup failed - socket still exists!")
-                    else:
-                        self.logger.debug("Socket confirmed cleared")
-                    
-                    # CRITICAL: Verify HeartbeatMonitor thread is actually dead
-                    # This prevents "Bad file descriptor" errors on reconnection
-                    monitor = self.rtcm_client.heartbeat_monitor
-                    if monitor.thread:
-                        # Poll until thread is confirmed dead (max 10 seconds)
-                        for attempt in range(20):  # 20 * 0.5s = 10 seconds max
-                            if not monitor.thread.is_alive():
-                                self.logger.debug(
-                                    f"HeartbeatMonitor thread confirmed dead after {attempt * 0.5:.1f}s"
-                                )
-                                break
-                            time.sleep(0.5)
-                        else:
-                            # Thread still alive after 10 seconds
-                            self.logger.error(
-                                "HeartbeatMonitor thread still alive after 10 seconds - "
-                                "proceeding anyway but connection may fail"
-                            )
-                    
-                    # Extra delay before creating new client to ensure OS has fully released resources
-                    time.sleep(0.2)
-                    self.logger.debug("RTCM client cleanup complete, ready for new connection")
-            except Exception as e:
-                self.logger.debug(f"RTCM client cleanup error (expected if already disconnected): {e}")
-
-            # Create fresh input source
-            self.logger.debug("Creating fresh input source")
-            self._create_input_source()
-
-            # Create fresh RTCM client
-            self.logger.debug("Creating fresh RTCM client")
-            self._create_rtcm_client()
-
-            # Start new pipeline
-            self.logger.debug("Starting new pipeline")
-            self._start_pipeline()
-
-            # Reset metrics previous stats for fresh start
-            self._prev_rtcm_stats = None
-            self._prev_pipeline_stats = None
-            self._prev_input_stats = None
-
-            self.logger.info("Pipeline restarted successfully")
-            self._last_restart_time = time.time()
-            return True
-
-        except Exception as e:
-            self.logger.error(f"Pipeline restart failed: {e}", exc_info=True)
-            return False
+    # ------------------------------------------------------------------
+    # Cleanup
+    # ------------------------------------------------------------------
 
     def _cleanup(self) -> None:
         """Clean up resources on error."""
         try:
-            if self.pipeline:
-                self.pipeline.stop_relay()
+            if self.hub:
+                self.hub.stop()
             if self.input_source:
                 self.input_source.disconnect()
-            if self.rtcm_client:
-                self.rtcm_client.disconnect()
             if self.metrics:
                 self.metrics.stop_metrics_server()
         except Exception as e:
@@ -588,7 +395,6 @@ def setup_signal_handlers(service: SPBaseRelayService) -> None:
         service.stop()
         sys.exit(0)
 
-    # Register signal handlers
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -636,19 +442,10 @@ def main() -> int:
     # Create and start service
     try:
         service = SPBaseRelayService(config)
-
-        # Setup signal handlers for graceful shutdown
         setup_signal_handlers(service)
-
-        # Start service
         service.start()
-
-        # Run service
         exit_code = service.run()
-
-        # Shutdown logging
         LoggerManager.shutdown_logging()
-
         return exit_code
 
     except SPBaseRelayError as e:

@@ -832,7 +832,7 @@ wheels = [
 
 [[package]]
 name = "sp-base-relay"
-version = "0.2.0"
+version = "2.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "dbus-fast" },

@@ -2,12 +2,28 @@
 
 ## Current Work Focus
 
-**Primary Objective**: SP-Base-Relay v2.1 COMPLETE → Next: sp-base integration (April 2026)
+**Primary Objective**: SP-RTK-Base-Relay v2.1 COMPLETE + project renamed → Next: sp-base integration (April 2026)
 
-**Status**: v2.1 Phases 0–5 COMPLETE. Phase 6 (cleanup) pending. sp-base integration next.
+**Status**: v2.1 Phases 0–5 COMPLETE. Project renamed `sp-base-relay` → `sp-rtk-base-relay` on `main` (April 21, 2026, commit `f9c2a35`). Phase 6 (cleanup) pending. sp-base integration next.
 
-**Previous**: v2.0 Phase 6 COMPLETE. All v2.0 features merged (commit 8f4f79a).
-**Branch**: `feature/v2.1-relay-engine` (branched from `feature/v2-multi-destination`)
+**Previous**: v2.1 merged to `main` via PR #5 → PR #6 (`origin/main` at `313f951`). Prior v2.0 work at commit 8f4f79a.
+**Branch**: `main` (all v2.1 work merged; working directly on main going forward)
+
+### Rename Summary (April 21, 2026)
+
+The project was renamed from `sp-base-relay` → `sp-rtk-base-relay` to more accurately reflect its purpose (providing RTCM corrections for RTK base stations) in preparation for public release. Commit `f9c2a35` on `main`.
+
+Changes:
+- Python package directory: `src/sp_base_relay/` → `src/sp_rtk_base_relay/` (`git mv`, history preserved)
+- Console script: `sp-base-relay` → `sp-rtk-base-relay`
+- systemd unit: `tools/systemd/sp-base-relay.service` → `sp-rtk-base-relay.service`
+- `pyproject.toml`: `name`, `[project.scripts]`, `[project.urls]`, pytest `--cov=` path updated
+- Global string replacement across 82 tracked text files (src/, tests/, docs/, memory-bank/, tools/, templates/, examples/, README, configs)
+- `uv.lock` regenerated for `sp-rtk-base-relay==2.1.0`
+- GitHub repo renamed via `gh repo rename`; `origin` remote updated to `https://github.com/rodenj1/sp-rtk-base-relay.git`
+- All **1,117** unit tests pass, coverage **89.49%**
+- Deployment note: existing installations must `sudo systemctl disable --now sp-base-relay && sudo systemctl daemon-reload`, then reinstall via `tools/install.sh` to pick up the renamed `sp-rtk-base-relay.service`.
+
 
 ### v2.1 Implementation Summary
 

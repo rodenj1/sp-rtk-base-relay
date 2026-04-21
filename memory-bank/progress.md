@@ -1,13 +1,56 @@
 # Progress
 
-## Current Status — v2.1 Phases 0–5 COMPLETE (April 10, 2026)
+## Current Status — v2.1 Complete + Project Renamed (April 21, 2026)
 
 **v1.x**: All phases complete (production-running)
 **v2.0**: All phases complete (956 tests, 88.46% coverage, commit 8f4f79a)
-**v2.1**: Phases 0–5 COMPLETE. Ready for cleanup. sp-base consuming RelayEngine API.
+**v2.1**: Phases 0–5 COMPLETE. Merged to `main` via PR #5 → PR #6. Ready for cleanup; sp-base consuming RelayEngine API.
+**Rename**: Project renamed `sp-base-relay` → `sp-rtk-base-relay` on `main` (commit `f9c2a35`, April 21, 2026) in preparation for public release.
 **Version**: 2.1.0
-**Tests**: 1,106 unit tests passing
-**Branch**: `feature/v2.1-relay-engine` (from `feature/v2-multi-destination`)
+**Tests**: 1,117 unit tests passing, 89.49% coverage (post-rename verification)
+**Branch**: `main` (v2.1 merged; working directly on main)
+**GitHub**: `https://github.com/rodenj1/sp-rtk-base-relay` (renamed via `gh repo rename`; GitHub auto-redirects old URL)
+
+---
+
+## Project Rename — COMPLETE ✅ (April 21, 2026, commit `f9c2a35`)
+
+**Motivation**: Preparing the project to go public. The new name `sp-rtk-base-relay` more accurately reflects the project's purpose: providing RTCM corrections for RTK base stations.
+
+**Scope of changes** (all on `main` in a single commit):
+- **Python package**: `src/sp_base_relay/` → `src/sp_rtk_base_relay/` via `git mv` (rename history preserved)
+- **Console script entry point**: `sp-base-relay` → `sp-rtk-base-relay` (`[project.scripts]` in `pyproject.toml`)
+- **pyproject.toml**: `name`, `[project.scripts]`, `[project.urls]` (Homepage/Documentation/Repository/Issues), pytest `--cov=src/sp_rtk_base_relay`
+- **systemd unit**: `tools/systemd/sp-base-relay.service` → `tools/systemd/sp-rtk-base-relay.service` (install/uninstall scripts updated)
+- **Global string replacement** across 82 tracked text files (`sp_base_relay` → `sp_rtk_base_relay`, `sp-base-relay` → `sp-rtk-base-relay`) spanning:
+  - `src/`, `tests/unit/`, `tests/integration/`, `tests/manual/`, `tests/fixtures/`
+  - `docs/`, `memory-bank/`, `examples/`, `templates/`, `tools/`
+  - `README.md`, `configuration-reference.md`, `config.example.yaml`, `config.bluetooth*.yaml`
+- **`uv.lock`** regenerated (`uv lock` → `sp-rtk-base-relay==2.1.0`)
+- **GitHub repo** renamed: `rodenj1/sp-base-relay` → `rodenj1/sp-rtk-base-relay` via `gh repo rename`
+- **Local git remote** updated: `origin` → `https://github.com/rodenj1/sp-rtk-base-relay.git`
+
+**Verification**:
+- `grep` for `sp[-_]base[-_]relay` in tracked files (excluding `uv.lock`): **zero matches**
+- `uv sync`: `sp-rtk-base-relay==2.1.0` installed cleanly
+- `uv run pytest`: **1,117 passed**, 89.49% coverage
+- `git fetch origin`: succeeds against new URL
+
+**Deployment note for existing installations**:
+Existing hosts running the old systemd service must:
+```bash
+sudo systemctl disable --now sp-base-relay
+sudo systemctl daemon-reload
+```
+...then reinstall via `tools/install.sh`, which will set up the renamed `sp-rtk-base-relay.service` unit.
+
+**Items intentionally not changed**:
+- Version stayed at `2.1.0` (no bump — rename is infrastructure, not a semantic release)
+- Commit message history (refers to old name, which is historically accurate)
+- Runtime/generated log files (`*.log`) — gitignored artifacts
+
+---
+
 
 Architecture plans:
 - v2.0: `docs/v2-architecture-plan.md`
@@ -147,7 +190,11 @@ All v1.x phases complete. See previous progress entries.
 - ⚠️ main.py not yet refactored to use RelayEngine internally (deferred)
 - ⚠️ BaseDestination not yet wired with event_bus param (deferred — lower priority)
 - ✅ v1.x Sure-Path connection is production-stable
-- ✅ All 1,106 unit tests passing
+- ✅ All 1,117 unit tests passing (post-rename, 89.49% coverage)
+- ✅ Project renamed to `sp-rtk-base-relay` (April 21, 2026, commit `f9c2a35`)
+- ✅ GitHub repo renamed and `origin` remote updated
+- ✅ `grep` for `sp[-_]base[-_]relay` in tracked files (excluding `uv.lock`): **zero matches**
+
 - ✅ v2.1 design decisions documented and approved
 - ✅ Backward compatibility maintained (all existing tests pass unmodified)
 - ✅ API technical spec complete for UI integration

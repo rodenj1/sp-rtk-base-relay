@@ -1,7 +1,9 @@
-# SP-Base-Relay Project Brief
+# SP-RTK-Base-Relay Project Brief
 
 ## Project Overview
-SP-Base-Relay is a Python package that serves as a multi-destination broadcast relay between RTK GPS base stations and RTCM correction services. It reads RTCM correction messages from various input sources and simultaneously forwards them to multiple destinations including custom RTCM servers (Sure-Path), NTRIP casters (RTK2go, Onocoy, rtkdirect), and local TCP clients.
+SP-RTK-Base-Relay is a Python package that serves as a multi-destination broadcast relay between RTK GPS base stations and RTCM correction services. It reads RTCM correction messages from various input sources and simultaneously forwards them to multiple destinations including custom RTCM servers (Sure-Path), NTRIP casters (RTK2go, Onocoy, rtkdirect), and local TCP clients.
+
+> **Note (April 2026):** The project was renamed from `sp-base-relay` to `sp-rtk-base-relay` in preparation for public release. The new name more accurately reflects the project's purpose: providing RTCM corrections for RTK base stations. The Python package directory is now `src/sp_rtk_base_relay/`, the console script is `sp-rtk-base-relay`, and the GitHub repository is `rodenj1/sp-rtk-base-relay`.
 
 ## Core Requirements
 

@@ -20,17 +20,17 @@ Architecture plans:
 ## v2.1 Development — Embeddable Relay Engine
 
 ### Purpose
-Enhance sp-base-relay so it can be used as a Python dependency by the sp-base web UI project. Core relay purpose unchanged.
+Enhance sp-rtk-base-relay so it can be used as a Python dependency by the sp-base web UI project. Core relay purpose unchanged.
 
 ### Design Decisions (DR-8 through DR-17)
-- DR-8: In-process integration (UI imports sp-base-relay directly)
+- DR-8: In-process integration (UI imports sp-rtk-base-relay directly)
 - DR-9: Programmatic config (no YAML required for embedded use)
 - DR-10: Polling + Event Bus (snapshot + push events)
 - DR-11: Hot add/remove destinations (zero interruption to other dests)
 - DR-12: Per-destination start/stop (independent control)
 - DR-13: RelayEngine facade (single API class for external consumers)
 - DR-14: Full backward compatibility (CLI, YAML, Prometheus unchanged)
-- DR-15: Device info/config lives in sp-base, NOT sp-base-relay
+- DR-15: Device info/config lives in sp-base, NOT sp-rtk-base-relay
 - DR-16: Two-port architecture support (separate UBX + RTCM ports = no relay interruption)
 - DR-17: Serial port handoff for shared-port configs (stop relay → UBX session → restart)
 
@@ -39,7 +39,7 @@ Enhance sp-base-relay so it can be used as a Python dependency by the sp-base we
 - Bumped version to 2.1.0 in `pyproject.toml` and `__init__.py`
 
 ### Phase 1: Event Bus System — COMPLETE ✅
-**New**: `src/sp_base_relay/core/events.py`, `tests/unit/test_events.py`
+**New**: `src/sp_rtk_base_relay/core/events.py`, `tests/unit/test_events.py`
 - [x] `RelayEvent` frozen dataclass (event_type, message, timestamp, payload)
 - [x] `EventSubscription` class (queue-based, iterable, closeable)
 - [x] `EventBus` class (thread-safe emit, subscribe, unsubscribe, ring buffer)
@@ -47,7 +47,7 @@ Enhance sp-base-relay so it can be used as a Python dependency by the sp-base we
 - [x] 31 tests passing
 
 ### Phase 2: Typed Status Snapshots — COMPLETE ✅
-**New**: `src/sp_base_relay/core/status.py`, `tests/unit/test_status.py`
+**New**: `src/sp_rtk_base_relay/core/status.py`, `tests/unit/test_status.py`
 - [x] `DestinationStatus` frozen dataclass
 - [x] `InputStatus` frozen dataclass
 - [x] `RelayStatus` frozen dataclass
@@ -67,7 +67,7 @@ Enhance sp-base-relay so it can be used as a Python dependency by the sp-base we
 - [x] 67 tests passing (16 new + 51 existing)
 
 ### Phase 4: RelayEngine Facade — COMPLETE ✅
-**New**: `src/sp_base_relay/engine.py`, `tests/unit/test_engine.py`
+**New**: `src/sp_rtk_base_relay/engine.py`, `tests/unit/test_engine.py`
 **Modified**: `__init__.py`
 - [x] `RelayEngine` class with full lifecycle API (start/stop/is_running)
 - [x] Destination management (add, remove, start, stop, get_destination_names)
@@ -82,8 +82,8 @@ Enhance sp-base-relay so it can be used as a Python dependency by the sp-base we
 - [x] Two-port architecture validated (UBX on FTDI UART, RTCM on Bluetooth)
 - [x] Architecture decision: device info/config belongs in sp-base
 
-### Phase 6: sp-base-relay Cleanup — TODO 📋
-- [ ] Remove `tools/probe_gps.py` (dev tool, not needed in sp-base-relay)
+### Phase 6: sp-rtk-base-relay Cleanup — TODO 📋
+- [ ] Remove `tools/probe_gps.py` (dev tool, not needed in sp-rtk-base-relay)
 - [ ] Revert `pyubx2` from dev dependencies (belongs in sp-base)
 - [ ] Integration tests: full RelayEngine lifecycle with real TCP sockets
 - [ ] README.md: add "Embedded Usage" section
@@ -95,7 +95,7 @@ Enhance sp-base-relay so it can be used as a Python dependency by the sp-base we
 ## v2.1 Module Map (Current)
 
 ```
-src/sp_base_relay/
+src/sp_rtk_base_relay/
 ├── __init__.py              # Updated: exports RelayEngine, EventBus, RelayEvent, RelayStatus
 ├── engine.py                # NEW — RelayEngine facade API
 ├── main.py                  # Unchanged (Phase 4 main.py refactor deferred)

@@ -88,7 +88,7 @@ SP-Base-Relay v2.0 transforms the system from a single-destination RTCM relay (G
 
 # 2. Send SOURCE request
 SOURCE <mountpoint_password>\r\n
-Source-Agent: NTRIP sp-base-relay/2.0\r\n
+Source-Agent: NTRIP sp-rtk-base-relay/2.0\r\n
 \r\n
 
 # 3. Receive response
@@ -108,7 +108,7 @@ POST /<mountpoint> HTTP/1.1\r\n
 Host: <caster_host>\r\n
 Ntrip-Version: Ntrip/2.0\r\n
 Authorization: Basic <base64(username:password)>\r\n
-User-Agent: NTRIP sp-base-relay/2.0\r\n
+User-Agent: NTRIP sp-rtk-base-relay/2.0\r\n
 Transfer-Encoding: chunked\r\n
 \r\n
 
@@ -134,7 +134,7 @@ HTTP/1.1 200 OK\r\n
 ## Module Structure
 
 ```
-src/sp_base_relay/
+src/sp_rtk_base_relay/
 ├── main.py                           # Refactored service orchestration (v2)
 ├── config.py                         # Refactored config with destinations: list
 ├── metrics.py                        # Rewritten with per-destination labels
@@ -260,7 +260,7 @@ metrics:
 logging:
   level: INFO
   format: json
-  file: /var/log/sp-base-relay.log
+  file: /var/log/sp-rtk-base-relay.log
   max_size_mb: 50
   backup_count: 3
 
@@ -274,24 +274,24 @@ service:
 
 ### Destination Metrics (labeled by destination name)
 ```
-sp_base_relay_dest_bytes_sent_total{destination="..."}
-sp_base_relay_dest_messages_sent_total{destination="..."}
-sp_base_relay_dest_messages_filtered_total{destination="..."}
-sp_base_relay_dest_connection_status{destination="..."}
-sp_base_relay_dest_connection_attempts_total{destination="..."}
-sp_base_relay_dest_errors_total{destination="...", error_type="..."}
-sp_base_relay_dest_relay_latency_seconds{destination="..."}
-sp_base_relay_dest_queue_depth{destination="..."}
-sp_base_relay_dest_reconnect_attempts_total{destination="..."}
+sp_rtk_base_relay_dest_bytes_sent_total{destination="..."}
+sp_rtk_base_relay_dest_messages_sent_total{destination="..."}
+sp_rtk_base_relay_dest_messages_filtered_total{destination="..."}
+sp_rtk_base_relay_dest_connection_status{destination="..."}
+sp_rtk_base_relay_dest_connection_attempts_total{destination="..."}
+sp_rtk_base_relay_dest_errors_total{destination="...", error_type="..."}
+sp_rtk_base_relay_dest_relay_latency_seconds{destination="..."}
+sp_rtk_base_relay_dest_queue_depth{destination="..."}
+sp_rtk_base_relay_dest_reconnect_attempts_total{destination="..."}
 ```
 
 ### Global Metrics
 ```
-sp_base_relay_input_bytes_read_total
-sp_base_relay_input_connection_status
-sp_base_relay_service_uptime_seconds
-sp_base_relay_active_destinations_count
-sp_base_relay_rtcm_messages_by_id_total{message_id="..."}
+sp_rtk_base_relay_input_bytes_read_total
+sp_rtk_base_relay_input_connection_status
+sp_rtk_base_relay_service_uptime_seconds
+sp_rtk_base_relay_active_destinations_count
+sp_rtk_base_relay_rtcm_messages_by_id_total{message_id="..."}
 ```
 
 ---
@@ -398,7 +398,7 @@ The following decisions were made during the pre-implementation design review se
 - Per-destination queues with `maxsize=100`
 - When queue is full: **silently drop new data** for that destination (non-blocking `put_nowait`, no effect on other destinations)
 - When destination reconnects after outage: **clear the queue** entirely, start fresh with new incoming data
-- Track drops with `sp_base_relay_dest_messages_dropped_total{destination="..."}` metric
+- Track drops with `sp_rtk_base_relay_dest_messages_dropped_total{destination="..."}` metric
 
 **Rationale**: Stale RTCM correction data is useless — a 30-second-old correction has no value. When a destination reconnects, it should receive only fresh data, not drain a backlog of obsolete corrections.
 
@@ -455,7 +455,7 @@ The following decisions were made during the pre-implementation design review se
 
 **Decision**: BroadcastHub tracks `last_data_received_time` and provides passive monitoring:
 - Log WARNING after 30 seconds of no data from input source
-- Expose `sp_base_relay_input_seconds_since_last_data` Prometheus gauge
+- Expose `sp_rtk_base_relay_input_seconds_since_last_data` Prometheus gauge
 - **Do not force reconnect** — input source manages its own connection health
 - When input dies, natural cascade handles destination reconnection:
   1. Input dies → no data flows → casters disconnect us after ~12s → destination threads detect → reconnect loops

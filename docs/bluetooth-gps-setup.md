@@ -1,6 +1,6 @@
 # Bluetooth GPS Setup Guide for SP-Base-Relay
 
-This guide provides complete instructions for setting up sp-base-relay with a Bluetooth RTK GPS device on Raspberry Pi.
+This guide provides complete instructions for setting up sp-rtk-base-relay with a Bluetooth RTK GPS device on Raspberry Pi.
 
 ## Overview
 
@@ -15,7 +15,7 @@ Raspberry Pi (bluetoothd)
     ↓ rfcomm
 /dev/rfcomm0 (virtual serial port)
     ↓ PySerial
-sp-base-relay (SerialInputSource)
+sp-rtk-base-relay (SerialInputSource)
     ↓ TCP/IP
 RTCM Server (rtcm.example.com:50010)
 ```
@@ -64,7 +64,7 @@ bluetoothctl --version
 **Option A: Using the interactive pairing script**
 
 ```bash
-# From the sp-base-relay directory
+# From the sp-rtk-base-relay directory
 sudo bluetoothctl
 
 # In bluetoothctl prompt:
@@ -148,12 +148,12 @@ This comprehensive test verifies:
 
 ```bash
 # Copy Bluetooth GPS configuration
-sudo cp config.bluetooth-gps.yaml /etc/sp-base-relay/config.yaml
+sudo cp config.bluetooth-gps.yaml /etc/sp-rtk-base-relay/config.yaml
 ```
 
 **Option B: Update your existing configuration**
 
-Edit `/etc/sp-base-relay/config.yaml`:
+Edit `/etc/sp-rtk-base-relay/config.yaml`:
 
 ```yaml
 input:
@@ -180,19 +180,19 @@ server:
 
 ```bash
 # Update systemd service with Bluetooth dependency
-sudo cp tools/systemd/sp-base-relay.service /etc/systemd/system/
+sudo cp tools/systemd/sp-rtk-base-relay.service /etc/systemd/system/
 
 # Reload systemd
 sudo systemctl daemon-reload
 
 # Enable service
-sudo systemctl enable sp-base-relay
+sudo systemctl enable sp-rtk-base-relay
 
 # Start service
-sudo systemctl start sp-base-relay
+sudo systemctl start sp-rtk-base-relay
 
 # Check status
-sudo systemctl status sp-base-relay
+sudo systemctl status sp-rtk-base-relay
 ```
 
 ### Step 8: Verify Complete System
@@ -204,8 +204,8 @@ sudo tools/bluetooth/status.sh
 # Monitor RTCM data flow
 sudo tools/bluetooth/monitor-data.sh
 
-# View sp-base-relay logs
-sudo journalctl -u sp-base-relay -f
+# View sp-rtk-base-relay logs
+sudo journalctl -u sp-rtk-base-relay -f
 ```
 
 ## Service Management
@@ -217,17 +217,17 @@ sudo journalctl -u sp-base-relay -f
 sudo systemctl start bluetooth-gps
 
 # Start SP-Base-Relay
-sudo systemctl start sp-base-relay
+sudo systemctl start sp-rtk-base-relay
 
 # Or restart both
-sudo systemctl restart bluetooth-gps sp-base-relay
+sudo systemctl restart bluetooth-gps sp-rtk-base-relay
 ```
 
 ### Stopping Services
 
 ```bash
 # Stop SP-Base-Relay first
-sudo systemctl stop sp-base-relay
+sudo systemctl stop sp-rtk-base-relay
 
 # Then stop Bluetooth GPS bridge
 sudo systemctl stop bluetooth-gps
@@ -241,11 +241,11 @@ sudo tools/bluetooth/status.sh
 
 # Detailed service status
 sudo systemctl status bluetooth-gps
-sudo systemctl status sp-base-relay
+sudo systemctl status sp-rtk-base-relay
 
 # View logs
 sudo journalctl -u bluetooth-gps -f
-sudo journalctl -u sp-base-relay -f
+sudo journalctl -u sp-rtk-base-relay -f
 ```
 
 ### Auto-Start on Boot
@@ -253,11 +253,11 @@ sudo journalctl -u sp-base-relay -f
 ```bash
 # Enable both services
 sudo systemctl enable bluetooth-gps
-sudo systemctl enable sp-base-relay
+sudo systemctl enable sp-rtk-base-relay
 
 # Verify enabled
 systemctl is-enabled bluetooth-gps
-systemctl is-enabled sp-base-relay
+systemctl is-enabled sp-rtk-base-relay
 ```
 
 ## Monitoring and Diagnostics
@@ -290,13 +290,13 @@ sudo tools/bluetooth/status.sh
 sudo journalctl -u bluetooth-gps --since today
 
 # SP-Base-Relay logs
-sudo journalctl -u sp-base-relay --since today
+sudo journalctl -u sp-rtk-base-relay --since today
 
 # Show only errors
-sudo journalctl -u sp-base-relay -p err --since today
+sudo journalctl -u sp-rtk-base-relay -p err --since today
 
 # Follow logs in real-time
-sudo journalctl -u bluetooth-gps -u sp-base-relay -f
+sudo journalctl -u bluetooth-gps -u sp-rtk-base-relay -f
 ```
 
 ## Troubleshooting
@@ -369,7 +369,7 @@ sudo chmod 666 /dev/rfcomm0
 **Solutions:**
 ```bash
 # 1. Add user to dialout group
-sudo usermod -a -G dialout sp-base-relay
+sudo usermod -a -G dialout sp-rtk-base-relay
 
 # 2. Set correct permissions
 sudo chmod 666 /dev/rfcomm0
@@ -378,7 +378,7 @@ sudo chmod 666 /dev/rfcomm0
 # May need to adjust security policies
 
 # 4. Restart service
-sudo systemctl restart sp-base-relay
+sudo systemctl restart sp-rtk-base-relay
 ```
 
 ### Bluetooth Connection Keeps Dropping
@@ -415,16 +415,16 @@ hcitool rssi 00:11:22:33:44:55
 ```bash
 # 1. Check service dependencies
 sudo systemctl list-dependencies bluetooth-gps
-sudo systemctl list-dependencies sp-base-relay
+sudo systemctl list-dependencies sp-rtk-base-relay
 
 # 2. Ensure services are enabled
 sudo systemctl enable bluetooth
 sudo systemctl enable bluetooth-gps
-sudo systemctl enable sp-base-relay
+sudo systemctl enable sp-rtk-base-relay
 
 # 3. Check start order
 # bluetooth-gps should start after bluetooth
-# sp-base-relay should start after bluetooth-gps
+# sp-rtk-base-relay should start after bluetooth-gps
 
 # 4. Check for failed services
 systemctl --failed
@@ -465,7 +465,7 @@ pipeline:
 
 ```bash
 # Check CPU and memory usage
-top -p $(pgrep -f sp-base-relay)
+top -p $(pgrep -f sp-rtk-base-relay)
 
 # Check Bluetooth adapter status
 hciconfig hci0
@@ -497,7 +497,7 @@ To connect multiple Bluetooth GPS devices:
 
 1. Create separate service files (bluetooth-gps2.service, etc.)
 2. Use different RFCOMM_DEVICE numbers (0, 1, 2...)
-3. Update sp-base-relay configuration to use appropriate port
+3. Update sp-rtk-base-relay configuration to use appropriate port
 
 ### Integration with RTKBase
 
@@ -526,8 +526,8 @@ input:
 
 ```bash
 # Restrict config file access
-sudo chmod 600 /etc/sp-base-relay/config.yaml
-sudo chown sp-base-relay:sp-base-relay /etc/sp-base-relay/config.yaml
+sudo chmod 600 /etc/sp-rtk-base-relay/config.yaml
+sudo chown sp-rtk-base-relay:sp-rtk-base-relay /etc/sp-rtk-base-relay/config.yaml
 ```
 
 ### Network Security
@@ -547,7 +547,7 @@ sudo ufw allow from 192.168.1.0/24 to any port 8080
 sudo tools/bluetooth/status.sh
 
 # Monthly: Check logs for errors
-sudo journalctl -u bluetooth-gps -u sp-base-relay --since "1 month ago" -p err
+sudo journalctl -u bluetooth-gps -u sp-rtk-base-relay --since "1 month ago" -p err
 
 # Quarterly: Update system packages
 sudo apt update && sudo apt upgrade
@@ -557,10 +557,10 @@ sudo apt update && sudo apt upgrade
 
 ```bash
 # Backup important files
-sudo tar czf sp-base-relay-backup.tar.gz \
-  /etc/sp-base-relay/config.yaml \
+sudo tar czf sp-rtk-base-relay-backup.tar.gz \
+  /etc/sp-rtk-base-relay/config.yaml \
   /etc/systemd/system/bluetooth-gps.service \
-  /etc/systemd/system/sp-base-relay.service
+  /etc/systemd/system/sp-rtk-base-relay.service
 ```
 
 ## Support and Resources
@@ -581,7 +581,7 @@ sudo tar czf sp-base-relay-backup.tar.gz \
 
 For issues or questions:
 1. Check the troubleshooting section above
-2. Review logs: `sudo journalctl -u sp-base-relay -n 100`
+2. Review logs: `sudo journalctl -u sp-rtk-base-relay -n 100`
 3. Run diagnostics: `sudo tools/bluetooth/test-connection.sh`
 4. Open an issue on GitHub with log output
 
@@ -591,13 +591,13 @@ For issues or questions:
 
 ```bash
 # Start everything
-sudo systemctl start bluetooth-gps sp-base-relay
+sudo systemctl start bluetooth-gps sp-rtk-base-relay
 
 # Stop everything
-sudo systemctl stop sp-base-relay bluetooth-gps
+sudo systemctl stop sp-rtk-base-relay bluetooth-gps
 
 # Restart everything
-sudo systemctl restart bluetooth-gps sp-base-relay
+sudo systemctl restart bluetooth-gps sp-rtk-base-relay
 
 # Check status
 sudo tools/bluetooth/status.sh
@@ -609,13 +609,13 @@ sudo tools/bluetooth/test-connection.sh
 sudo tools/bluetooth/monitor-data.sh
 
 # View logs
-sudo journalctl -u bluetooth-gps -u sp-base-relay -f
+sudo journalctl -u bluetooth-gps -u sp-rtk-base-relay -f
 ```
 
 ### File Locations
 
-- Configuration: `/etc/sp-base-relay/config.yaml`
+- Configuration: `/etc/sp-rtk-base-relay/config.yaml`
 - Service files: `/etc/systemd/system/*.service`
-- Logs: `journalctl` or `/var/log/sp-base-relay/`
+- Logs: `journalctl` or `/var/log/sp-rtk-base-relay/`
 - Serial port: `/dev/rfcomm0`
 - Scripts: `tools/bluetooth/*.sh`

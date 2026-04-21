@@ -201,7 +201,7 @@ class LoggerManager:
 
     @classmethod
     def setup_logging(
-        cls, config: LoggingConfig, logger_name: str = "sp_base_relay"
+        cls, config: LoggingConfig, logger_name: str = "sp_rtk_base_relay"
     ) -> logging.Logger:
         """Set up logging configuration.
 
@@ -299,7 +299,7 @@ class LoggerManager:
             )
 
     @classmethod
-    def get_logger(cls, name: str = "sp_base_relay") -> logging.Logger:
+    def get_logger(cls, name: str = "sp_rtk_base_relay") -> logging.Logger:
         """Get a logger instance.
 
         Args:
@@ -324,10 +324,10 @@ class LoggerManager:
 
         # Return child logger
         if cls._root_logger:
-            if name == "sp_base_relay":
+            if name == "sp_rtk_base_relay":
                 return cls._root_logger
             else:
-                return cls._root_logger.getChild(name.replace("sp_base_relay.", ""))
+                return cls._root_logger.getChild(name.replace("sp_rtk_base_relay.", ""))
         else:
             return logging.getLogger(name)
 
@@ -358,7 +358,7 @@ class LoggerManager:
 
 
 # Convenience functions for getting loggers
-def get_logger(name: str = "sp_base_relay") -> logging.Logger:
+def get_logger(name: str = "sp_rtk_base_relay") -> logging.Logger:
     """Get a logger instance.
 
     Args:

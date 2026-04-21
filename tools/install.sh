@@ -1,6 +1,6 @@
 #!/bin/bash
 # SP-Base-Relay Installation Script
-# This script installs sp-base-relay as a systemd service
+# This script installs sp-rtk-base-relay as a systemd service
 
 set -e
 
@@ -11,13 +11,13 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration
-SERVICE_NAME="sp-base-relay"
-SERVICE_USER="sp-base-relay"
-SERVICE_GROUP="sp-base-relay"
+SERVICE_NAME="sp-rtk-base-relay"
+SERVICE_USER="sp-rtk-base-relay"
+SERVICE_GROUP="sp-rtk-base-relay"
 INSTALL_DIR="/usr/local/bin"
-CONFIG_DIR="/etc/sp-base-relay"
-DATA_DIR="/var/lib/sp-base-relay"
-LOG_DIR="/var/log/sp-base-relay"
+CONFIG_DIR="/etc/sp-rtk-base-relay"
+DATA_DIR="/var/lib/sp-rtk-base-relay"
+LOG_DIR="/var/log/sp-rtk-base-relay"
 SYSTEMD_DIR="/etc/systemd/system"
 
 # Functions
@@ -111,11 +111,11 @@ create_directories() {
 }
 
 install_package() {
-    print_info "Installing sp-base-relay package..."
+    print_info "Installing sp-rtk-base-relay package..."
     
     # Check if package is installed
-    if python3 -c "import sp_base_relay" 2>/dev/null; then
-        print_warning "sp-base-relay package already installed"
+    if python3 -c "import sp_rtk_base_relay" 2>/dev/null; then
+        print_warning "sp-rtk-base-relay package already installed"
         read -p "Do you want to upgrade? [y/N] " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -127,10 +127,10 @@ install_package() {
     # Install or upgrade package
     if command -v uv &> /dev/null; then
         print_info "Installing with uv..."
-        uv pip install --system sp-base-relay
+        uv pip install --system sp-rtk-base-relay
     elif command -v pip3 &> /dev/null; then
         print_info "Installing with pip..."
-        pip3 install sp-base-relay
+        pip3 install sp-rtk-base-relay
     else
         print_error "Neither uv nor pip3 found"
         exit 1
@@ -160,7 +160,7 @@ setup_configuration() {
     fi
     
     # Generate default configuration
-    sp-base-relay --generate-config > "$CONFIG_FILE"
+    sp-rtk-base-relay --generate-config > "$CONFIG_FILE"
     chown root:root "$CONFIG_FILE"
     chmod 644 "$CONFIG_FILE"
     

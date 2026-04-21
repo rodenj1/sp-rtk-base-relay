@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from sp_base_relay.config import (
+from sp_rtk_base_relay.config import (
     Config,
     DestinationConfig,
     DestinationFilterConfig,
@@ -16,7 +16,7 @@ from sp_base_relay.config import (
     SurePathDestinationConfig,
     TcpServerDestinationConfig,
 )
-from sp_base_relay.exceptions import ConfigurationError
+from sp_rtk_base_relay.exceptions import ConfigurationError
 
 
 # ============================================================================

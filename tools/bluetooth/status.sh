@@ -1,5 +1,5 @@
 #!/bin/bash
-# Check status of all Bluetooth GPS and sp-base-relay services
+# Check status of all Bluetooth GPS and sp-rtk-base-relay services
 
 # Colors
 RED='\033[0;31m'
@@ -26,13 +26,13 @@ else
 fi
 echo ""
 
-# Check sp-base-relay service
+# Check sp-rtk-base-relay service
 echo -e "${YELLOW}SP-Base-Relay Service:${NC}"
-if systemctl list-unit-files | grep -q "sp-base-relay.service"; then
-    systemctl status sp-base-relay --no-pager -l | head -n 10
+if systemctl list-unit-files | grep -q "sp-rtk-base-relay.service"; then
+    systemctl status sp-rtk-base-relay --no-pager -l | head -n 10
 else
     echo -e "${RED}Not installed${NC}"
-    echo "Install with: sudo cp tools/systemd/sp-base-relay.service /etc/systemd/system/"
+    echo "Install with: sudo cp tools/systemd/sp-rtk-base-relay.service /etc/systemd/system/"
 fi
 echo ""
 
@@ -60,7 +60,7 @@ echo -n "Bluetooth-GPS: "
 systemctl is-active --quiet bluetooth-gps 2>/dev/null && echo -e "${GREEN}Active${NC}" || echo -e "${RED}Inactive${NC}"
 
 echo -n "SP-Base-Relay: "
-systemctl is-active --quiet sp-base-relay 2>/dev/null && echo -e "${GREEN}Active${NC}" || echo -e "${RED}Inactive${NC}"
+systemctl is-active --quiet sp-rtk-base-relay 2>/dev/null && echo -e "${GREEN}Active${NC}" || echo -e "${RED}Inactive${NC}"
 
 echo -n "Serial Port: "
 [ -e /dev/rfcomm0 ] && echo -e "${GREEN}Present${NC}" || echo -e "${RED}Missing${NC}"

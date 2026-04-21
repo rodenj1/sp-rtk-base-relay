@@ -9,12 +9,12 @@ import time
 
 import pytest
 
-from sp_base_relay.core.destinations.base_destination import (
+from sp_rtk_base_relay.core.destinations.base_destination import (
     BaseDestination,
     DestinationStats,
     DEFAULT_QUEUE_SIZE,
 )
-from sp_base_relay.core.message_filter import FilterConfig, FilterMode
+from sp_rtk_base_relay.core.message_filter import FilterConfig, FilterMode
 from typing import Any
 
 

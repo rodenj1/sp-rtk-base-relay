@@ -394,7 +394,7 @@ class LoggingConfig:
 
     level: str = "INFO"
     format: str = "json"
-    file: str | None = "/var/log/sp-base-relay.log"
+    file: str | None = "/var/log/sp-rtk-base-relay.log"
     max_size_mb: int = 50
     backup_count: int = 3
 
@@ -431,9 +431,9 @@ class ServiceConfig:
     """Service configuration."""
 
     daemon: bool = False
-    pid_file: str = "/var/run/sp-base-relay.pid"
-    user: str = "sp-base-relay"
-    group: str = "sp-base-relay"
+    pid_file: str = "/var/run/sp-rtk-base-relay.pid"
+    user: str = "sp-rtk-base-relay"
+    group: str = "sp-rtk-base-relay"
 
 
 # ============================================================================
@@ -966,8 +966,8 @@ class ConfigManager:
     """Configuration manager for SP-Base-Relay."""
 
     DEFAULT_CONFIG_LOCATIONS = [
-        "/etc/sp-base-relay/config.yaml",
-        "~/.config/sp-base-relay/config.yaml",
+        "/etc/sp-rtk-base-relay/config.yaml",
+        "~/.config/sp-rtk-base-relay/config.yaml",
         "./config.yaml",
     ]
 
@@ -1213,15 +1213,15 @@ class ConfigManager:
             "logging": {
                 "level": "INFO",
                 "format": "json",
-                "file": "/var/log/sp-base-relay.log",
+                "file": "/var/log/sp-rtk-base-relay.log",
                 "max_size_mb": 50,
                 "backup_count": 3,
             },
             "service": {
                 "daemon": False,
-                "pid_file": "/var/run/sp-base-relay.pid",
-                "user": "sp-base-relay",
-                "group": "sp-base-relay",
+                "pid_file": "/var/run/sp-rtk-base-relay.pid",
+                "user": "sp-rtk-base-relay",
+                "group": "sp-rtk-base-relay",
             },
         }
 

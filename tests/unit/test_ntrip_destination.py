@@ -8,18 +8,18 @@ from unittest.mock import Mock, patch, MagicMock
 
 import pytest
 
-from sp_base_relay.config import (
+from sp_rtk_base_relay.config import (
     DestinationConfig,
     DestinationFilterConfig,
     NtripDestinationConfig,
     SurePathDestinationConfig,
 )
-from sp_base_relay.core.destinations.ntrip_destination import (
+from sp_rtk_base_relay.core.destinations.ntrip_destination import (
     NtripDestination,
     build_ntrip_destination,
 )
-from sp_base_relay.core.message_filter import FilterConfig
-from sp_base_relay.exceptions import ConfigurationError, NtripError
+from sp_rtk_base_relay.core.message_filter import FilterConfig
+from sp_rtk_base_relay.exceptions import ConfigurationError, NtripError
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +124,7 @@ class TestNtripDestinationInit:
 class TestNtripConnectionV1:
     """Tests for NTRIP v1.0 connection and auth."""
 
-    @patch("sp_base_relay.core.destinations.ntrip_destination.socket.socket")
+    @patch("sp_rtk_base_relay.core.destinations.ntrip_destination.socket.socket")
     def test_connect_v1_success(
         self, mock_socket_cls: Mock, dest_v1: NtripDestination
     ) -> None:
@@ -141,7 +141,7 @@ class TestNtripConnectionV1:
         assert b"SOURCE my_password /MY_MOUNT" in sent_data
         assert b"Source-Agent:" in sent_data
 
-    @patch("sp_base_relay.core.destinations.ntrip_destination.socket.socket")
+    @patch("sp_rtk_base_relay.core.destinations.ntrip_destination.socket.socket")
     def test_connect_v1_auth_failure(
         self, mock_socket_cls: Mock, dest_v1: NtripDestination
     ) -> None:
@@ -153,7 +153,7 @@ class TestNtripConnectionV1:
             dest_v1._connect()
         assert dest_v1._socket is None
 
-    @patch("sp_base_relay.core.destinations.ntrip_destination.socket.socket")
+    @patch("sp_rtk_base_relay.core.destinations.ntrip_destination.socket.socket")
     def test_connect_v1_connection_refused(
         self, mock_socket_cls: Mock, dest_v1: NtripDestination
     ) -> None:
@@ -169,7 +169,7 @@ class TestNtripConnectionV1:
 class TestNtripConnectionV2:
     """Tests for NTRIP v2.0 connection and auth."""
 
-    @patch("sp_base_relay.core.destinations.ntrip_destination.socket.socket")
+    @patch("sp_rtk_base_relay.core.destinations.ntrip_destination.socket.socket")
     def test_connect_v2_success(
         self, mock_socket_cls: Mock, dest_v2: NtripDestination
     ) -> None:
@@ -190,7 +190,7 @@ class TestNtripConnectionV2:
         expected_creds = base64.b64encode(b"onocoy_user:onocoy_pass").decode()
         assert f"Authorization: Basic {expected_creds}" in sent_data
 
-    @patch("sp_base_relay.core.destinations.ntrip_destination.socket.socket")
+    @patch("sp_rtk_base_relay.core.destinations.ntrip_destination.socket.socket")
     def test_connect_v2_auth_failure(
         self, mock_socket_cls: Mock, dest_v2: NtripDestination
     ) -> None:
@@ -201,7 +201,7 @@ class TestNtripConnectionV2:
         with pytest.raises(NtripError, match="v2.0 auth failed"):
             dest_v2._connect()
 
-    @patch("sp_base_relay.core.destinations.ntrip_destination.socket.socket")
+    @patch("sp_rtk_base_relay.core.destinations.ntrip_destination.socket.socket")
     def test_connect_v2_timeout(
         self, mock_socket_cls: Mock, dest_v2: NtripDestination
     ) -> None:
@@ -212,7 +212,7 @@ class TestNtripConnectionV2:
         with pytest.raises(NtripError, match="timeout"):
             dest_v2._connect()
 
-    @patch("sp_base_relay.core.destinations.ntrip_destination.socket.socket")
+    @patch("sp_rtk_base_relay.core.destinations.ntrip_destination.socket.socket")
     def test_connect_sets_keepalive(
         self, mock_socket_cls: Mock, dest_v2: NtripDestination
     ) -> None:
@@ -369,7 +369,7 @@ class TestNtripBackoff:
             dest_v1._attempt_connect()
             mock_connect.assert_not_called()
 
-    @patch("sp_base_relay.core.destinations.ntrip_destination.socket.socket")
+    @patch("sp_rtk_base_relay.core.destinations.ntrip_destination.socket.socket")
     def test_attempt_connect_success_resets_backoff(
         self, mock_socket_cls: Mock, dest_v1: NtripDestination
     ) -> None:
@@ -483,7 +483,7 @@ class TestBuildNtripDestination:
 
     def test_factory_registration(self) -> None:
         """Verify 'ntrip' is registered in DestinationFactory."""
-        from sp_base_relay.core.destinations.destination_factory import (
+        from sp_rtk_base_relay.core.destinations.destination_factory import (
             DestinationFactory,
         )
         assert "ntrip" in DestinationFactory._builders
@@ -497,7 +497,7 @@ class TestBuildNtripDestination:
 class TestProtocolFormat:
     """Tests verifying exact protocol format compliance."""
 
-    @patch("sp_base_relay.core.destinations.ntrip_destination.socket.socket")
+    @patch("sp_rtk_base_relay.core.destinations.ntrip_destination.socket.socket")
     def test_v1_source_format(
         self, mock_socket_cls: Mock, dest_v1: NtripDestination
     ) -> None:
@@ -511,10 +511,10 @@ class TestProtocolFormat:
         request = mock_sock.sendall.call_args_list[0][0][0].decode("ascii")
         lines = request.split("\r\n")
         assert lines[0] == "SOURCE my_password /MY_MOUNT"
-        assert lines[1].startswith("Source-Agent: NTRIP sp-base-relay/")
+        assert lines[1].startswith("Source-Agent: NTRIP sp-rtk-base-relay/")
         assert lines[2] == ""  # Empty line terminates headers
 
-    @patch("sp_base_relay.core.destinations.ntrip_destination.socket.socket")
+    @patch("sp_rtk_base_relay.core.destinations.ntrip_destination.socket.socket")
     def test_v2_post_format(
         self, mock_socket_cls: Mock, dest_v2: NtripDestination
     ) -> None:

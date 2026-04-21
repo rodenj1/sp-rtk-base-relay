@@ -18,20 +18,20 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from sp_base_relay.config import (
+from sp_rtk_base_relay.config import (
     DestinationConfig,
     DestinationFilterConfig,
     NtripDestinationConfig,
     SurePathDestinationConfig,
 )
-from sp_base_relay.core.destinations.base_destination import BaseDestination
-from sp_base_relay.core.destinations.surepath_destination import (
+from sp_rtk_base_relay.core.destinations.base_destination import BaseDestination
+from sp_rtk_base_relay.core.destinations.surepath_destination import (
     SurePathDestination,
     build_surepath_destination,
 )
-from sp_base_relay.core.message_filter import FilterConfig, FilterMode
-from sp_base_relay.core.rtcm_client import ConnectionStats, RTCMClient
-from sp_base_relay.exceptions import ConfigurationError, DestinationError
+from sp_rtk_base_relay.core.message_filter import FilterConfig, FilterMode
+from sp_rtk_base_relay.core.rtcm_client import ConnectionStats, RTCMClient
+from sp_rtk_base_relay.exceptions import ConfigurationError, DestinationError
 
 
 # ============================================================================
@@ -136,7 +136,7 @@ class TestConstruction:
         dest = _make_dest()
         assert dest._next_connect_time == 0.0
 
-    @patch("sp_base_relay.core.destinations.surepath_destination.RTCMClient")
+    @patch("sp_rtk_base_relay.core.destinations.surepath_destination.RTCMClient")
     def test_creates_rtcm_client_from_config(self, mock_cls: MagicMock) -> None:
         """Verify RTCMClient is constructed with converted config."""
         cfg = _default_surepath_config()
@@ -341,7 +341,7 @@ class TestClientStats:
 class TestFactoryBuilder:
     """build_surepath_destination + auto-registration."""
 
-    @patch("sp_base_relay.core.destinations.surepath_destination.RTCMClient")
+    @patch("sp_rtk_base_relay.core.destinations.surepath_destination.RTCMClient")
     def test_build_creates_surepath_destination(
         self, mock_cls: MagicMock
     ) -> None:
@@ -350,7 +350,7 @@ class TestFactoryBuilder:
         assert isinstance(dest, SurePathDestination)
         assert dest.name == "sp1"
 
-    @patch("sp_base_relay.core.destinations.surepath_destination.RTCMClient")
+    @patch("sp_rtk_base_relay.core.destinations.surepath_destination.RTCMClient")
     def test_build_applies_filter(self, mock_cls: MagicMock) -> None:
         cfg = DestinationConfig(
             name="sp-filtered",
@@ -387,7 +387,7 @@ class TestFactoryBuilder:
             build_surepath_destination(cfg)
 
     def test_surepath_auto_registered_in_factory(self) -> None:
-        from sp_base_relay.core.destinations.destination_factory import (
+        from sp_rtk_base_relay.core.destinations.destination_factory import (
             DestinationFactory,
         )
 

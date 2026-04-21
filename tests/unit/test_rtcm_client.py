@@ -11,9 +11,9 @@ import threading
 import time
 from unittest.mock import Mock, patch
 
-from sp_base_relay.config import RTCMServerConfig
-from sp_base_relay.core.rtcm_client import RTCMClient, HeartbeatMonitor, ConnectionStats
-from sp_base_relay.core.connection_states import ConnectionState
+from sp_rtk_base_relay.config import RTCMServerConfig
+from sp_rtk_base_relay.core.rtcm_client import RTCMClient, HeartbeatMonitor, ConnectionStats
+from sp_rtk_base_relay.core.connection_states import ConnectionState
 
 
 # Simple inline mock server for testing

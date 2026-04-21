@@ -5,10 +5,10 @@ Tests the input source factory for creating and registering input source types.
 
 import pytest
 
-from sp_base_relay.core.input_sources.input_factory import InputSourceFactory
-from sp_base_relay.core.input_sources.base_input import InputSource
-from sp_base_relay.core.input_sources.serial_input import SerialInputSource
-from sp_base_relay.exceptions import ConfigurationError
+from sp_rtk_base_relay.core.input_sources.input_factory import InputSourceFactory
+from sp_rtk_base_relay.core.input_sources.base_input import InputSource
+from sp_rtk_base_relay.core.input_sources.serial_input import SerialInputSource
+from sp_rtk_base_relay.exceptions import ConfigurationError
 
 
 class TestInputSourceFactory:

@@ -1,12 +1,12 @@
 """RelayEngine — high-level facade for programmatic relay control.
 
 This module provides :class:`RelayEngine`, the recommended entry-point
-for applications that embed *sp-base-relay* as a Python dependency.
+for applications that embed *sp-rtk-base-relay* as a Python dependency.
 
 Typical usage::
 
-    from sp_base_relay.engine import RelayEngine
-    from sp_base_relay.config import InputConfig, DestinationConfig
+    from sp_rtk_base_relay.engine import RelayEngine
+    from sp_rtk_base_relay.config import InputConfig, DestinationConfig
 
     engine = RelayEngine(InputConfig(source="tcp", config={"host": "...", "port": 2101}))
     engine.start([dest_config_1, dest_config_2])
@@ -30,23 +30,23 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from sp_base_relay.config import DestinationConfig, InputConfig
-from sp_base_relay.core.broadcast_hub import BroadcastHub
-from sp_base_relay.core.destinations.destination_factory import DestinationFactory
-from sp_base_relay.core.events import (
+from sp_rtk_base_relay.config import DestinationConfig, InputConfig
+from sp_rtk_base_relay.core.broadcast_hub import BroadcastHub
+from sp_rtk_base_relay.core.destinations.destination_factory import DestinationFactory
+from sp_rtk_base_relay.core.events import (
     ENGINE_STARTED,
     ENGINE_STOPPED,
     EventBus,
     EventSubscription,
     RelayEvent,
 )
-from sp_base_relay.core.input_sources.input_factory import InputSourceFactory
-from sp_base_relay.core.status import RelayStatus, build_relay_status
-from sp_base_relay.exceptions import ConfigurationError, ServiceError
+from sp_rtk_base_relay.core.input_sources.input_factory import InputSourceFactory
+from sp_rtk_base_relay.core.status import RelayStatus, build_relay_status
+from sp_rtk_base_relay.exceptions import ConfigurationError, ServiceError
 
 if TYPE_CHECKING:
-    from sp_base_relay.core.destinations.base_destination import BaseDestination
-    from sp_base_relay.core.input_sources.base_input import InputSource
+    from sp_rtk_base_relay.core.destinations.base_destination import BaseDestination
+    from sp_rtk_base_relay.core.input_sources.base_input import InputSource
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +55,8 @@ class RelayEngine:
     """High-level relay engine for programmatic control.
 
     This is the recommended API for applications that embed
-    *sp-base-relay* as a dependency.  For standalone CLI usage,
-    run ``sp-base-relay --config config.yaml`` which uses this
+    *sp-rtk-base-relay* as a dependency.  For standalone CLI usage,
+    run ``sp-rtk-base-relay --config config.yaml`` which uses this
     engine internally.
 
     The engine is created in a **stopped** state.  Call :meth:`start`

@@ -13,7 +13,7 @@ RFCOMM_DEVICE=0
 
 # Logging function
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/sp-base-relay/bluetooth-recovery.log
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a /var/log/sp-rtk-base-relay/bluetooth-recovery.log
 }
 
 log "=== Bluetooth GPS Recovery Started ==="

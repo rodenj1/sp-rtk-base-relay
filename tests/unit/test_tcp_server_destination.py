@@ -24,19 +24,19 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from sp_base_relay.config import (
+from sp_rtk_base_relay.config import (
     DestinationConfig,
     DestinationFilterConfig,
     TcpServerDestinationConfig,
 )
-from sp_base_relay.core.destinations.tcp_server_destination import (
+from sp_rtk_base_relay.core.destinations.tcp_server_destination import (
     CLIENT_WRITE_TIMEOUT,
     TcpServerDestination,
     build_tcp_server_destination,
 )
-from sp_base_relay.core.destinations.destination_factory import DestinationFactory
-from sp_base_relay.core.message_filter import FilterConfig
-from sp_base_relay.exceptions import DestinationError
+from sp_rtk_base_relay.core.destinations.destination_factory import DestinationFactory
+from sp_rtk_base_relay.core.message_filter import FilterConfig
+from sp_rtk_base_relay.exceptions import DestinationError
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
@@ -549,7 +549,7 @@ class TestTcpServerMetrics:
 
     def test_client_count_metric_updated(self) -> None:
         """Verify MetricsCollector reads client_count from tcp_server."""
-        from sp_base_relay.metrics import MetricsCollector
+        from sp_rtk_base_relay.metrics import MetricsCollector
 
         # Use unique namespace to avoid conflicts
         ns = f"test_tcp_metric_{int(time.time() * 1000)}"
@@ -588,7 +588,7 @@ class TestTcpServerMetrics:
 
     def test_destination_type_check(self) -> None:
         """Non-tcp_server destinations don't set client count gauge."""
-        from sp_base_relay.metrics import MetricsCollector
+        from sp_rtk_base_relay.metrics import MetricsCollector
 
         ns = f"test_tcp_notype_{int(time.time() * 1000)}"
         mc = MetricsCollector(namespace=ns)

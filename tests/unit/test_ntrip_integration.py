@@ -12,10 +12,10 @@ import time
 
 import pytest
 
-from sp_base_relay.config import NtripDestinationConfig
-from sp_base_relay.core.destinations.ntrip_destination import NtripDestination
-from sp_base_relay.core.message_filter import FilterConfig
-from sp_base_relay.exceptions import NtripError
+from sp_rtk_base_relay.config import NtripDestinationConfig
+from sp_rtk_base_relay.core.destinations.ntrip_destination import NtripDestination
+from sp_rtk_base_relay.core.message_filter import FilterConfig
+from sp_rtk_base_relay.exceptions import NtripError
 from tests.fixtures.mock_ntrip_caster import MockNtripCaster
 
 

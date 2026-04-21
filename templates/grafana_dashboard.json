@@ -36,7 +36,7 @@
     }
   ],
   "id": null,
-  "uid": "sp-base-relay-v2",
+  "uid": "sp-rtk-base-relay-v2",
   "title": "SP-Base-Relay v2 Monitoring",
   "description": "Multi-destination RTCM relay monitoring with per-destination metrics",
   "tags": ["rtcm", "gps", "relay", "multi-destination"],
@@ -59,7 +59,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sp_base_relay_service_uptime_seconds",
+          "expr": "sp_rtk_base_relay_service_uptime_seconds",
           "legendFormat": "Service Uptime",
           "refId": "A"
         }
@@ -104,7 +104,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sp_base_relay_active_destinations_count",
+          "expr": "sp_rtk_base_relay_active_destinations_count",
           "legendFormat": "Connected",
           "refId": "A"
         }
@@ -150,7 +150,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sp_base_relay_input_connection_status",
+          "expr": "sp_rtk_base_relay_input_connection_status",
           "legendFormat": "GPS Input",
           "refId": "A"
         }
@@ -203,7 +203,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sp_base_relay_hub_running_status",
+          "expr": "sp_rtk_base_relay_hub_running_status",
           "legendFormat": "Hub",
           "refId": "A"
         }
@@ -256,7 +256,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sp_base_relay_dest_connection_status{destination=~\"$destination\"}",
+          "expr": "sp_rtk_base_relay_dest_connection_status{destination=~\"$destination\"}",
           "legendFormat": "{{destination}}",
           "refId": "A"
         }
@@ -309,7 +309,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(sp_base_relay_dest_bytes_sent_total{destination=~\"$destination\"}[1m])",
+          "expr": "rate(sp_rtk_base_relay_dest_bytes_sent_total{destination=~\"$destination\"}[1m])",
           "legendFormat": "{{destination}}",
           "refId": "A"
         }
@@ -370,7 +370,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(sp_base_relay_dest_messages_sent_total{destination=~\"$destination\"}[1m])",
+          "expr": "rate(sp_rtk_base_relay_dest_messages_sent_total{destination=~\"$destination\"}[1m])",
           "legendFormat": "{{destination}}",
           "refId": "A"
         }
@@ -431,7 +431,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sp_base_relay_dest_queue_depth{destination=~\"$destination\"}",
+          "expr": "sp_rtk_base_relay_dest_queue_depth{destination=~\"$destination\"}",
           "legendFormat": "{{destination}}",
           "refId": "A"
         }
@@ -495,7 +495,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(sp_base_relay_dest_messages_dropped_total{destination=~\"$destination\"}[5m]) * 60",
+          "expr": "rate(sp_rtk_base_relay_dest_messages_dropped_total{destination=~\"$destination\"}[5m]) * 60",
           "legendFormat": "{{destination}} drops/min",
           "refId": "A"
         }
@@ -557,7 +557,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sp_base_relay_dest_connection_attempts_total{destination=~\"$destination\"}",
+          "expr": "sp_rtk_base_relay_dest_connection_attempts_total{destination=~\"$destination\"}",
           "legendFormat": "{{destination}}",
           "refId": "A"
         }
@@ -618,7 +618,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "rate(sp_base_relay_dest_errors_total{destination=~\"$destination\"}[5m]) * 60",
+          "expr": "rate(sp_rtk_base_relay_dest_errors_total{destination=~\"$destination\"}[5m]) * 60",
           "legendFormat": "{{destination}} errors/min",
           "refId": "A"
         }
@@ -680,7 +680,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sp_base_relay_input_seconds_since_last_data",
+          "expr": "sp_rtk_base_relay_input_seconds_since_last_data",
           "legendFormat": "Seconds since last GPS data",
           "refId": "A"
         }
@@ -743,7 +743,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sp_base_relay_dest_messages_filtered_total{destination=~\"$destination\"}",
+          "expr": "sp_rtk_base_relay_dest_messages_filtered_total{destination=~\"$destination\"}",
           "legendFormat": "{{destination}}",
           "refId": "A"
         }
@@ -784,10 +784,10 @@
           "uid": "${DS_PROMETHEUS}"
         },
         "query": {
-          "query": "label_values(sp_base_relay_dest_connection_status, destination)",
+          "query": "label_values(sp_rtk_base_relay_dest_connection_status, destination)",
           "refId": "StandardVariableQuery"
         },
-        "definition": "label_values(sp_base_relay_dest_connection_status, destination)",
+        "definition": "label_values(sp_rtk_base_relay_dest_connection_status, destination)",
         "multi": true,
         "includeAll": true,
         "allValue": ".*",

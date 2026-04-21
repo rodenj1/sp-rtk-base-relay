@@ -32,7 +32,7 @@ server:
 logging:
   level: INFO                 # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
   format: json                # Options: json, text
-  file: /var/log/sp-base-relay/sp-base-relay.log
+  file: /var/log/sp-rtk-base-relay/sp-rtk-base-relay.log
   max_size_mb: 50
   backup_count: 3
 
@@ -54,14 +54,14 @@ monitoring:
 # Service Configuration
 service:
   daemon: false
-  pid_file: /var/run/sp-base-relay.pid
-  user: sp-base-relay
-  group: sp-base-relay
+  pid_file: /var/run/sp-rtk-base-relay.pid
+  user: sp-rtk-base-relay
+  group: sp-rtk-base-relay
 
 # Notes:
 # - Bluetooth GPS device must be paired and trusted before starting
 # - bluetooth-gps.service must be running to create /dev/rfcomm0
-# - Serial port permissions: should be readable/writable by sp-base-relay user
+# - Serial port permissions: should be readable/writable by sp-rtk-base-relay user
 # - For troubleshooting, use: tools/bluetooth/test-connection.sh
 #
 # PySerial Standard Field Names (now aligned with SerialInputConfig):

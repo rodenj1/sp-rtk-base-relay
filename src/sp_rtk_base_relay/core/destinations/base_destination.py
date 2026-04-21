@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
-from sp_base_relay.core.message_filter import FilterConfig, MessageFilter
+from sp_rtk_base_relay.core.message_filter import FilterConfig, MessageFilter
 
 
 logger = logging.getLogger(__name__)

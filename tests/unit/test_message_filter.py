@@ -6,7 +6,7 @@ filter modes: pass_all, allowlist, and blocklist.
 
 import pytest
 
-from sp_base_relay.core.message_filter import (
+from sp_rtk_base_relay.core.message_filter import (
     FilterConfig,
     FilterMode,
     MessageFilter,

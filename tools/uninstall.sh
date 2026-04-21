@@ -1,6 +1,6 @@
 #!/bin/bash
 # SP-Base-Relay Uninstallation Script
-# This script removes sp-base-relay systemd service and optionally the package
+# This script removes sp-rtk-base-relay systemd service and optionally the package
 
 set -e
 
@@ -11,12 +11,12 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration
-SERVICE_NAME="sp-base-relay"
-SERVICE_USER="sp-base-relay"
-SERVICE_GROUP="sp-base-relay"
-CONFIG_DIR="/etc/sp-base-relay"
-DATA_DIR="/var/lib/sp-base-relay"
-LOG_DIR="/var/log/sp-base-relay"
+SERVICE_NAME="sp-rtk-base-relay"
+SERVICE_USER="sp-rtk-base-relay"
+SERVICE_GROUP="sp-rtk-base-relay"
+CONFIG_DIR="/etc/sp-rtk-base-relay"
+DATA_DIR="/var/lib/sp-rtk-base-relay"
+LOG_DIR="/var/log/sp-rtk-base-relay"
 SYSTEMD_DIR="/etc/systemd/system"
 
 # Functions
@@ -78,13 +78,13 @@ remove_service() {
 remove_package() {
     print_info "Checking for installed package..."
     
-    if ! python3 -c "import sp_base_relay" 2>/dev/null; then
+    if ! python3 -c "import sp_rtk_base_relay" 2>/dev/null; then
         print_warning "Package not installed"
         return
     fi
     
     echo ""
-    read -p "Do you want to uninstall the sp-base-relay package? [y/N] " -n 1 -r
+    read -p "Do you want to uninstall the sp-rtk-base-relay package? [y/N] " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         print_info "Keeping package installed"
@@ -93,10 +93,10 @@ remove_package() {
     
     if command -v uv &> /dev/null; then
         print_info "Uninstalling with uv..."
-        uv pip uninstall --system sp-base-relay
+        uv pip uninstall --system sp-rtk-base-relay
     elif command -v pip3 &> /dev/null; then
         print_info "Uninstalling with pip..."
-        pip3 uninstall -y sp-base-relay
+        pip3 uninstall -y sp-rtk-base-relay
     else
         print_warning "Neither uv nor pip3 found, skipping package removal"
         return
@@ -177,7 +177,7 @@ print_summary() {
     # Check what's remaining
     REMAINING=()
     
-    if python3 -c "import sp_base_relay" 2>/dev/null; then
+    if python3 -c "import sp_rtk_base_relay" 2>/dev/null; then
         REMAINING+=("Package is still installed")
     fi
     
@@ -220,7 +220,7 @@ main() {
     check_root
     
     # Confirm uninstallation
-    echo "This will remove the sp-base-relay systemd service."
+    echo "This will remove the sp-rtk-base-relay systemd service."
     echo "You will be prompted for optional removals (package, user, data)."
     echo ""
     read -p "Do you want to continue? [y/N] " -n 1 -r

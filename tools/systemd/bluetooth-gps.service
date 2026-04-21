@@ -1,9 +1,9 @@
 [Unit]
 Description=Bluetooth GPS Serial Bridge for RTK_GPS_BASE
-Documentation=https://github.com/rodenj1/sp-base-relay
+Documentation=https://github.com/rodenj1/sp-rtk-base-relay
 After=bluetooth.service
 Requires=bluetooth.service
-Before=sp-base-relay.service
+Before=sp-rtk-base-relay.service
 StartLimitBurst=20
 StartLimitIntervalSec=600
 
@@ -37,7 +37,7 @@ ExecStartPost=/bin/chmod 666 /dev/rfcomm${RFCOMM_DEVICE}
 ExecStartPost=/bin/sh -c 'timeout 5 head -c 1 /dev/rfcomm${RFCOMM_DEVICE} >/dev/null 2>&1 || echo "Warning: rfcomm device may not be fully ready"'
 
 # Cleanup on stop - run recovery script to properly reset Bluetooth connection
-ExecStopPost=/opt/sp-base-relay/tools/bluetooth/reset-connection.sh || true
+ExecStopPost=/opt/sp-rtk-base-relay/tools/bluetooth/reset-connection.sh || true
 ExecStopPost=/usr/bin/rfcomm release ${RFCOMM_DEVICE} || true
 
 # Restart configuration - More aggressive for Bluetooth recovery

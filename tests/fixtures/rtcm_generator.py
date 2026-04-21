@@ -8,7 +8,7 @@ but contains synthetic positioning data.
 import time
 from dataclasses import dataclass
 
-from sp_base_relay.rtcm_decoder import RTCMMessageDecoder
+from sp_rtk_base_relay.rtcm_decoder import RTCMMessageDecoder
 
 
 @dataclass

@@ -8,12 +8,12 @@ import socket
 from unittest.mock import patch, MagicMock, Mock
 import pytest
 
-from src.sp_base_relay.core.bluetooth_manager import BluetoothManager
-from src.sp_base_relay.core.input_sources.bluetooth_input import (
+from src.sp_rtk_base_relay.core.bluetooth_manager import BluetoothManager
+from src.sp_rtk_base_relay.core.input_sources.bluetooth_input import (
     BluetoothInputSource,
     BluetoothConfig,
 )
-from src.sp_base_relay.exceptions import InputSourceError
+from src.sp_rtk_base_relay.exceptions import InputSourceError
 
 
 class TestBluetoothConfig:
@@ -129,7 +129,7 @@ class TestBluetoothInputSourceConnection:
         
         mock_socket = Mock()
         
-        with patch('src.sp_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
+        with patch('src.sp_rtk_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
             result = source.connect()
         
         assert result is True
@@ -156,7 +156,7 @@ class TestBluetoothInputSourceConnection:
         
         mock_socket = Mock()
         
-        with patch('src.sp_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
+        with patch('src.sp_rtk_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
             result = source.connect()
         
         assert result is True
@@ -178,7 +178,7 @@ class TestBluetoothInputSourceConnection:
     
     def test_connect_device_not_found(self):
         """Test connection fails when device not found."""
-        from src.sp_base_relay.core.bluetooth_manager import BluetoothError
+        from src.sp_rtk_base_relay.core.bluetooth_manager import BluetoothError
         
         config = BluetoothConfig(device_name="NonExistent")
         source = BluetoothInputSource(config)
@@ -209,7 +209,7 @@ class TestBluetoothInputSourceConnection:
         mock_socket = Mock()
         mock_socket.connect.side_effect = socket.error("Connection refused")
         
-        with patch('src.sp_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
+        with patch('src.sp_rtk_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
             with pytest.raises(InputSourceError) as exc_info:
                 source.connect()
         
@@ -228,7 +228,7 @@ class TestBluetoothInputSourceConnection:
         
         mock_socket = Mock()
         
-        with patch('src.sp_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
+        with patch('src.sp_rtk_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
             source.connect()
             source.disconnect()
         
@@ -250,7 +250,7 @@ class TestBluetoothInputSourceConnection:
         
         mock_socket = Mock()
         
-        with patch('src.sp_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
+        with patch('src.sp_rtk_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
             source.connect()
             assert source.bt_manager is not None
             source.disconnect()
@@ -273,7 +273,7 @@ class TestBluetoothInputSourceConnection:
         
         mock_socket = Mock()
         
-        with patch('src.sp_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
+        with patch('src.sp_rtk_base_relay.core.input_sources.bluetooth_input.socket.socket', return_value=mock_socket):
             source.connect()
             # Should not raise despite close() error
             source.disconnect()

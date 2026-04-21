@@ -21,9 +21,9 @@ import logging
 from typing import Any
 from dataclasses import asdict
 
-from sp_base_relay.core.input_sources.tcp_input import TCPInputSource
-from sp_base_relay.core.rtcm_client import RTCMClient
-from sp_base_relay.config import RTCMServerConfig
+from sp_rtk_base_relay.core.input_sources.tcp_input import TCPInputSource
+from sp_rtk_base_relay.core.rtcm_client import RTCMClient
+from sp_rtk_base_relay.config import RTCMServerConfig
 from tests.fixtures.mock_rtcm_server import MockRTCMServer
 
 

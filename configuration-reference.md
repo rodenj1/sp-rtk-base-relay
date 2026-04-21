@@ -15,8 +15,8 @@ Configuration is loaded from the first found location:
 
 1. **Command line**: `--config /path/to/config.yaml`
 2. **Environment variable**: `SP_BASE_RELAY_CONFIG=/path/to/config.yaml`
-3. **User directory**: `~/.config/sp-base-relay/config.yaml`
-4. **System directory**: `/etc/sp-base-relay/config.yaml`
+3. **User directory**: `~/.config/sp-rtk-base-relay/config.yaml`
+4. **System directory**: `/etc/sp-rtk-base-relay/config.yaml`
 5. **Current directory**: `./config.yaml`
 
 ---
@@ -65,7 +65,7 @@ metrics:
 logging:
   level: "INFO"
   format: "json"
-  file: "/var/log/sp-base-relay.log"
+  file: "/var/log/sp-rtk-base-relay.log"
   max_size_mb: 50
   backup_count: 3
 
@@ -289,7 +289,7 @@ Access: `http://localhost:8080/metrics`
 |-------|------|---------|-------------|
 | `level` | string | `"INFO"` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
 | `format` | string | `"json"` | `json` (structured) or `text` (human-readable) |
-| `file` | string\|null | `"/var/log/sp-base-relay.log"` | Log file path (`null` for console only) |
+| `file` | string\|null | `"/var/log/sp-rtk-base-relay.log"` | Log file path (`null` for console only) |
 | `max_size_mb` | int | 50 | Max log file size in MB (>0) |
 | `backup_count` | int | 3 | Rotated backup files to keep (≥0) |
 
@@ -300,9 +300,9 @@ Access: `http://localhost:8080/metrics`
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `daemon` | bool | `false` | Run as background daemon |
-| `pid_file` | string | `"/var/run/sp-base-relay.pid"` | PID file location |
-| `user` | string | `"sp-base-relay"` | Service user |
-| `group` | string | `"sp-base-relay"` | Service group |
+| `pid_file` | string | `"/var/run/sp-rtk-base-relay.pid"` | PID file location |
+| `user` | string | `"sp-rtk-base-relay"` | Service user |
+| `group` | string | `"sp-rtk-base-relay"` | Service group |
 
 ---
 
@@ -346,10 +346,10 @@ export SP_DEST_ONOCOY_PORT="2102"
 
 ```bash
 # Validate configuration file
-sp-base-relay --config config.yaml --validate
+sp-rtk-base-relay --config config.yaml --validate
 
 # Generate default config
-sp-base-relay --generate-config > config.yaml
+sp-rtk-base-relay --generate-config > config.yaml
 ```
 
 ### Key Validation Rules
@@ -468,7 +468,7 @@ metrics:
 logging:
   level: "INFO"
   format: "json"
-  file: "/var/log/sp-base-relay.log"
+  file: "/var/log/sp-rtk-base-relay.log"
   max_size_mb: 100
   backup_count: 7
 ```
@@ -559,20 +559,20 @@ Configuration values are resolved in this order (later overrides earlier):
 
 ### File Permissions
 ```bash
-sudo chown sp-base-relay:sp-base-relay /etc/sp-base-relay/config.yaml
-sudo chmod 640 /etc/sp-base-relay/config.yaml
+sudo chown sp-rtk-base-relay:sp-rtk-base-relay /etc/sp-rtk-base-relay/config.yaml
+sudo chmod 640 /etc/sp-rtk-base-relay/config.yaml
 ```
 
 ---
 
 ## Programmatic Configuration (v2.1)
 
-When using sp-base-relay as an **embedded Python library**, no YAML file is needed. Configuration is done via Python dataclass objects.
+When using sp-rtk-base-relay as an **embedded Python library**, no YAML file is needed. Configuration is done via Python dataclass objects.
 
 ### InputConfig
 
 ```python
-from sp_base_relay.config import InputConfig
+from sp_rtk_base_relay.config import InputConfig
 
 # TCP input
 input_cfg = InputConfig(source="tcp", config={"host": "192.168.1.100", "port": 3000})
@@ -587,7 +587,7 @@ input_cfg = InputConfig(source="bluetooth", config={"device_address": "AA:BB:CC:
 ### DestinationConfig
 
 ```python
-from sp_base_relay.config import DestinationConfig
+from sp_rtk_base_relay.config import DestinationConfig
 
 # Sure-Path destination
 surepath = DestinationConfig(
@@ -620,7 +620,7 @@ local_tcp = DestinationConfig(
 ### RelayEngine Usage
 
 ```python
-from sp_base_relay import RelayEngine
+from sp_rtk_base_relay import RelayEngine
 
 engine = RelayEngine(input_cfg)
 

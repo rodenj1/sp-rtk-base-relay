@@ -10,11 +10,11 @@ import time
 import threading
 from unittest.mock import Mock, patch
 
-from sp_base_relay.core.data_pipeline import DataPipelineCoordinator
-from sp_base_relay.core.rtcm_client import RTCMClient
-from sp_base_relay.core.connection_states import ConnectionState
-from sp_base_relay.core.input_sources.base_input import InputSource
-from sp_base_relay.config import RTCMServerConfig
+from sp_rtk_base_relay.core.data_pipeline import DataPipelineCoordinator
+from sp_rtk_base_relay.core.rtcm_client import RTCMClient
+from sp_rtk_base_relay.core.connection_states import ConnectionState
+from sp_rtk_base_relay.core.input_sources.base_input import InputSource
+from sp_rtk_base_relay.config import RTCMServerConfig
 
 from typing import Any
 
@@ -489,7 +489,7 @@ class TestDataPipelineEdgeCases:
         coordinator.running = True
 
         # Should log warning and return
-        with patch("sp_base_relay.core.data_pipeline.logger") as mock_logger:
+        with patch("sp_rtk_base_relay.core.data_pipeline.logger") as mock_logger:
             coordinator.start_relay()
             mock_logger.warning.assert_called_once()
 

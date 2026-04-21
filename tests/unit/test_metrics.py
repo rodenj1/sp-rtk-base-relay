@@ -13,8 +13,8 @@ import pytest
 from unittest.mock import Mock, patch, PropertyMock
 from prometheus_client import REGISTRY
 
-from sp_base_relay.metrics import MetricsCollector, _DestSnapshot, _inc_delta
-from sp_base_relay.core.destinations.base_destination import DestinationStats
+from sp_rtk_base_relay.metrics import MetricsCollector, _DestSnapshot, _inc_delta
+from sp_rtk_base_relay.core.destinations.base_destination import DestinationStats
 
 
 # ======================================================================
@@ -92,9 +92,9 @@ class TestMetricsInitialization:
     """Test MetricsCollector initialization."""
 
     def test_default_namespace(self) -> None:
-        """Default namespace is 'sp_base_relay'."""
+        """Default namespace is 'sp_rtk_base_relay'."""
         mc = MetricsCollector()
-        assert mc.namespace == "sp_base_relay"
+        assert mc.namespace == "sp_rtk_base_relay"
         assert not mc.is_running
         assert mc._service_start_time > 0
 
@@ -138,7 +138,7 @@ class TestMetricsInitialization:
 class TestMetricsServerLifecycle:
     """Test metrics HTTP server start/stop."""
 
-    @patch("sp_base_relay.metrics.start_http_server")
+    @patch("sp_rtk_base_relay.metrics.start_http_server")
     def test_start_server(self, mock_start: Mock) -> None:
         """Start server on default port."""
         mc = MetricsCollector()
@@ -146,14 +146,14 @@ class TestMetricsServerLifecycle:
         mock_start.assert_called_once_with(9090, addr="0.0.0.0")
         assert mc.is_running
 
-    @patch("sp_base_relay.metrics.start_http_server")
+    @patch("sp_rtk_base_relay.metrics.start_http_server")
     def test_start_server_custom_port(self, mock_start: Mock) -> None:
         """Start server on custom port/host."""
         mc = MetricsCollector()
         mc.start_metrics_server(port=8080, host="127.0.0.1")
         mock_start.assert_called_once_with(8080, addr="127.0.0.1")
 
-    @patch("sp_base_relay.metrics.start_http_server")
+    @patch("sp_rtk_base_relay.metrics.start_http_server")
     def test_start_server_already_running(self, mock_start: Mock) -> None:
         """Starting when already running is a no-op."""
         mc = MetricsCollector()
@@ -161,7 +161,7 @@ class TestMetricsServerLifecycle:
         mc.start_metrics_server(port=9090)
         mock_start.assert_not_called()
 
-    @patch("sp_base_relay.metrics.start_http_server")
+    @patch("sp_rtk_base_relay.metrics.start_http_server")
     def test_start_server_failure(self, mock_start: Mock) -> None:
         """Server start failure propagates exception."""
         mock_start.side_effect = OSError("Port in use")

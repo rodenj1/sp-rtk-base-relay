@@ -15,9 +15,9 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from sp_base_relay.config import DestinationConfig
-from sp_base_relay.core.destinations.base_destination import BaseDestination
-from sp_base_relay.exceptions import ConfigurationError, DestinationError
+from sp_rtk_base_relay.config import DestinationConfig
+from sp_rtk_base_relay.core.destinations.base_destination import BaseDestination
+from sp_rtk_base_relay.exceptions import ConfigurationError, DestinationError
 
 logger = logging.getLogger(__name__)
 

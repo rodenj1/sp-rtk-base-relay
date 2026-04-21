@@ -103,12 +103,12 @@ uv run pytest tests/unit/test_input_factory.py -v
 ### Old Way (2 services)
 ```
 bluetooth-gps.service → shell scripts → rfcomm bind → /dev/rfcomm0
-sp-base-relay.service → reads from /dev/rfcomm0
+sp-rtk-base-relay.service → reads from /dev/rfcomm0
 ```
 
 ### New Way (1 service)
 ```
-sp-base-relay.service → Python Bluetooth → AF_BLUETOOTH socket
+sp-rtk-base-relay.service → Python Bluetooth → AF_BLUETOOTH socket
 ```
 
 ### Benefits
@@ -155,7 +155,7 @@ These packages are needed to build PyGObject from source. PyGObject provides the
 
 2. **Create Python 3.10 virtual environment:**
    ```bash
-   cd /opt/sp-base-relay
+   cd /opt/sp-rtk-base-relay
    /usr/local/bin/python3.10 -m venv .venv --system-site-packages
    source .venv/bin/activate
    ```
@@ -209,8 +209,8 @@ These packages are needed to build PyGObject from source. PyGObject provides the
 
 ### Phase 6: Migration
 - Stop old `bluetooth-gps.service`
-- Update sp-base-relay config to use Bluetooth input
-- Restart sp-base-relay.service
+- Update sp-rtk-base-relay config to use Bluetooth input
+- Restart sp-rtk-base-relay.service
 - Remove old shell scripts
 - Document migration process
 
@@ -218,7 +218,7 @@ These packages are needed to build PyGObject from source. PyGObject provides the
 
 ### Check Bluetooth Status
 ```python
-from src.sp_base_relay.core.bluetooth_manager import BluetoothManager
+from src.sp_rtk_base_relay.core.bluetooth_manager import BluetoothManager
 manager = BluetoothManager()
 devices = manager.discover_devices(timeout=10)
 print(devices)
@@ -226,7 +226,7 @@ print(devices)
 
 ### Check Available Input Types
 ```python
-from src.sp_base_relay.core.input_sources.input_factory import InputSourceFactory
+from src.sp_rtk_base_relay.core.input_sources.input_factory import InputSourceFactory
 print(InputSourceFactory.get_available_types())
 # Output: ['serial', 'tcp', 'bluetooth']
 ```

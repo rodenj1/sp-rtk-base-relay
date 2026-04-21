@@ -23,11 +23,11 @@ import queue
 import time
 from typing import Any
 
-from sp_base_relay.config import DestinationConfig, TcpServerDestinationConfig
-from sp_base_relay.core.destinations.base_destination import BaseDestination
-from sp_base_relay.core.destinations.destination_factory import DestinationFactory
-from sp_base_relay.core.message_filter import FilterConfig
-from sp_base_relay.exceptions import DestinationError
+from sp_rtk_base_relay.config import DestinationConfig, TcpServerDestinationConfig
+from sp_rtk_base_relay.core.destinations.base_destination import BaseDestination
+from sp_rtk_base_relay.core.destinations.destination_factory import DestinationFactory
+from sp_rtk_base_relay.core.message_filter import FilterConfig
+from sp_rtk_base_relay.exceptions import DestinationError
 
 logger = logging.getLogger(__name__)
 

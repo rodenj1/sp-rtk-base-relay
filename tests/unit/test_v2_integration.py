@@ -17,18 +17,18 @@ import time
 import threading
 from typing import Any
 
-from sp_base_relay.config import (
+from sp_rtk_base_relay.config import (
     NtripDestinationConfig,
     TcpServerDestinationConfig,
 )
-from sp_base_relay.core.broadcast_hub import BroadcastHub
-from sp_base_relay.core.destinations.ntrip_destination import NtripDestination
-from sp_base_relay.core.destinations.tcp_server_destination import (
+from sp_rtk_base_relay.core.broadcast_hub import BroadcastHub
+from sp_rtk_base_relay.core.destinations.ntrip_destination import NtripDestination
+from sp_rtk_base_relay.core.destinations.tcp_server_destination import (
     TcpServerDestination,
 )
-from sp_base_relay.core.message_filter import FilterConfig
-from sp_base_relay.core.input_sources.base_input import InputSource
-from sp_base_relay.metrics import MetricsCollector
+from sp_rtk_base_relay.core.message_filter import FilterConfig
+from sp_rtk_base_relay.core.input_sources.base_input import InputSource
+from sp_rtk_base_relay.metrics import MetricsCollector
 from tests.fixtures.mock_ntrip_caster import MockNtripCaster
 from tests.fixtures.rtcm_generator import RTCMGenerator
 

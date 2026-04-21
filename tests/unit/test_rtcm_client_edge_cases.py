@@ -8,9 +8,9 @@ import socket
 import time
 from unittest.mock import Mock
 
-from sp_base_relay.core.rtcm_client import RTCMClient
-from sp_base_relay.config import RTCMServerConfig
-from sp_base_relay.core.connection_states import ConnectionState
+from sp_rtk_base_relay.core.rtcm_client import RTCMClient
+from sp_rtk_base_relay.config import RTCMServerConfig
+from sp_rtk_base_relay.core.connection_states import ConnectionState
 
 
 class TestRTCMClientConnectionErrors:
@@ -287,7 +287,7 @@ class TestHeartbeatMonitorEdgeCases:
 
     def test_stop_when_not_running(self):
         """Test stop when monitor is not running."""
-        from sp_base_relay.core.rtcm_client import HeartbeatMonitor
+        from sp_rtk_base_relay.core.rtcm_client import HeartbeatMonitor
 
         monitor = HeartbeatMonitor(timeout_seconds=30)
 
@@ -298,7 +298,7 @@ class TestHeartbeatMonitorEdgeCases:
 
     def test_start_when_already_running(self):
         """Test start returns early if already running."""
-        from sp_base_relay.core.rtcm_client import HeartbeatMonitor
+        from sp_rtk_base_relay.core.rtcm_client import HeartbeatMonitor
 
         monitor = HeartbeatMonitor(timeout_seconds=30)
         monitor.running = True

@@ -6,7 +6,7 @@ import json
 from unittest.mock import Mock
 import pytest
 
-from sp_base_relay.logger import (
+from sp_rtk_base_relay.logger import (
     JSONFormatter,
     TextFormatter,
     LoggerManager,
@@ -18,8 +18,8 @@ from sp_base_relay.logger import (
     log_operation_success,
     log_operation_error,
 )
-from sp_base_relay.config import LoggingConfig
-from sp_base_relay.exceptions import ConfigurationError
+from sp_rtk_base_relay.config import LoggingConfig
+from sp_rtk_base_relay.exceptions import ConfigurationError
 
 
 class TestJSONFormatter:

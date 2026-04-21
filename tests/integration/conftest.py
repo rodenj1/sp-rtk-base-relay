@@ -12,7 +12,7 @@ from typing import Any
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 
-from sp_base_relay.core.input_sources.tcp_input import TCPInputSource, TCPConfig
+from sp_rtk_base_relay.core.input_sources.tcp_input import TCPInputSource, TCPConfig
 from tests.fixtures.mock_rtcm_server import MockRTCMServer
 
 
@@ -318,8 +318,8 @@ def configure_integration_test_logging() -> None:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    # Set sp_base_relay logger to DEBUG for detailed output
-    sp_logger = logging.getLogger("sp_base_relay")
+    # Set sp_rtk_base_relay logger to DEBUG for detailed output
+    sp_logger = logging.getLogger("sp_rtk_base_relay")
     sp_logger.setLevel(logging.DEBUG)
 
     logger.info("Integration test logging configured")

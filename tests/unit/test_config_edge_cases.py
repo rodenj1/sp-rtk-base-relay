@@ -6,12 +6,12 @@ from typing import Any
 from unittest.mock import patch
 import pytest
 
-from sp_base_relay.config import (
+from sp_rtk_base_relay.config import (
     InputConfig,
     ConfigManager,
     Config,
 )
-from sp_base_relay.exceptions import ConfigurationError
+from sp_rtk_base_relay.exceptions import ConfigurationError
 
 
 def _v2_surepath_dest(
@@ -60,7 +60,7 @@ class TestInputConfigEdgeCases:
 
     def test_tcp_config_with_generic_exception(self) -> None:
         """Test TCP config validation with non-ConfigurationError exception."""
-        with patch("sp_base_relay.config.TCPInputConfig") as mock_tcp:
+        with patch("sp_rtk_base_relay.config.TCPInputConfig") as mock_tcp:
             mock_tcp.side_effect = ValueError("Some unexpected error")
 
             with pytest.raises(
@@ -70,7 +70,7 @@ class TestInputConfigEdgeCases:
 
     def test_serial_config_with_generic_exception(self) -> None:
         """Test serial config validation with non-ConfigurationError exception."""
-        with patch("sp_base_relay.config.SerialInputConfig") as mock_serial:
+        with patch("sp_rtk_base_relay.config.SerialInputConfig") as mock_serial:
             mock_serial.side_effect = TypeError("Some unexpected error")
 
             with pytest.raises(
@@ -82,7 +82,7 @@ class TestInputConfigEdgeCases:
 
     def test_usb_serial_config_with_generic_exception(self) -> None:
         """Test USB serial config validation with non-ConfigurationError exception."""
-        with patch("sp_base_relay.config.SerialInputConfig") as mock_serial:
+        with patch("sp_rtk_base_relay.config.SerialInputConfig") as mock_serial:
             mock_serial.side_effect = RuntimeError("Some unexpected error")
 
             with pytest.raises(
@@ -119,7 +119,7 @@ class TestConfigManagerEdgeCases:
         try:
             with patch.dict(os.environ, {"SP_BASE_RELAY_CONFIG": config_path}):
                 config = ConfigManager.load_config()
-                from sp_base_relay.config import SurePathDestinationConfig
+                from sp_rtk_base_relay.config import SurePathDestinationConfig
                 assert isinstance(config.destinations[0].config, SurePathDestinationConfig)
                 assert config.destinations[0].config.host == "env-test.example.com"
         finally:
@@ -151,7 +151,7 @@ class TestConfigManagerEdgeCases:
                 config = ConfigManager.load_config(
                     config_path, apply_env_overrides=False
                 )
-                from sp_base_relay.config import SurePathDestinationConfig
+                from sp_rtk_base_relay.config import SurePathDestinationConfig
                 assert isinstance(config.destinations[0].config, SurePathDestinationConfig)
                 assert config.destinations[0].config.host == "test.example.com"
         finally:

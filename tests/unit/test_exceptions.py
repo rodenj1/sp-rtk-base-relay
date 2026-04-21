@@ -2,7 +2,7 @@
 
 import pytest
 
-from sp_base_relay.exceptions import (
+from sp_rtk_base_relay.exceptions import (
     SPBaseRelayError,
     ConfigurationError,
     ConnectionError,
@@ -252,20 +252,20 @@ class TestServiceError:
 
     def test_service_error_with_name(self):
         """Test service error with service name."""
-        error = ServiceError("Service failed", service_name="sp-base-relay")
+        error = ServiceError("Service failed", service_name="sp-rtk-base-relay")
         assert "Service failed" in str(error)
-        assert "Service: sp-base-relay" in str(error)
-        assert error.service_name == "sp-base-relay"
+        assert "Service: sp-rtk-base-relay" in str(error)
+        assert error.service_name == "sp-rtk-base-relay"
 
     def test_service_error_with_details(self):
         """Test service error with details."""
         error = ServiceError(
             "Service failed",
-            service_name="sp-base-relay",
+            service_name="sp-rtk-base-relay",
             details="Failed to bind to port",
         )
         assert "Service failed" in str(error)
-        assert "Service: sp-base-relay" in str(error)
+        assert "Service: sp-rtk-base-relay" in str(error)
         assert error.details == "Failed to bind to port"
 
     def test_inheritance(self):

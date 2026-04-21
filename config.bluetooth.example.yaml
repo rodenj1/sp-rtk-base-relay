@@ -48,7 +48,7 @@ logging:
   # Optional: Log to file
   # file:
   #   enabled: true
-  #   path: "/var/log/sp-base-relay/relay.log"
+  #   path: "/var/log/sp-rtk-base-relay/relay.log"
   #   max_bytes: 10485760  # 10 MB
   #   backup_count: 5
 

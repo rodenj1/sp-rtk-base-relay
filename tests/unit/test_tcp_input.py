@@ -10,11 +10,11 @@ import threading
 import time
 from unittest.mock import patch
 
-from sp_base_relay.core.input_sources.tcp_input import (
+from sp_rtk_base_relay.core.input_sources.tcp_input import (
     TCPInputSource,
     TCPConfig,
 )
-from sp_base_relay.exceptions import InputSourceError
+from sp_rtk_base_relay.exceptions import InputSourceError
 
 
 class MockTCPServer:

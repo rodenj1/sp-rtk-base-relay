@@ -23,16 +23,16 @@ from typing import Any
 
 import pytest
 
-from sp_base_relay.core.broadcast_hub import (
+from sp_rtk_base_relay.core.broadcast_hub import (
     BroadcastHub,
     BroadcastStats,
 )
-from sp_base_relay.core.destinations.base_destination import (
+from sp_rtk_base_relay.core.destinations.base_destination import (
     BaseDestination,
     DEFAULT_QUEUE_SIZE,
 )
-from sp_base_relay.core.input_sources.base_input import InputSource
-from sp_base_relay.core.message_filter import FilterConfig
+from sp_rtk_base_relay.core.input_sources.base_input import InputSource
+from sp_rtk_base_relay.core.message_filter import FilterConfig
 
 
 # ============================================================================
@@ -893,7 +893,7 @@ class TestEventEmissions:
     """Verify lifecycle events are emitted through the event bus."""
 
     def test_hub_start_emits_events(self) -> None:
-        from sp_base_relay.core.events import (
+        from sp_rtk_base_relay.core.events import (
             HUB_STARTED as _HUB_STARTED,
             INPUT_CONNECTED as _INPUT_CONNECTED,
             EventBus,
@@ -913,7 +913,7 @@ class TestEventEmissions:
             sub.close()
 
     def test_hub_stop_emits_event(self) -> None:
-        from sp_base_relay.core.events import (
+        from sp_rtk_base_relay.core.events import (
             HUB_STOPPED as _HUB_STOPPED,
             EventBus,
         )
@@ -929,7 +929,7 @@ class TestEventEmissions:
         sub.close()
 
     def test_add_destination_emits_event(self) -> None:
-        from sp_base_relay.core.events import (
+        from sp_rtk_base_relay.core.events import (
             DESTINATION_ADDED as _DEST_ADDED,
             EventBus,
         )
@@ -943,7 +943,7 @@ class TestEventEmissions:
         sub.close()
 
     def test_remove_destination_emits_event(self) -> None:
-        from sp_base_relay.core.events import (
+        from sp_rtk_base_relay.core.events import (
             DESTINATION_REMOVED as _DEST_REMOVED,
             EventBus,
         )
@@ -966,7 +966,7 @@ class TestEventEmissions:
         # No exception raised — events silently skipped
 
     def test_watchdog_emits_no_data_warning(self) -> None:
-        from sp_base_relay.core.events import (
+        from sp_rtk_base_relay.core.events import (
             INPUT_NO_DATA_WARNING as _NO_DATA,
             EventBus,
         )

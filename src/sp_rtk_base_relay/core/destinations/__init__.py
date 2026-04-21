@@ -10,26 +10,26 @@ Exports:
     SurePathDestination: Sure-Path server destination (wraps RTCMClient)
 """
 
-from sp_base_relay.core.destinations.base_destination import (
+from sp_rtk_base_relay.core.destinations.base_destination import (
     BaseDestination,
     DestinationStats,
 )
-from sp_base_relay.core.destinations.destination_factory import (
+from sp_rtk_base_relay.core.destinations.destination_factory import (
     DestinationFactory,
 )
 
 # Import registers the "surepath" builder with DestinationFactory
-from sp_base_relay.core.destinations.surepath_destination import (  # noqa: F401
+from sp_rtk_base_relay.core.destinations.surepath_destination import (  # noqa: F401
     SurePathDestination,
 )
 
 # Import registers the "ntrip" builder with DestinationFactory
-from sp_base_relay.core.destinations.ntrip_destination import (  # noqa: F401
+from sp_rtk_base_relay.core.destinations.ntrip_destination import (  # noqa: F401
     NtripDestination,
 )
 
 # Import registers the "tcp_server" builder with DestinationFactory
-from sp_base_relay.core.destinations.tcp_server_destination import (  # noqa: F401
+from sp_rtk_base_relay.core.destinations.tcp_server_destination import (  # noqa: F401
     TcpServerDestination,
 )
 

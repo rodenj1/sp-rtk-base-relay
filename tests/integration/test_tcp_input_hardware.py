@@ -20,8 +20,8 @@ import logging
 from typing import Any
 from dataclasses import asdict
 
-from sp_base_relay.core.input_sources.tcp_input import TCPInputSource, TCPConfig
-from sp_base_relay.exceptions import InputSourceError
+from sp_rtk_base_relay.core.input_sources.tcp_input import TCPInputSource, TCPConfig
+from sp_rtk_base_relay.exceptions import InputSourceError
 
 
 logger = logging.getLogger(__name__)

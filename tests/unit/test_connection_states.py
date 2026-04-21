@@ -4,7 +4,7 @@ Tests the ConnectionState enum and its properties to ensure proper
 state tracking throughout the connection lifecycle.
 """
 
-from sp_base_relay.core.connection_states import ConnectionState
+from sp_rtk_base_relay.core.connection_states import ConnectionState
 
 
 class TestConnectionState:

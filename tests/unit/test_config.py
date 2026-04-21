@@ -7,7 +7,7 @@ from unittest.mock import patch, mock_open
 import pytest
 from typing import Any
 
-from sp_base_relay.config import (
+from sp_rtk_base_relay.config import (
     ServerConfig,
     TCPInputConfig,
     SerialInputConfig,
@@ -18,7 +18,7 @@ from sp_base_relay.config import (
     Config,
     ConfigManager,
 )
-from sp_base_relay.exceptions import ConfigurationError
+from sp_rtk_base_relay.exceptions import ConfigurationError
 
 
 class TestServerConfig:
@@ -500,7 +500,7 @@ class TestLoggingConfig:
         config = LoggingConfig()
         assert config.level == "INFO"
         assert config.format == "json"
-        assert config.file == "/var/log/sp-base-relay.log"
+        assert config.file == "/var/log/sp-rtk-base-relay.log"
         assert config.max_size_mb == 50
         assert config.backup_count == 3
 
@@ -726,7 +726,7 @@ destinations:
 
         config = ConfigManager.load_config("/test/config.yaml")
         assert len(config.destinations) == 1
-        from sp_base_relay.config import SurePathDestinationConfig
+        from sp_rtk_base_relay.config import SurePathDestinationConfig
         assert isinstance(config.destinations[0].config, SurePathDestinationConfig)
         assert config.destinations[0].config.host == "test.example.com"
 
@@ -759,7 +759,7 @@ destinations:
         mock_exists.return_value = True
 
         config = ConfigManager.load_config("/test/config.yaml")
-        from sp_base_relay.config import SurePathDestinationConfig
+        from sp_rtk_base_relay.config import SurePathDestinationConfig
         assert isinstance(config.destinations[0].config, SurePathDestinationConfig)
         assert config.destinations[0].config.host == "env.example.com"
         assert config.destinations[0].config.port == 9090

@@ -16,7 +16,7 @@ import time
 
 import pytest
 
-from sp_base_relay.core.events import (
+from sp_rtk_base_relay.core.events import (
     DEFAULT_RING_BUFFER_SIZE,
     DEFAULT_SUBSCRIBER_QUEUE_SIZE,
     DESTINATION_ADDED,

@@ -18,12 +18,12 @@ from typing import Any
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from sp_base_relay.config import ConfigManager
-from sp_base_relay.logger import setup_logging
-from sp_base_relay.metrics import MetricsCollector
-from sp_base_relay.core.rtcm_client import RTCMClient
-from sp_base_relay.core.input_sources.input_factory import InputSourceFactory
-from sp_base_relay.core.data_pipeline import DataPipelineCoordinator
+from sp_rtk_base_relay.config import ConfigManager
+from sp_rtk_base_relay.logger import setup_logging
+from sp_rtk_base_relay.metrics import MetricsCollector
+from sp_rtk_base_relay.core.rtcm_client import RTCMClient
+from sp_rtk_base_relay.core.input_sources.input_factory import InputSourceFactory
+from sp_rtk_base_relay.core.data_pipeline import DataPipelineCoordinator
 
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ def main() -> None:
     logger.info("SP-Base-Relay service starting with metrics enabled")
     
     # Initialize metrics collector
-    metrics = MetricsCollector(namespace="sp_base_relay")
+    metrics = MetricsCollector(namespace="sp_rtk_base_relay")
     
     # Start metrics HTTP server if enabled
     if config.metrics.enabled:

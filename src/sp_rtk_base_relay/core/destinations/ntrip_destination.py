@@ -21,26 +21,26 @@ import socket
 import time
 from typing import Any
 
-from sp_base_relay import __version__
-from sp_base_relay.config import (
+from sp_rtk_base_relay import __version__
+from sp_rtk_base_relay.config import (
     DestinationConfig,
     NtripDestinationConfig,
 )
-from sp_base_relay.core.destinations.base_destination import (
+from sp_rtk_base_relay.core.destinations.base_destination import (
     BaseDestination,
     DEFAULT_QUEUE_SIZE,
 )
-from sp_base_relay.core.destinations.destination_factory import (
+from sp_rtk_base_relay.core.destinations.destination_factory import (
     DestinationFactory,
 )
-from sp_base_relay.core.message_filter import FilterConfig
-from sp_base_relay.exceptions import ConfigurationError, NtripError
+from sp_rtk_base_relay.core.message_filter import FilterConfig
+from sp_rtk_base_relay.exceptions import ConfigurationError, NtripError
 
 
 logger = logging.getLogger(__name__)
 
 # User-Agent / Source-Agent string
-_USER_AGENT = f"NTRIP sp-base-relay/{__version__}"
+_USER_AGENT = f"NTRIP sp-rtk-base-relay/{__version__}"
 
 # Timeout for the authentication handshake response (seconds)
 _AUTH_RESPONSE_TIMEOUT = 10.0
@@ -256,7 +256,7 @@ class NtripDestination(BaseDestination):
 
         Protocol:
             SOURCE <password>\\r\\n
-            Source-Agent: NTRIP sp-base-relay/x.y.z\\r\\n
+            Source-Agent: NTRIP sp-rtk-base-relay/x.y.z\\r\\n
             \\r\\n
 
         Expected response:
@@ -303,7 +303,7 @@ class NtripDestination(BaseDestination):
             Host: <caster>\\r\\n
             Ntrip-Version: Ntrip/2.0\\r\\n
             Authorization: Basic <base64(username:password)>\\r\\n
-            User-Agent: NTRIP sp-base-relay/x.y.z\\r\\n
+            User-Agent: NTRIP sp-rtk-base-relay/x.y.z\\r\\n
             Transfer-Encoding: chunked\\r\\n
             \\r\\n
 

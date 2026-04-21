@@ -1,6 +1,6 @@
 [Unit]
 Description=SP-Base-Relay - RTCM Correction Data Relay Service
-Documentation=https://github.com/rodenj1/sp-base-relay
+Documentation=https://github.com/rodenj1/sp-rtk-base-relay
 After=network-online.target bluetooth-gps.service
 Wants=network-online.target
 # Tight coupling: If bluetooth-gps stops/restarts, we stop/restart too
@@ -9,16 +9,16 @@ PartOf=bluetooth-gps.service
 
 [Service]
 Type=simple
-User=sp-base-relay
-Group=sp-base-relay
+User=sp-rtk-base-relay
+Group=sp-rtk-base-relay
 
 # Service execution
 # Note: Update ExecStart path to match your installation
-ExecStart=/usr/local/bin/sp-base-relay --config /etc/sp-base-relay/config.yaml --foreground
+ExecStart=/usr/local/bin/sp-rtk-base-relay --config /etc/sp-rtk-base-relay/config.yaml --foreground
 ExecReload=/bin/kill -HUP $MAINPID
 
 # Working directory
-WorkingDirectory=/var/lib/sp-base-relay
+WorkingDirectory=/var/lib/sp-rtk-base-relay
 
 # Restart behavior - Faster recovery for Bluetooth failures
 Restart=on-failure
@@ -29,7 +29,7 @@ StartLimitBurst=10
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=sp-base-relay
+SyslogIdentifier=sp-rtk-base-relay
 
 # Environment
 Environment="PYTHONUNBUFFERED=1"

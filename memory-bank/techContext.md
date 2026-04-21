@@ -31,8 +31,8 @@
 ### Package Management with UV
 ```bash
 # Project initialization
-uv init sp-base-relay
-cd sp-base-relay
+uv init sp-rtk-base-relay
+cd sp-rtk-base-relay
 
 # Dependency management
 uv add pyserial pyyaml prometheus-client
@@ -42,12 +42,12 @@ uv add --dev pytest pytest-cov black pylint mypy
 source .venv/bin/activate
 
 # Running tests
-uv run pytest --cov=src/sp_base_relay --cov-report=html
+uv run pytest --cov=src/sp_rtk_base_relay --cov-report=html
 ```
 
 ### Project Structure (v2.1)
 ```
-sp-base-relay/
+sp-rtk-base-relay/
 ├── pyproject.toml           # UV/Python project configuration (version 2.1.0)
 ├── uv.lock                  # Dependency lock file
 ├── README.md                # Project documentation
@@ -61,7 +61,7 @@ sp-base-relay/
 │   ├── deployment-guide.md
 │   └── metrics-guide.md
 ├── src/
-│   └── sp_base_relay/
+│   └── sp_rtk_base_relay/
 │       ├── __init__.py      # v2.1: exports RelayEngine, EventBus, RelayEvent, RelayStatus
 │       ├── engine.py        # NEW v2.1 — RelayEngine facade API
 │       ├── main.py          # CLI entry point (v2 with BroadcastHub)

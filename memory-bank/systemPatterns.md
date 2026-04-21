@@ -4,7 +4,7 @@
 
 ### v2.1 Embeddable Relay Engine (March 2026 — Phases 0–4 COMPLETE)
 
-v2.1 adds a `RelayEngine` facade, EventBus, and dynamic destination management so sp-base-relay can be used as a Python dependency by the sp-base web UI project. **1,106 unit tests passing.**
+v2.1 adds a `RelayEngine` facade, EventBus, and dynamic destination management so sp-rtk-base-relay can be used as a Python dependency by the sp-base web UI project. **1,106 unit tests passing.**
 
 ```
                             ┌─────────────┐
@@ -38,7 +38,7 @@ SP-Base-Relay v2.0 transforms from a single-destination relay into a multi-desti
 ### Detailed Component View
 ```
 ┌─────────────────────┐    ┌──────────────────────────────────────────────────────┐
-│ Input Sources       │    │ sp-base-relay v2.0                                  │
+│ Input Sources       │    │ sp-rtk-base-relay v2.0                                  │
 │ - Serial UART       │    │                                                      │
 │ - USB Serial        │────│─▶ [BroadcastHub]                                    │
 │ - TCP (RTKBase)     │    │       │ message_filter per destination               │
@@ -60,7 +60,7 @@ SP-Base-Relay v2.0 transforms from a single-destination relay into a multi-desti
 ### v1.x Architecture (October 2025 — February 2026, DEPRECATED)
 ```
 ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
-│ Input Sources       │────│ sp-base-relay       │────│ Custom RTCM Server  │
+│ Input Sources       │────│ sp-rtk-base-relay       │────│ Custom RTCM Server  │
 │ - Serial/TCP/BT     │    │ DataPipelineCoord.  │    │ (Sure-Path only)    │
 └─────────────────────┘    └─────────────────────┘    └─────────────────────┘
 ```

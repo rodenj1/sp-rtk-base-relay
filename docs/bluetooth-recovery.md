@@ -23,9 +23,9 @@ This layer provides systemd-based automatic recovery mechanisms.
 
 #### Components
 
-1. **Bluetooth Reset Script** (`/opt/sp-base-relay/tools/bluetooth/reset-connection.sh`)
+1. **Bluetooth Reset Script** (`/opt/sp-rtk-base-relay/tools/bluetooth/reset-connection.sh`)
 2. **Enhanced bluetooth-gps.service** (with health checks)
-3. **Enhanced sp-base-relay.service** (with pre-start validation)
+3. **Enhanced sp-rtk-base-relay.service** (with pre-start validation)
 
 ---
 
@@ -37,7 +37,7 @@ bluetooth-gps.service (running)
          ↓
     /dev/rfcomm0 (active)
          ↓
-sp-base-relay.service (reading GPS data)
+sp-rtk-base-relay.service (reading GPS data)
          ↓
     RTCM Server (receiving corrections)
 ```
@@ -49,10 +49,10 @@ Bluetooth GPS Hangs
          ↓
 Serial I/O Error: [Errno 5]
          ↓
-sp-base-relay detects failure
+sp-rtk-base-relay detects failure
     (after 2-3 consecutive errors)
          ↓
-sp-base-relay stops (max retries exceeded)
+sp-rtk-base-relay stops (max retries exceeded)
          ↓
 ExecStopPost: Triggers bluetooth-gps restart
          ↓
@@ -70,7 +70,7 @@ reset-connection.sh:
          ↓
 bluetooth-gps restarts successfully
          ↓
-sp-base-relay restarts (passes pre-checks)
+sp-rtk-base-relay restarts (passes pre-checks)
          ↓
 System operational again
 ```
@@ -99,10 +99,10 @@ StartLimitIntervalSec=600  # Was 300s (larger window)
 **Automatic Recovery:**
 ```ini
 # Runs recovery script when service stops
-ExecStopPost=/opt/sp-base-relay/tools/bluetooth/reset-connection.sh
+ExecStopPost=/opt/sp-rtk-base-relay/tools/bluetooth/reset-connection.sh
 ```
 
-### sp-base-relay.service
+### sp-rtk-base-relay.service
 
 **Pre-Start Validation:**
 ```ini
@@ -136,7 +136,7 @@ ExecStopPost=/bin/sh -c 'systemctl restart bluetooth-gps.service'
 
 ## Recovery Script Details
 
-### `/opt/sp-base-relay/tools/bluetooth/reset-connection.sh`
+### `/opt/sp-rtk-base-relay/tools/bluetooth/reset-connection.sh`
 
 **What It Does:**
 1. **Releases frozen rfcomm device** - Unbinds `/dev/rfcomm0`
@@ -150,7 +150,7 @@ ExecStopPost=/bin/sh -c 'systemctl restart bluetooth-gps.service'
 **Execution Time:** ~10-15 seconds
 
 **Logging:**
-- Logs to `/var/log/sp-base-relay/bluetooth-recovery.log`
+- Logs to `/var/log/sp-rtk-base-relay/bluetooth-recovery.log`
 - Timestamps all actions
 - Reports success/failure
 
@@ -162,11 +162,11 @@ ExecStopPost=/bin/sh -c 'systemctl restart bluetooth-gps.service'
 ```bash
 # Check if services are running
 sudo systemctl status bluetooth-gps.service
-sudo systemctl status sp-base-relay.service
+sudo systemctl status sp-rtk-base-relay.service
 
 # Check for recent restarts
 sudo systemctl show bluetooth-gps.service -p ActiveEnterTimestamp
-sudo systemctl show sp-base-relay.service -p ActiveEnterTimestamp
+sudo systemctl show sp-rtk-base-relay.service -p ActiveEnterTimestamp
 ```
 
 ### View Recovery Logs
@@ -174,26 +174,26 @@ sudo systemctl show sp-base-relay.service -p ActiveEnterTimestamp
 # Bluetooth GPS service logs
 sudo journalctl -u bluetooth-gps.service -f
 
-# sp-base-relay service logs
-sudo journalctl -u sp-base-relay.service -f
+# sp-rtk-base-relay service logs
+sudo journalctl -u sp-rtk-base-relay.service -f
 
 # Recovery script logs
-sudo tail -f /var/log/sp-base-relay/bluetooth-recovery.log
+sudo tail -f /var/log/sp-rtk-base-relay/bluetooth-recovery.log
 
 # All logs together
-sudo journalctl -u bluetooth-gps.service -u sp-base-relay.service -f
+sudo journalctl -u bluetooth-gps.service -u sp-rtk-base-relay.service -f
 ```
 
 ### Check Recovery History
 ```bash
 # Count recovery events
-grep "Recovery Started" /var/log/sp-base-relay/bluetooth-recovery.log | wc -l
+grep "Recovery Started" /var/log/sp-rtk-base-relay/bluetooth-recovery.log | wc -l
 
 # Last recovery time
-grep "Recovery SUCCESSFUL" /var/log/sp-base-relay/bluetooth-recovery.log | tail -1
+grep "Recovery SUCCESSFUL" /var/log/sp-rtk-base-relay/bluetooth-recovery.log | tail -1
 
 # Failed recoveries (if any)
-grep "Recovery FAILED" /var/log/sp-base-relay/bluetooth-recovery.log
+grep "Recovery FAILED" /var/log/sp-rtk-base-relay/bluetooth-recovery.log
 ```
 
 ### Verify Device Health
@@ -216,13 +216,13 @@ If automatic recovery fails after multiple attempts:
 
 ### Option 1: Manual Script Execution
 ```bash
-sudo /opt/sp-base-relay/tools/bluetooth/reset-connection.sh
+sudo /opt/sp-rtk-base-relay/tools/bluetooth/reset-connection.sh
 ```
 
 ### Option 2: Restart Services
 ```bash
 sudo systemctl restart bluetooth-gps.service
-sudo systemctl restart sp-base-relay.service
+sudo systemctl restart sp-rtk-base-relay.service
 ```
 
 ### Option 3: Full Bluetooth Stack Reset
@@ -230,7 +230,7 @@ sudo systemctl restart sp-base-relay.service
 sudo systemctl restart bluetooth.service
 sleep 5
 sudo systemctl restart bluetooth-gps.service
-sudo systemctl restart sp-base-relay.service
+sudo systemctl restart sp-rtk-base-relay.service
 ```
 
 ### Option 4: Pi Reboot (Last Resort)
@@ -251,16 +251,16 @@ sudo rfcomm release 0
 echo "disconnect 00:11:22:33:44:55" | bluetoothctl
 
 # Wait and observe recovery (should take < 30 seconds)
-sudo journalctl -u bluetooth-gps.service -u sp-base-relay.service -f
+sudo journalctl -u bluetooth-gps.service -u sp-rtk-base-relay.service -f
 ```
 
 ### Expected Behavior
-1. sp-base-relay detects failure within 30-60 seconds
-2. sp-base-relay stops after max retries
+1. sp-rtk-base-relay detects failure within 30-60 seconds
+2. sp-rtk-base-relay stops after max retries
 3. ExecStopPost triggers bluetooth-gps restart
 4. Recovery script runs automatically
 5. bluetooth-gps reconnects and creates /dev/rfcomm0
-6. sp-base-relay restarts and resumes operation
+6. sp-rtk-base-relay restarts and resumes operation
 
 ### Success Criteria
 - ✅ Services recover within 30 seconds
@@ -276,7 +276,7 @@ sudo journalctl -u bluetooth-gps.service -u sp-base-relay.service -f
 
 **Check permissions:**
 ```bash
-ls -l /opt/sp-base-relay/tools/bluetooth/reset-connection.sh
+ls -l /opt/sp-rtk-base-relay/tools/bluetooth/reset-connection.sh
 # Should be: -rwxr-xr-x (executable)
 ```
 
@@ -288,7 +288,7 @@ bluetoothctl info 00:11:22:33:44:55
 
 **Run script manually with debug:**
 ```bash
-sudo bash -x /opt/sp-base-relay/tools/bluetooth/reset-connection.sh
+sudo bash -x /opt/sp-rtk-base-relay/tools/bluetooth/reset-connection.sh
 ```
 
 ### Services Don't Restart
@@ -300,18 +300,18 @@ sudo systemctl daemon-reload
 
 # Check service dependencies
 systemctl list-dependencies bluetooth-gps.service
-systemctl list-dependencies sp-base-relay.service
+systemctl list-dependencies sp-rtk-base-relay.service
 ```
 
 **Check restart limits:**
 ```bash
 # View restart statistics
 systemctl show bluetooth-gps.service -p NRestarts
-systemctl show sp-base-relay.service -p NRestarts
+systemctl show sp-rtk-base-relay.service -p NRestarts
 
 # Reset restart counters if hit limit
 sudo systemctl reset-failed bluetooth-gps.service
-sudo systemctl reset-failed sp-base-relay.service
+sudo systemctl reset-failed sp-rtk-base-relay.service
 ```
 
 ### Device Still Frozen After Recovery
@@ -326,7 +326,7 @@ sudo systemctl reset-failed sp-base-relay.service
 # Full Bluetooth stack reset
 sudo systemctl restart bluetooth.service
 sleep 5
-sudo /opt/sp-base-relay/tools/bluetooth/reset-connection.sh
+sudo /opt/sp-rtk-base-relay/tools/bluetooth/reset-connection.sh
 ```
 
 ---
@@ -338,20 +338,20 @@ The system exposes metrics for monitoring recovery events:
 ### Prometheus Metrics
 ```
 # Connection failures
-sp_base_relay_input_connection_failures_total
+sp_rtk_base_relay_input_connection_failures_total
 
 # Service restarts
-sp_base_relay_service_restarts_total
+sp_rtk_base_relay_service_restarts_total
 
 # Time since last recovery
-sp_base_relay_last_recovery_timestamp_seconds
+sp_rtk_base_relay_last_recovery_timestamp_seconds
 ```
 
 ### Setup Alerts (Grafana)
 ```yaml
 # Alert if recovery happens frequently
 - alert: FrequentBluetoothRecovery
-  expr: rate(sp_base_relay_service_restarts_total[5m]) > 0.1
+  expr: rate(sp_rtk_base_relay_service_restarts_total[5m]) > 0.1
   annotations:
     summary: "Bluetooth GPS recovering too frequently"
 ```
@@ -383,7 +383,7 @@ Key settings:
 - `StartLimitIntervalSec=600` - Time window for restart counting
 
 ### SP-Base-Relay Configuration
-Located in: `/etc/systemd/system/sp-base-relay.service`
+Located in: `/etc/systemd/system/sp-rtk-base-relay.service`
 
 Key settings:
 - `BindsTo=bluetooth-gps.service` - Tight coupling
@@ -391,7 +391,7 @@ Key settings:
 - `Restart=on-failure` - Only restart on failures
 
 ### Recovery Script Configuration
-Located in: `/opt/sp-base-relay/tools/bluetooth/reset-connection.sh`
+Located in: `/opt/sp-rtk-base-relay/tools/bluetooth/reset-connection.sh`
 
 Key settings:
 ```bash

@@ -22,8 +22,8 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from sp_base_relay.core.destinations.base_destination import BaseDestination
-from sp_base_relay.core.events import (
+from sp_rtk_base_relay.core.destinations.base_destination import BaseDestination
+from sp_rtk_base_relay.core.events import (
     DESTINATION_ADDED,
     DESTINATION_REMOVED,
     HUB_STARTED,
@@ -35,8 +35,8 @@ from sp_base_relay.core.events import (
     INPUT_RECONNECTING,
     EventBus,
 )
-from sp_base_relay.core.input_sources.base_input import InputSource
-from sp_base_relay.rtcm_decoder import RTCMMessageDecoder
+from sp_rtk_base_relay.core.input_sources.base_input import InputSource
+from sp_rtk_base_relay.rtcm_decoder import RTCMMessageDecoder
 
 
 logger = logging.getLogger(__name__)

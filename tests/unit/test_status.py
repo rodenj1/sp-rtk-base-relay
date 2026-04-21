@@ -17,9 +17,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from sp_base_relay.core.destinations.base_destination import DestinationStats
-from sp_base_relay.core.input_sources.base_input import InputSourceStats
-from sp_base_relay.core.status import (
+from sp_rtk_base_relay.core.destinations.base_destination import DestinationStats
+from sp_rtk_base_relay.core.input_sources.base_input import InputSourceStats
+from sp_rtk_base_relay.core.status import (
     DestinationStatus,
     InputStatus,
     RelayStatus,

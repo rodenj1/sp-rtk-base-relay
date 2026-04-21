@@ -22,8 +22,8 @@ from prometheus_client import (
 )
 
 if TYPE_CHECKING:
-    from sp_base_relay.core.broadcast_hub import BroadcastHub
-    from sp_base_relay.core.destinations.base_destination import BaseDestination
+    from sp_rtk_base_relay.core.broadcast_hub import BroadcastHub
+    from sp_rtk_base_relay.core.destinations.base_destination import BaseDestination
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class MetricsCollector:
         mc.update_all(destinations, hub, input_connected=True)
     """
 
-    def __init__(self, namespace: str = "sp_base_relay") -> None:
+    def __init__(self, namespace: str = "sp_rtk_base_relay") -> None:
         """Initialize metrics collector.
 
         Args:

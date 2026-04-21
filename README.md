@@ -45,14 +45,14 @@ Each destination runs in its own thread with an independent queue, so a failure 
 ### Installation
 
 ```bash
-git clone https://github.com/rodenj1/sp-base-relay.git
-cd sp-base-relay
+git clone https://github.com/rodenj1/sp-rtk-base-relay.git
+cd sp-rtk-base-relay
 sudo ./tools/install.sh
 ```
 
 ### Configuration
 
-Edit `/etc/sp-base-relay/config.yaml` (or see `config.example.yaml`):
+Edit `/etc/sp-rtk-base-relay/config.yaml` (or see `config.example.yaml`):
 
 ```yaml
 input:
@@ -108,10 +108,10 @@ logging:
 
 ```bash
 # As a systemd service
-sudo systemctl start sp-base-relay
+sudo systemctl start sp-rtk-base-relay
 
 # Or foreground
-sp-base-relay --config config.yaml --foreground
+sp-rtk-base-relay --config config.yaml --foreground
 ```
 
 ## Destination Types
@@ -154,16 +154,16 @@ Per-destination metrics with `{destination="..."}` labels:
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `sp_base_relay_dest_bytes_sent_total` | Counter | Bytes sent per destination |
-| `sp_base_relay_dest_messages_sent_total` | Counter | Messages sent per destination |
-| `sp_base_relay_dest_messages_dropped_total` | Counter | Queue overflow drops per destination |
-| `sp_base_relay_dest_connection_status` | Gauge | Connection state (1/0) per destination |
-| `sp_base_relay_dest_errors_total` | Counter | Errors per destination |
-| `sp_base_relay_dest_queue_depth` | Gauge | Queue depth per destination |
-| `sp_base_relay_input_connection_status` | Gauge | Input source connection state |
-| `sp_base_relay_input_seconds_since_last_data` | Gauge | No-data watchdog |
-| `sp_base_relay_tcp_server_connected_clients` | Gauge | TCP server client count |
-| `sp_base_relay_service_uptime_seconds` | Gauge | Service uptime |
+| `sp_rtk_base_relay_dest_bytes_sent_total` | Counter | Bytes sent per destination |
+| `sp_rtk_base_relay_dest_messages_sent_total` | Counter | Messages sent per destination |
+| `sp_rtk_base_relay_dest_messages_dropped_total` | Counter | Queue overflow drops per destination |
+| `sp_rtk_base_relay_dest_connection_status` | Gauge | Connection state (1/0) per destination |
+| `sp_rtk_base_relay_dest_errors_total` | Counter | Errors per destination |
+| `sp_rtk_base_relay_dest_queue_depth` | Gauge | Queue depth per destination |
+| `sp_rtk_base_relay_input_connection_status` | Gauge | Input source connection state |
+| `sp_rtk_base_relay_input_seconds_since_last_data` | Gauge | No-data watchdog |
+| `sp_rtk_base_relay_tcp_server_connected_clients` | Gauge | TCP server client count |
+| `sp_rtk_base_relay_service_uptime_seconds` | Gauge | Service uptime |
 
 ### Grafana Dashboard
 
@@ -181,8 +181,8 @@ Import `templates/grafana_dashboard.json` for a pre-built v2 dashboard with per-
 ## Project Structure
 
 ```
-sp-base-relay/
-├── src/sp_base_relay/
+sp-rtk-base-relay/
+├── src/sp_rtk_base_relay/
 │   ├── main.py                      # Service orchestration (v2)
 │   ├── config.py                    # YAML config with destinations: list
 │   ├── metrics.py                   # Per-destination Prometheus metrics
@@ -225,8 +225,8 @@ sp-base-relay/
 
 ```bash
 # Clone and install
-git clone https://github.com/rodenj1/sp-base-relay.git
-cd sp-base-relay
+git clone https://github.com/rodenj1/sp-rtk-base-relay.git
+cd sp-rtk-base-relay
 uv sync --all-extras
 source .venv/bin/activate
 
@@ -234,7 +234,7 @@ source .venv/bin/activate
 uv run pytest
 
 # Run with coverage
-uv run pytest --cov=src/sp_base_relay --cov-report=html
+uv run pytest --cov=src/sp_rtk_base_relay --cov-report=html
 ```
 
 ### Code Quality Standards
@@ -246,7 +246,7 @@ uv run pytest --cov=src/sp_base_relay --cov-report=html
 ## CLI Usage
 
 ```
-sp-base-relay [OPTIONS]
+sp-rtk-base-relay [OPTIONS]
 
 Options:
   --version                Show version and exit
@@ -262,8 +262,8 @@ Options:
 SP-Base-Relay can be used as a **Python library** by external applications (e.g., GPS configuration UIs). The `RelayEngine` facade provides full programmatic control:
 
 ```python
-from sp_base_relay import RelayEngine
-from sp_base_relay.config import InputConfig, DestinationConfig
+from sp_rtk_base_relay import RelayEngine
+from sp_rtk_base_relay.config import InputConfig, DestinationConfig
 
 # 1. Create engine with input source
 engine = RelayEngine(InputConfig(source="tcp", config={"host": "192.168.1.100", "port": 3000}))

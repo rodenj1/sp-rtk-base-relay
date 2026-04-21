@@ -11,7 +11,7 @@
 
 ### v2.1 Implementation Summary
 
-v2.1 enhances sp-base-relay to be usable as a **Python dependency** by the sp-base web UI project. The core purpose remains unchanged: RTCM relay.
+v2.1 enhances sp-rtk-base-relay to be usable as a **Python dependency** by the sp-base web UI project. The core purpose remains unchanged: RTCM relay.
 
 Architecture plan: `docs/v2.1-architecture-plan.md`
 UI integration plan: `docs/ublox_gps_webui_planning.md` (historical — plans now in sp-base memory bank)
@@ -32,7 +32,7 @@ API spec: `docs/relay-engine-api-spec.md`
 **Total unit tests**: 1,106 passing
 
 ### Next Steps
-1. **Phase 6**: sp-base-relay cleanup (remove probe_gps.py, revert pyubx2, README, integration tests)
+1. **Phase 6**: sp-rtk-base-relay cleanup (remove probe_gps.py, revert pyubx2, README, integration tests)
 
 ---
 

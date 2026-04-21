@@ -1,5 +1,5 @@
 [project]
-name = "sp-base-relay"
+name = "sp-rtk-base-relay"
 version = "2.1.0"
 description = "RTCM relay service for custom GPS correction servers"
 readme = "README.md"
@@ -41,13 +41,13 @@ dev = [
 ]
 
 [project.scripts]
-sp-base-relay = "sp_base_relay.main:main"
+sp-rtk-base-relay = "sp_rtk_base_relay.main:main"
 
 [project.urls]
-Homepage = "https://github.com/rodenj1/sp-base-relay"
-Documentation = "https://github.com/rodenj1/sp-base-relay#readme"
-Repository = "https://github.com/rodenj1/sp-base-relay"
-Issues = "https://github.com/rodenj1/sp-base-relay/issues"
+Homepage = "https://github.com/rodenj1/sp-rtk-base-relay"
+Documentation = "https://github.com/rodenj1/sp-rtk-base-relay#readme"
+Repository = "https://github.com/rodenj1/sp-rtk-base-relay"
+Issues = "https://github.com/rodenj1/sp-rtk-base-relay/issues"
 
 [build-system]
 requires = ["uv_build>=0.9.5,<0.10.0"]
@@ -56,7 +56,7 @@ build-backend = "uv_build"
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = [
-    "--cov=src/sp_base_relay",
+    "--cov=src/sp_rtk_base_relay",
     "--cov-report=term-missing",
     "--cov-report=html:htmlcov",
     "--cov-fail-under=70",

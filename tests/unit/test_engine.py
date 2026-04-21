@@ -18,25 +18,25 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from sp_base_relay.config import (
+from sp_rtk_base_relay.config import (
     DestinationConfig,
     DestinationFilterConfig,
     InputConfig,
     TcpServerDestinationConfig,
 )
-from sp_base_relay.core.destinations.base_destination import (
+from sp_rtk_base_relay.core.destinations.base_destination import (
     BaseDestination,
     DEFAULT_QUEUE_SIZE,
 )
-from sp_base_relay.core.events import (
+from sp_rtk_base_relay.core.events import (
     ENGINE_STARTED,
     ENGINE_STOPPED,
     EventBus,
 )
-from sp_base_relay.core.input_sources.base_input import InputSource
-from sp_base_relay.core.message_filter import FilterConfig
-from sp_base_relay.engine import RelayEngine
-from sp_base_relay.exceptions import ConfigurationError, ServiceError
+from sp_rtk_base_relay.core.input_sources.base_input import InputSource
+from sp_rtk_base_relay.core.message_filter import FilterConfig
+from sp_rtk_base_relay.engine import RelayEngine
+from sp_rtk_base_relay.exceptions import ConfigurationError, ServiceError
 
 
 # ============================================================================
@@ -176,8 +176,8 @@ class TestRelayEngineInit:
 class TestRelayEngineLifecycle:
     """start() / stop() tests."""
 
-    @patch("sp_base_relay.engine.DestinationFactory")
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.DestinationFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_start_creates_hub_and_runs(
         self, mock_isf: MagicMock, mock_df: MagicMock
     ) -> None:
@@ -195,8 +195,8 @@ class TestRelayEngineLifecycle:
         finally:
             engine.stop()
 
-    @patch("sp_base_relay.engine.DestinationFactory")
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.DestinationFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_start_with_no_destinations(
         self, mock_isf: MagicMock, mock_df: MagicMock
     ) -> None:
@@ -210,7 +210,7 @@ class TestRelayEngineLifecycle:
         finally:
             engine.stop()
 
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_start_when_already_running_raises(
         self, mock_isf: MagicMock
     ) -> None:
@@ -224,8 +224,8 @@ class TestRelayEngineLifecycle:
         finally:
             engine.stop()
 
-    @patch("sp_base_relay.engine.DestinationFactory")
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.DestinationFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_stop_cleans_up(
         self, mock_isf: MagicMock, mock_df: MagicMock
     ) -> None:
@@ -243,8 +243,8 @@ class TestRelayEngineLifecycle:
         engine.stop()  # should not raise
         assert engine.is_running is False
 
-    @patch("sp_base_relay.engine.DestinationFactory")
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.DestinationFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_start_stop_restart(
         self, mock_isf: MagicMock, mock_df: MagicMock
     ) -> None:
@@ -275,8 +275,8 @@ class TestRelayEngineLifecycle:
 class TestDestinationManagement:
     """Hot add/remove/start/stop tests."""
 
-    @patch("sp_base_relay.engine.DestinationFactory")
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.DestinationFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_add_destination(
         self, mock_isf: MagicMock, mock_df: MagicMock
     ) -> None:
@@ -297,8 +297,8 @@ class TestDestinationManagement:
         with pytest.raises(ServiceError, match="not running"):
             engine.add_destination(_make_dest_config())
 
-    @patch("sp_base_relay.engine.DestinationFactory")
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.DestinationFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_add_duplicate_name_raises(
         self, mock_isf: MagicMock, mock_df: MagicMock
     ) -> None:
@@ -314,8 +314,8 @@ class TestDestinationManagement:
         finally:
             engine.stop()
 
-    @patch("sp_base_relay.engine.DestinationFactory")
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.DestinationFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_remove_destination(
         self, mock_isf: MagicMock, mock_df: MagicMock
     ) -> None:
@@ -330,7 +330,7 @@ class TestDestinationManagement:
         finally:
             engine.stop()
 
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_remove_nonexistent_raises(self, mock_isf: MagicMock) -> None:
         mock_isf.create_input_source.return_value = FakeInputSource()
 
@@ -347,8 +347,8 @@ class TestDestinationManagement:
         with pytest.raises(ServiceError, match="not running"):
             engine.remove_destination("any")
 
-    @patch("sp_base_relay.engine.DestinationFactory")
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.DestinationFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_stop_destination(
         self, mock_isf: MagicMock, mock_df: MagicMock
     ) -> None:
@@ -364,7 +364,7 @@ class TestDestinationManagement:
         finally:
             engine.stop()
 
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_stop_destination_nonexistent_raises(
         self, mock_isf: MagicMock
     ) -> None:
@@ -378,8 +378,8 @@ class TestDestinationManagement:
         finally:
             engine.stop()
 
-    @patch("sp_base_relay.engine.DestinationFactory")
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.DestinationFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_start_destination(
         self, mock_isf: MagicMock, mock_df: MagicMock
     ) -> None:
@@ -397,7 +397,7 @@ class TestDestinationManagement:
         finally:
             engine.stop()
 
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_start_destination_nonexistent_raises(
         self, mock_isf: MagicMock
     ) -> None:
@@ -430,8 +430,8 @@ class TestDestinationManagement:
 class TestRelayEngineStatus:
     """get_status() tests."""
 
-    @patch("sp_base_relay.engine.DestinationFactory")
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.DestinationFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_get_status_returns_relay_status(
         self, mock_isf: MagicMock, mock_df: MagicMock
     ) -> None:
@@ -462,7 +462,7 @@ class TestRelayEngineStatus:
 class TestRelayEngineEvents:
     """Event subscription and retrieval tests."""
 
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_subscribe_before_start(self, mock_isf: MagicMock) -> None:
         mock_isf.create_input_source.return_value = FakeInputSource()
 
@@ -476,7 +476,7 @@ class TestRelayEngineEvents:
             engine.stop()
             sub.close()
 
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_stop_emits_engine_stopped(self, mock_isf: MagicMock) -> None:
         mock_isf.create_input_source.return_value = FakeInputSource()
 
@@ -488,7 +488,7 @@ class TestRelayEngineEvents:
         assert ENGINE_STOPPED in events
         sub.close()
 
-    @patch("sp_base_relay.engine.InputSourceFactory")
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
     def test_get_recent_events(self, mock_isf: MagicMock) -> None:
         mock_isf.create_input_source.return_value = FakeInputSource()
 

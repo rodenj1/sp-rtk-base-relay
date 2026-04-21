@@ -17,22 +17,22 @@ from typing import Any
 
 import pytest
 
-from sp_base_relay.config import (
+from sp_rtk_base_relay.config import (
     DestinationConfig,
     DestinationFilterConfig,
     SurePathDestinationConfig,
     NtripDestinationConfig,
     TcpServerDestinationConfig,
 )
-from sp_base_relay.core.destinations.base_destination import (
+from sp_rtk_base_relay.core.destinations.base_destination import (
     BaseDestination,
     DEFAULT_QUEUE_SIZE,
 )
-from sp_base_relay.core.destinations.destination_factory import (
+from sp_rtk_base_relay.core.destinations.destination_factory import (
     DestinationFactory,
 )
-from sp_base_relay.core.message_filter import FilterConfig
-from sp_base_relay.exceptions import ConfigurationError, DestinationError
+from sp_rtk_base_relay.core.message_filter import FilterConfig
+from sp_rtk_base_relay.exceptions import ConfigurationError, DestinationError
 
 
 # ============================================================================

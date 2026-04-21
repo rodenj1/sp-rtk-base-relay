@@ -1,6 +1,6 @@
 """Unit tests for RTCM message decoder."""
 
-from sp_base_relay.rtcm_decoder import RTCMMessageDecoder
+from sp_rtk_base_relay.rtcm_decoder import RTCMMessageDecoder
 
 
 class TestRTCMMessageDecoder:

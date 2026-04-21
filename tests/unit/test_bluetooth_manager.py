@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from tests.fixtures.mock_bluetooth import create_mock_dbus_fast, create_mock_message_bus
-from src.sp_base_relay.core.bluetooth_manager import BluetoothManager, BluetoothError
+from src.sp_rtk_base_relay.core.bluetooth_manager import BluetoothManager, BluetoothError
 
 
 class TestBluetoothManagerInit:
@@ -21,10 +21,10 @@ class TestBluetoothManagerInit:
         bus_type, _, dbus_error = create_mock_dbus_fast()
         mock_bus = create_mock_message_bus()
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             
@@ -37,10 +37,10 @@ class TestBluetoothManagerInit:
         bus_type, _, dbus_error = create_mock_dbus_fast()
         mock_bus = create_mock_message_bus()
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager(adapter_name="hci1")
             
@@ -48,7 +48,7 @@ class TestBluetoothManagerInit:
     
     def test_init_dbus_fast_not_available(self):
         """Test initialization fails when dbus-fast not available."""
-        with patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', False):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', False):
             with pytest.raises(BluetoothError) as exc_info:
                 BluetoothManager()
             
@@ -60,10 +60,10 @@ class TestBluetoothManagerInit:
         mock_bus = create_mock_message_bus()
         mock_bus.set_should_fail("/org/bluez/hci0")
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             with pytest.raises(BluetoothError) as exc_info:
                 BluetoothManager()
@@ -82,10 +82,10 @@ class TestBluetoothManagerDiscovery:
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
              patch('asyncio.sleep'):  # Mock async sleep
             
             manager = BluetoothManager()
@@ -98,10 +98,10 @@ class TestBluetoothManagerDiscovery:
         bus_type, _, dbus_error = create_mock_dbus_fast()
         mock_bus = create_mock_message_bus()
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
              patch('asyncio.sleep'):
             
             manager = BluetoothManager()
@@ -115,10 +115,10 @@ class TestBluetoothManagerDiscovery:
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             exists = manager.find_device_by_mac("00:11:22:33:44:55")
@@ -130,10 +130,10 @@ class TestBluetoothManagerDiscovery:
         bus_type, _, dbus_error = create_mock_dbus_fast()
         mock_bus = create_mock_message_bus()
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             exists = manager.find_device_by_mac("00:11:22:33:44:55")
@@ -150,10 +150,10 @@ class TestBluetoothManagerPairing:
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE", paired=False)
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             result = manager.pair_device("00:11:22:33:44:55")
@@ -168,10 +168,10 @@ class TestBluetoothManagerPairing:
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE", paired=True)
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             result = manager.pair_device("00:11:22:33:44:55")
@@ -186,10 +186,10 @@ class TestBluetoothManagerPairing:
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             result = manager.trust_device("00:11:22:33:44:55")
@@ -204,10 +204,10 @@ class TestBluetoothManagerPairing:
         mock_bus = create_mock_message_bus()
         # Don't add device - will cause failure at introspection
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             
@@ -228,10 +228,10 @@ class TestBluetoothManagerConnection:
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             result = manager.connect_device("00:11:22:33:44:55")
@@ -246,10 +246,10 @@ class TestBluetoothManagerConnection:
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE", connected=True)
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             result = manager.connect_device("00:11:22:33:44:55")
@@ -264,10 +264,10 @@ class TestBluetoothManagerConnection:
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE", connected=True)
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             result = manager.disconnect_device("00:11:22:33:44:55")
@@ -285,10 +285,10 @@ class TestBluetoothManagerHelpers:
         bus_type, _, dbus_error = create_mock_dbus_fast()
         mock_bus = create_mock_message_bus()
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             channel = manager.discover_rfcomm_channel("00:11:22:33:44:55")
@@ -302,10 +302,10 @@ class TestBluetoothManagerHelpers:
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
              patch('asyncio.sleep'):
             
             manager = BluetoothManager()
@@ -319,10 +319,10 @@ class TestBluetoothManagerHelpers:
         bus_type, _, dbus_error = create_mock_dbus_fast()
         mock_bus = create_mock_message_bus()
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda **_kw: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda **_kw: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
              patch('asyncio.sleep'):
             
             manager = BluetoothManager()
@@ -337,10 +337,10 @@ class TestBluetoothManagerHelpers:
         bus_type, _, dbus_error = create_mock_dbus_fast()
         mock_bus = create_mock_message_bus()
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             
@@ -355,10 +355,10 @@ class TestBluetoothManagerHelpers:
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             mac, channel = manager.ensure_device_ready(mac_address="00:11:22:33:44:55")
@@ -379,10 +379,10 @@ class TestBluetoothManagerCacheInvalidation:
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             device_path = "/org/bluez/hci0/dev_00_11_22_33_44_55"
@@ -400,10 +400,10 @@ class TestBluetoothManagerCacheInvalidation:
         bus_type, _, dbus_error = create_mock_dbus_fast()
         mock_bus = create_mock_message_bus()
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             # Should not raise
@@ -419,10 +419,10 @@ class TestBluetoothManagerCacheInvalidation:
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE", paired=False)
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             device_path = "/org/bluez/hci0/dev_00_11_22_33_44_55"
@@ -443,10 +443,10 @@ class TestBluetoothManagerCacheInvalidation:
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True):
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True):
             
             manager = BluetoothManager()
             device_path = "/org/bluez/hci0/dev_00_11_22_33_44_55"
@@ -470,10 +470,10 @@ class TestBluetoothManagerRecovery:
         mock_bus = create_mock_message_bus()
         # Device NOT added initially — first pair attempt will fail
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
              patch('asyncio.sleep'):
             
             manager = BluetoothManager()
@@ -505,10 +505,10 @@ class TestBluetoothManagerRecovery:
         mock_bus = create_mock_message_bus()
         # Device never added — both attempts will fail
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
              patch('asyncio.sleep'):
             
             manager = BluetoothManager()
@@ -523,10 +523,10 @@ class TestBluetoothManagerRecovery:
         bus_type, _, dbus_error = create_mock_dbus_fast()
         mock_bus = create_mock_message_bus()
         
-        with patch('src.sp_base_relay.core.bluetooth_manager.BusType', bus_type), \
-             patch('src.sp_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
-             patch('src.sp_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
-             patch('src.sp_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
+        with patch('src.sp_rtk_base_relay.core.bluetooth_manager.BusType', bus_type), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus', lambda bus_type: mock_bus), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager.DBusError', dbus_error), \
+             patch('src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available', True), \
              patch('asyncio.sleep'):
             
             manager = BluetoothManager()

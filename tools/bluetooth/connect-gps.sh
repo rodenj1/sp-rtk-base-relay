@@ -69,7 +69,7 @@ if [ -e "/dev/rfcomm${RFCOMM_DEVICE}" ]; then
     sudo chmod 666 "/dev/rfcomm${RFCOMM_DEVICE}"
     
     echo ""
-    echo -e "${GREEN}You can now use /dev/rfcomm${RFCOMM_DEVICE} with sp-base-relay${NC}"
+    echo -e "${GREEN}You can now use /dev/rfcomm${RFCOMM_DEVICE} with sp-rtk-base-relay${NC}"
 else
     echo -e "${RED}Error: Failed to create /dev/rfcomm${RFCOMM_DEVICE}${NC}"
     exit 1

@@ -3,13 +3,13 @@
 __version__ = "2.1.0"
 
 # v2.1 public API — RelayEngine facade
-from sp_base_relay.engine import RelayEngine
+from sp_rtk_base_relay.engine import RelayEngine
 
 # v2.1 public API — Event system
-from sp_base_relay.core.events import EventBus, EventSubscription, RelayEvent
+from sp_rtk_base_relay.core.events import EventBus, EventSubscription, RelayEvent
 
 # v2.1 public API — Typed status snapshots
-from sp_base_relay.core.status import (
+from sp_rtk_base_relay.core.status import (
     DestinationStatus,
     InputStatus,
     RelayStatus,

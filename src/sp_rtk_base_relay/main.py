@@ -10,23 +10,23 @@ import time
 from pathlib import Path
 from typing import Any
 
-from sp_base_relay import __version__
-from sp_base_relay.config import Config, ConfigManager
-from sp_base_relay.core.broadcast_hub import BroadcastHub
-from sp_base_relay.core.destinations.base_destination import BaseDestination
-from sp_base_relay.core.destinations.destination_factory import DestinationFactory
-from sp_base_relay.core.input_sources.base_input import InputSource
-from sp_base_relay.core.input_sources.input_factory import InputSourceFactory
-from sp_base_relay.exceptions import (
+from sp_rtk_base_relay import __version__
+from sp_rtk_base_relay.config import Config, ConfigManager
+from sp_rtk_base_relay.core.broadcast_hub import BroadcastHub
+from sp_rtk_base_relay.core.destinations.base_destination import BaseDestination
+from sp_rtk_base_relay.core.destinations.destination_factory import DestinationFactory
+from sp_rtk_base_relay.core.input_sources.base_input import InputSource
+from sp_rtk_base_relay.core.input_sources.input_factory import InputSourceFactory
+from sp_rtk_base_relay.exceptions import (
     ConfigurationError,
     ServiceError,
     SPBaseRelayError,
 )
-from sp_base_relay.logger import LoggerManager, get_logger
-from sp_base_relay.metrics import MetricsCollector
+from sp_rtk_base_relay.logger import LoggerManager, get_logger
+from sp_rtk_base_relay.metrics import MetricsCollector
 
 # Ensure destination builders are registered on import
-import sp_base_relay.core.destinations as _destinations_registry  # noqa: F401  # pyright: ignore[reportUnusedImport]
+import sp_rtk_base_relay.core.destinations as _destinations_registry  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 _ = _destinations_registry  # Keep pyright happy
 
@@ -326,22 +326,22 @@ def create_parser() -> argparse.ArgumentParser:
         Configured argument parser
     """
     parser = argparse.ArgumentParser(
-        prog="sp-base-relay",
+        prog="sp-rtk-base-relay",
         description="RTCM relay service for custom GPS correction servers",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Start service with configuration file
-  sp-base-relay --config /etc/sp-base-relay/config.yaml
+  sp-rtk-base-relay --config /etc/sp-rtk-base-relay/config.yaml
   
   # Validate configuration
-  sp-base-relay --config config.yaml --validate
+  sp-rtk-base-relay --config config.yaml --validate
   
   # Generate example configuration
-  sp-base-relay --generate-config > config.yaml
+  sp-rtk-base-relay --generate-config > config.yaml
   
   # Run in foreground with debug logging
-  sp-base-relay --config config.yaml --foreground --log-level DEBUG
+  sp-rtk-base-relay --config config.yaml --foreground --log-level DEBUG
         """,
     )
 
@@ -353,8 +353,8 @@ Examples:
         "-c",
         "--config",
         type=Path,
-        default=Path("/etc/sp-base-relay/config.yaml"),
-        help="Path to configuration file (default: /etc/sp-base-relay/config.yaml)",
+        default=Path("/etc/sp-rtk-base-relay/config.yaml"),
+        help="Path to configuration file (default: /etc/sp-rtk-base-relay/config.yaml)",
     )
 
     parser.add_argument(

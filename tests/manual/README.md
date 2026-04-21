@@ -16,7 +16,7 @@ Manual tests are designed for scenarios where:
 
 End-to-end test script for validating complete data flow with the production RTCM server.
 
-**Purpose**: Validate that sp-base-relay can successfully:
+**Purpose**: Validate that sp-rtk-base-relay can successfully:
 - Connect to TCP hardware source (192.168.0.242:3000)
 - Authenticate with production RTCM server (rtcm.example.com:50010)
 - Stream RTCM data continuously

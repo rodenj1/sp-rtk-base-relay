@@ -8,12 +8,12 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from sp_base_relay.config import Config, LoggingConfig, MetricsConfig
-from sp_base_relay.exceptions import (
+from sp_rtk_base_relay.config import Config, LoggingConfig, MetricsConfig
+from sp_rtk_base_relay.exceptions import (
     ConfigurationError,
     ServiceError,
 )
-from sp_base_relay.main import (
+from sp_rtk_base_relay.main import (
     SPBaseRelayService,
     create_parser,
     main,
@@ -122,10 +122,10 @@ class TestServiceInit:
 class TestServiceStartup:
     """Tests for service startup process."""
 
-    @patch("sp_base_relay.main.MetricsCollector")
-    @patch("sp_base_relay.main.InputSourceFactory")
-    @patch("sp_base_relay.main.DestinationFactory")
-    @patch("sp_base_relay.main.BroadcastHub")
+    @patch("sp_rtk_base_relay.main.MetricsCollector")
+    @patch("sp_rtk_base_relay.main.InputSourceFactory")
+    @patch("sp_rtk_base_relay.main.DestinationFactory")
+    @patch("sp_rtk_base_relay.main.BroadcastHub")
     def test_start_success(
         self,
         mock_hub_cls: Mock,
@@ -150,7 +150,7 @@ class TestServiceStartup:
         assert len(service.destinations) == 1
         assert service.hub is not None
 
-    @patch("sp_base_relay.main.MetricsCollector")
+    @patch("sp_rtk_base_relay.main.MetricsCollector")
     def test_start_with_metrics_enabled(
         self, mock_metrics_cls: Mock, mock_config: Mock
     ) -> None:
@@ -170,7 +170,7 @@ class TestServiceStartup:
             port=mock_config.metrics.port, host=mock_config.metrics.host
         )
 
-    @patch("sp_base_relay.main.MetricsCollector")
+    @patch("sp_rtk_base_relay.main.MetricsCollector")
     def test_start_without_metrics(
         self, mock_metrics_cls: Mock, mock_config: Mock
     ) -> None:
@@ -275,7 +275,7 @@ class TestServiceShutdown:
 class TestServiceRun:
     """Tests for service run loop."""
 
-    @patch("sp_base_relay.main.time.sleep")
+    @patch("sp_rtk_base_relay.main.time.sleep")
     def test_run_until_shutdown(
         self, mock_sleep: Mock, mock_config: Mock, mock_hub: Mock
     ) -> None:
@@ -305,7 +305,7 @@ class TestServiceRun:
         with pytest.raises(ServiceError, match="must be started"):
             service.run()
 
-    @patch("sp_base_relay.main.time.sleep")
+    @patch("sp_rtk_base_relay.main.time.sleep")
     def test_run_handles_keyboard_interrupt(
         self, mock_sleep: Mock, mock_config: Mock, mock_hub: Mock
     ) -> None:
@@ -319,7 +319,7 @@ class TestServiceRun:
             exit_code = service.run()
         assert exit_code == 0
 
-    @patch("sp_base_relay.main.time.sleep")
+    @patch("sp_rtk_base_relay.main.time.sleep")
     def test_run_handles_exceptions(
         self, mock_sleep: Mock, mock_config: Mock, mock_hub: Mock
     ) -> None:
@@ -333,7 +333,7 @@ class TestServiceRun:
             exit_code = service.run()
         assert exit_code == 1
 
-    @patch("sp_base_relay.main.time.sleep")
+    @patch("sp_rtk_base_relay.main.time.sleep")
     def test_run_updates_metrics(
         self,
         mock_sleep: Mock,
@@ -367,7 +367,7 @@ class TestServiceRun:
 class TestServiceComponents:
     """Tests for component creation methods."""
 
-    @patch("sp_base_relay.main.InputSourceFactory")
+    @patch("sp_rtk_base_relay.main.InputSourceFactory")
     def test_create_tcp_input_source(
         self, mock_factory: Mock, mock_config: Mock, mock_input_source: Mock
     ) -> None:
@@ -381,7 +381,7 @@ class TestServiceComponents:
         args = mock_factory.create_input_source.call_args
         assert args[0][0] == "tcp"
 
-    @patch("sp_base_relay.main.InputSourceFactory")
+    @patch("sp_rtk_base_relay.main.InputSourceFactory")
     def test_create_serial_input_source(
         self, mock_factory: Mock, mock_config: Mock, mock_input_source: Mock
     ) -> None:
@@ -402,7 +402,7 @@ class TestServiceComponents:
         args = mock_factory.create_input_source.call_args
         assert args[0][0] == "serial"
 
-    @patch("sp_base_relay.main.InputSourceFactory")
+    @patch("sp_rtk_base_relay.main.InputSourceFactory")
     def test_create_usb_serial_maps_to_serial(
         self, mock_factory: Mock, mock_config: Mock, mock_input_source: Mock
     ) -> None:
@@ -429,7 +429,7 @@ class TestServiceComponents:
         with pytest.raises(ConfigurationError, match="Unsupported input source"):
             service._create_input_source()
 
-    @patch("sp_base_relay.main.DestinationFactory")
+    @patch("sp_rtk_base_relay.main.DestinationFactory")
     def test_create_destinations(
         self, mock_factory: Mock, mock_config: Mock, mock_destination: Mock
     ) -> None:
@@ -447,7 +447,7 @@ class TestServiceComponents:
         with pytest.raises(ConfigurationError, match="No destinations configured"):
             service._create_destinations()
 
-    @patch("sp_base_relay.main.DestinationFactory")
+    @patch("sp_rtk_base_relay.main.DestinationFactory")
     def test_create_destinations_none_enabled(
         self, mock_factory: Mock, mock_config: Mock
     ) -> None:
@@ -456,7 +456,7 @@ class TestServiceComponents:
         with pytest.raises(ConfigurationError, match="No enabled destinations"):
             service._create_destinations()
 
-    @patch("sp_base_relay.main.BroadcastHub")
+    @patch("sp_rtk_base_relay.main.BroadcastHub")
     def test_start_hub(
         self,
         mock_hub_cls: Mock,
@@ -620,7 +620,7 @@ class TestCLIParser:
     def test_parse_default_config_path(self) -> None:
         parser = create_parser()
         args = parser.parse_args([])
-        assert args.config == Path("/etc/sp-base-relay/config.yaml")
+        assert args.config == Path("/etc/sp-rtk-base-relay/config.yaml")
 
     def test_parse_custom_config_path(self) -> None:
         parser = create_parser()
@@ -679,7 +679,7 @@ class TestSignalHandlers:
             assert calls[0][0][0] == signal.SIGTERM
             assert calls[1][0][0] == signal.SIGINT
 
-    @patch("sp_base_relay.main.sys.exit")
+    @patch("sp_rtk_base_relay.main.sys.exit")
     def test_signal_handler_stops_service(
         self, mock_exit: Mock, mock_config: Mock
     ) -> None:
@@ -703,18 +703,18 @@ class TestSignalHandlers:
 class TestMainFunction:
     """Tests for main() entry point."""
 
-    @patch("sp_base_relay.main.ConfigManager.generate_default_config")
+    @patch("sp_rtk_base_relay.main.ConfigManager.generate_default_config")
     def test_main_generate_config_mode(
         self, mock_gen: Mock, capsys: pytest.CaptureFixture[str]
     ) -> None:
         mock_gen.return_value = "# Config"
-        with patch("sys.argv", ["sp-base-relay", "--generate-config"]):
+        with patch("sys.argv", ["sp-rtk-base-relay", "--generate-config"]):
             exit_code = main()
         assert exit_code == 0
         assert "# Config" in capsys.readouterr().out
 
-    @patch("sp_base_relay.main.ConfigManager")
-    @patch("sp_base_relay.main.LoggerManager")
+    @patch("sp_rtk_base_relay.main.ConfigManager")
+    @patch("sp_rtk_base_relay.main.LoggerManager")
     def test_main_validate_mode(
         self,
         mock_logger_mgr: Mock,
@@ -726,12 +726,12 @@ class TestMainFunction:
         mock_config_mgr.load_config.return_value = mock_config
         mock_config_mgr_cls.return_value = mock_config_mgr
 
-        with patch("sys.argv", ["sp-base-relay", "--validate"]):
+        with patch("sys.argv", ["sp-rtk-base-relay", "--validate"]):
             exit_code = main()
         assert exit_code == 0
         assert "valid" in capsys.readouterr().out.lower()
 
-    @patch("sp_base_relay.main.ConfigManager")
+    @patch("sp_rtk_base_relay.main.ConfigManager")
     def test_main_config_load_error(
         self, mock_config_mgr_cls: Mock, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -739,13 +739,13 @@ class TestMainFunction:
         mock_config_mgr.load_config.side_effect = ConfigurationError("Invalid config")
         mock_config_mgr_cls.return_value = mock_config_mgr
 
-        with patch("sys.argv", ["sp-base-relay"]):
+        with patch("sys.argv", ["sp-rtk-base-relay"]):
             exit_code = main()
         assert exit_code == 1
         assert "Error loading configuration" in capsys.readouterr().err
 
-    @patch("sp_base_relay.main.ConfigManager")
-    @patch("sp_base_relay.main.LoggerManager")
+    @patch("sp_rtk_base_relay.main.ConfigManager")
+    @patch("sp_rtk_base_relay.main.LoggerManager")
     def test_main_logger_setup_error(
         self,
         mock_logger_mgr: Mock,
@@ -758,15 +758,15 @@ class TestMainFunction:
         mock_config_mgr_cls.return_value = mock_config_mgr
         mock_logger_mgr.setup_logging.side_effect = Exception("Logger error")
 
-        with patch("sys.argv", ["sp-base-relay"]):
+        with patch("sys.argv", ["sp-rtk-base-relay"]):
             exit_code = main()
         assert exit_code == 1
         assert "Error setting up logging" in capsys.readouterr().err
 
-    @patch("sp_base_relay.main.ConfigManager")
-    @patch("sp_base_relay.main.LoggerManager")
-    @patch("sp_base_relay.main.SPBaseRelayService")
-    @patch("sp_base_relay.main.setup_signal_handlers")
+    @patch("sp_rtk_base_relay.main.ConfigManager")
+    @patch("sp_rtk_base_relay.main.LoggerManager")
+    @patch("sp_rtk_base_relay.main.SPBaseRelayService")
+    @patch("sp_rtk_base_relay.main.setup_signal_handlers")
     def test_main_successful_run(
         self,
         mock_setup_signals: Mock,
@@ -782,7 +782,7 @@ class TestMainFunction:
         mock_service.run.return_value = 0
         mock_service_cls.return_value = mock_service
 
-        with patch("sys.argv", ["sp-base-relay"]):
+        with patch("sys.argv", ["sp-rtk-base-relay"]):
             exit_code = main()
 
         assert exit_code == 0
@@ -790,9 +790,9 @@ class TestMainFunction:
         mock_service.run.assert_called_once()
         mock_logger_mgr.shutdown_logging.assert_called_once()
 
-    @patch("sp_base_relay.main.ConfigManager")
-    @patch("sp_base_relay.main.LoggerManager")
-    @patch("sp_base_relay.main.SPBaseRelayService")
+    @patch("sp_rtk_base_relay.main.ConfigManager")
+    @patch("sp_rtk_base_relay.main.LoggerManager")
+    @patch("sp_rtk_base_relay.main.SPBaseRelayService")
     def test_main_service_error(
         self,
         mock_service_cls: Mock,
@@ -807,13 +807,13 @@ class TestMainFunction:
         mock_service.start.side_effect = ServiceError("Service error")
         mock_service_cls.return_value = mock_service
 
-        with patch("sys.argv", ["sp-base-relay"]):
+        with patch("sys.argv", ["sp-rtk-base-relay"]):
             exit_code = main()
         assert exit_code == 1
 
-    @patch("sp_base_relay.main.ConfigManager")
-    @patch("sp_base_relay.main.LoggerManager")
-    @patch("sp_base_relay.main.SPBaseRelayService")
+    @patch("sp_rtk_base_relay.main.ConfigManager")
+    @patch("sp_rtk_base_relay.main.LoggerManager")
+    @patch("sp_rtk_base_relay.main.SPBaseRelayService")
     def test_main_keyboard_interrupt(
         self,
         mock_service_cls: Mock,
@@ -828,12 +828,12 @@ class TestMainFunction:
         mock_service.start.side_effect = KeyboardInterrupt()
         mock_service_cls.return_value = mock_service
 
-        with patch("sys.argv", ["sp-base-relay"]):
+        with patch("sys.argv", ["sp-rtk-base-relay"]):
             exit_code = main()
         assert exit_code == 0
 
-    @patch("sp_base_relay.main.ConfigManager")
-    @patch("sp_base_relay.main.LoggerManager")
+    @patch("sp_rtk_base_relay.main.ConfigManager")
+    @patch("sp_rtk_base_relay.main.LoggerManager")
     def test_main_log_level_override(
         self,
         mock_logger_mgr: Mock,
@@ -845,9 +845,9 @@ class TestMainFunction:
         mock_config_mgr_cls.return_value = mock_config_mgr
 
         with (
-            patch("sys.argv", ["sp-base-relay", "--log-level", "DEBUG"]),
-            patch("sp_base_relay.main.SPBaseRelayService"),
-            patch("sp_base_relay.main.setup_signal_handlers"),
+            patch("sys.argv", ["sp-rtk-base-relay", "--log-level", "DEBUG"]),
+            patch("sp_rtk_base_relay.main.SPBaseRelayService"),
+            patch("sp_rtk_base_relay.main.setup_signal_handlers"),
         ):
             try:
                 main()

@@ -1,6 +1,6 @@
 # SP-Base-Relay Deployment Guide
 
-This guide provides comprehensive instructions for deploying sp-base-relay v2.0 as a systemd service on Linux systems.
+This guide provides comprehensive instructions for deploying sp-rtk-base-relay v2.0 as a systemd service on Linux systems.
 
 ## Prerequisites
 
@@ -21,14 +21,14 @@ This guide provides comprehensive instructions for deploying sp-base-relay v2.0 
 ### Method 1: Automated (Recommended)
 
 ```bash
-git clone https://github.com/rodenj1/sp-base-relay.git
-cd sp-base-relay
+git clone https://github.com/rodenj1/sp-rtk-base-relay.git
+cd sp-rtk-base-relay
 sudo ./tools/install.sh
 ```
 
 The script will:
 1. Check system dependencies
-2. Create system user and group (`sp-base-relay`)
+2. Create system user and group (`sp-rtk-base-relay`)
 3. Create required directories
 4. Install the Python package
 5. Generate default configuration
@@ -38,22 +38,22 @@ The script will:
 
 ```bash
 # Install package
-uv pip install --system sp-base-relay
+uv pip install --system sp-rtk-base-relay
 
 # Create system user
-sudo useradd --system --no-create-home --shell /bin/false sp-base-relay
+sudo useradd --system --no-create-home --shell /bin/false sp-rtk-base-relay
 
 # Create directories
-sudo mkdir -p /etc/sp-base-relay /var/lib/sp-base-relay /var/log/sp-base-relay
-sudo chown sp-base-relay:sp-base-relay /var/lib/sp-base-relay /var/log/sp-base-relay
+sudo mkdir -p /etc/sp-rtk-base-relay /var/lib/sp-rtk-base-relay /var/log/sp-rtk-base-relay
+sudo chown sp-rtk-base-relay:sp-rtk-base-relay /var/lib/sp-rtk-base-relay /var/log/sp-rtk-base-relay
 
 # Generate config
-sudo sp-base-relay --generate-config > /etc/sp-base-relay/config.yaml
+sudo sp-rtk-base-relay --generate-config > /etc/sp-rtk-base-relay/config.yaml
 
 # Install systemd service
-sudo cp tools/systemd/sp-base-relay.service /etc/systemd/system/
+sudo cp tools/systemd/sp-rtk-base-relay.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable sp-base-relay
+sudo systemctl enable sp-rtk-base-relay
 ```
 
 ---
@@ -66,7 +66,7 @@ v2.0 replaces the old `server:` key with a `destinations:` list. If you're upgra
 
 ### Basic Configuration
 
-Edit `/etc/sp-base-relay/config.yaml`:
+Edit `/etc/sp-rtk-base-relay/config.yaml`:
 
 ```yaml
 input:
@@ -168,26 +168,26 @@ For complete configuration options, see [Configuration Reference](../configurati
 ### Basic Commands
 
 ```bash
-sudo systemctl start sp-base-relay
-sudo systemctl stop sp-base-relay
-sudo systemctl restart sp-base-relay
-sudo systemctl status sp-base-relay
-sudo systemctl enable sp-base-relay    # Auto-start on boot
+sudo systemctl start sp-rtk-base-relay
+sudo systemctl stop sp-rtk-base-relay
+sudo systemctl restart sp-rtk-base-relay
+sudo systemctl status sp-rtk-base-relay
+sudo systemctl enable sp-rtk-base-relay    # Auto-start on boot
 ```
 
 ### Viewing Logs
 
 ```bash
-sudo journalctl -u sp-base-relay -f           # Follow in real-time
-sudo journalctl -u sp-base-relay -n 50        # Last 50 lines
-sudo journalctl -u sp-base-relay -p err       # Errors only
-sudo journalctl -u sp-base-relay -o short-iso # With timestamps
+sudo journalctl -u sp-rtk-base-relay -f           # Follow in real-time
+sudo journalctl -u sp-rtk-base-relay -n 50        # Last 50 lines
+sudo journalctl -u sp-rtk-base-relay -p err       # Errors only
+sudo journalctl -u sp-rtk-base-relay -o short-iso # With timestamps
 ```
 
 ### Configuration Validation
 
 ```bash
-sp-base-relay --config /etc/sp-base-relay/config.yaml --validate
+sp-rtk-base-relay --config /etc/sp-rtk-base-relay/config.yaml --validate
 ```
 
 ---
@@ -203,11 +203,11 @@ curl http://localhost:8080/metrics
 ```
 
 Key metrics:
-- `sp_base_relay_dest_connection_status{destination="..."}` — per-destination connection state
-- `sp_base_relay_dest_bytes_sent_total{destination="..."}` — per-destination throughput
-- `sp_base_relay_dest_errors_total{destination="..."}` — per-destination errors
-- `sp_base_relay_input_connection_status` — GPS input connection state
-- `sp_base_relay_input_seconds_since_last_data` — no-data watchdog
+- `sp_rtk_base_relay_dest_connection_status{destination="..."}` — per-destination connection state
+- `sp_rtk_base_relay_dest_bytes_sent_total{destination="..."}` — per-destination throughput
+- `sp_rtk_base_relay_dest_errors_total{destination="..."}` — per-destination errors
+- `sp_rtk_base_relay_input_connection_status` — GPS input connection state
+- `sp_rtk_base_relay_input_seconds_since_last_data` — no-data watchdog
 
 For complete metrics documentation, see [Metrics Guide](metrics-guide.md).
 
@@ -221,7 +221,7 @@ Import `templates/grafana_dashboard.json` for a pre-built v2 dashboard with:
 ### Health Checks
 
 ```bash
-sudo systemctl is-active sp-base-relay
+sudo systemctl is-active sp-rtk-base-relay
 curl http://localhost:8080/metrics | grep connection_status
 ```
 
@@ -232,9 +232,9 @@ curl http://localhost:8080/metrics | grep connection_status
 ### Service Won't Start
 
 ```bash
-sudo systemctl status sp-base-relay
-sudo journalctl -u sp-base-relay -n 50
-sp-base-relay --config /etc/sp-base-relay/config.yaml --validate
+sudo systemctl status sp-rtk-base-relay
+sudo journalctl -u sp-rtk-base-relay -n 50
+sp-rtk-base-relay --config /etc/sp-rtk-base-relay/config.yaml --validate
 ```
 
 Common issues:
@@ -254,16 +254,16 @@ telnet rtk2go.com 2101
 sudo systemctl status str2str_tcp
 
 # View connection logs
-sudo journalctl -u sp-base-relay | grep -i "connection\|auth"
+sudo journalctl -u sp-rtk-base-relay | grep -i "connection\|auth"
 ```
 
 ### Permission Errors
 
 ```bash
-sudo chown -R sp-base-relay:sp-base-relay /var/lib/sp-base-relay
-sudo chown -R sp-base-relay:sp-base-relay /var/log/sp-base-relay
-sudo usermod -a -G dialout sp-base-relay    # For serial ports
-sudo systemctl restart sp-base-relay
+sudo chown -R sp-rtk-base-relay:sp-rtk-base-relay /var/lib/sp-rtk-base-relay
+sudo chown -R sp-rtk-base-relay:sp-rtk-base-relay /var/log/sp-rtk-base-relay
+sudo usermod -a -G dialout sp-rtk-base-relay    # For serial ports
+sudo systemctl restart sp-rtk-base-relay
 ```
 
 ---
@@ -274,12 +274,12 @@ sudo systemctl restart sp-base-relay
 
 1. **Backup your config**:
    ```bash
-   sudo cp /etc/sp-base-relay/config.yaml /etc/sp-base-relay/config.yaml.v1.bak
+   sudo cp /etc/sp-rtk-base-relay/config.yaml /etc/sp-rtk-base-relay/config.yaml.v1.bak
    ```
 
 2. **Update the package**:
    ```bash
-   cd sp-base-relay && git pull && sudo ./tools/install.sh
+   cd sp-rtk-base-relay && git pull && sudo ./tools/install.sh
    ```
 
 3. **Migrate config**: Replace `server:` with `destinations:` list format. See [Configuration Reference](../configuration-reference.md#migration-from-v1x).
@@ -290,14 +290,14 @@ sudo systemctl restart sp-base-relay
 
 6. **Restart**:
    ```bash
-   sudo systemctl restart sp-base-relay
+   sudo systemctl restart sp-rtk-base-relay
    ```
 
 ### Within v2.x
 
 ```bash
-cd sp-base-relay && git pull && sudo ./tools/install.sh
-sudo systemctl restart sp-base-relay
+cd sp-rtk-base-relay && git pull && sudo ./tools/install.sh
+sudo systemctl restart sp-rtk-base-relay
 ```
 
 ---
@@ -310,12 +310,12 @@ sudo ./tools/uninstall.sh
 
 Or manually:
 ```bash
-sudo systemctl stop sp-base-relay
-sudo systemctl disable sp-base-relay
-sudo rm /etc/systemd/system/sp-base-relay.service
+sudo systemctl stop sp-rtk-base-relay
+sudo systemctl disable sp-rtk-base-relay
+sudo rm /etc/systemd/system/sp-rtk-base-relay.service
 sudo systemctl daemon-reload
-pip3 uninstall sp-base-relay
-sudo userdel sp-base-relay
+pip3 uninstall sp-rtk-base-relay
+sudo userdel sp-rtk-base-relay
 ```
 
 ---
@@ -333,7 +333,7 @@ input:
 
 Optional systemd dependency:
 ```ini
-# Add to /etc/systemd/system/sp-base-relay.service [Unit] section
+# Add to /etc/systemd/system/sp-rtk-base-relay.service [Unit] section
 After=str2str_tcp.service
 Wants=str2str_tcp.service
 ```
@@ -342,10 +342,10 @@ Wants=str2str_tcp.service
 
 ## Security
 
-- Service runs as dedicated `sp-base-relay` user with minimal privileges
+- Service runs as dedicated `sp-rtk-base-relay` user with minimal privileges
 - Config file should be readable only by the service user:
   ```bash
-  sudo chmod 640 /etc/sp-base-relay/config.yaml
+  sudo chmod 640 /etc/sp-rtk-base-relay/config.yaml
   ```
 - Use environment variables for sensitive credentials:
   ```bash

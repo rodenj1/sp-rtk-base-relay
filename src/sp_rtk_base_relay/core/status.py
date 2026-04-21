@@ -24,9 +24,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from sp_base_relay.core.broadcast_hub import BroadcastHub
-    from sp_base_relay.core.destinations.base_destination import BaseDestination
-    from sp_base_relay.core.input_sources.base_input import InputSource
+    from sp_rtk_base_relay.core.broadcast_hub import BroadcastHub
+    from sp_rtk_base_relay.core.destinations.base_destination import BaseDestination
+    from sp_rtk_base_relay.core.input_sources.base_input import InputSource
 
 
 # ---------------------------------------------------------------------------

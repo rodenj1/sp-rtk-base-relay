@@ -831,7 +831,7 @@ wheels = [
 ]
 
 [[package]]
-name = "sp-base-relay"
+name = "sp-rtk-base-relay"
 version = "2.1.0"
 source = { editable = "." }
 dependencies = [

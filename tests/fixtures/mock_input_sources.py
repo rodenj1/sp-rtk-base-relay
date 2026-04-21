@@ -11,8 +11,8 @@ import threading
 from typing import Any
 from dataclasses import dataclass
 
-from src.sp_base_relay.core.input_sources.base_input import InputSource
-from src.sp_base_relay.exceptions import InputSourceError
+from src.sp_rtk_base_relay.core.input_sources.base_input import InputSource
+from src.sp_rtk_base_relay.exceptions import InputSourceError
 from .rtcm_generator import RTCMGenerator
 
 

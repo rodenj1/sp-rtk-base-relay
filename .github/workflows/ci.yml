@@ -12,10 +12,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Pinned action SHAs (supply-chain safety). Versions noted in comments.
-env:
-  # astral-sh/setup-uv v8.1.0
-  SETUP_UV_SHA: "08807647e7069bb48b6ef5acd8ec9567f424441b"
+# Top-level permissions.  Jobs that need to mint an OIDC token for Codecov
+# upgrade this at the job level.  All other jobs run with read-only contents.
+permissions:
+  contents: read
 
 jobs:
   # ------------------------------------------------------------------
@@ -63,6 +63,10 @@ jobs:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     needs: lint
+    # id-token: write is required for Codecov's OIDC tokenless upload.
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -110,45 +114,27 @@ jobs:
           path: pytest-junit.xml
           retention-days: 14
 
-      - name: Extract coverage percent
-        if: matrix.python-version == '3.12' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        id: coverage
-        run: |
-          # coverage.xml has <coverage line-rate="0.8935" ...> at the root
-          RATE=$(python -c "import xml.etree.ElementTree as ET; r=ET.parse('coverage.xml').getroot(); print(f'{float(r.attrib[\"line-rate\"])*100:.2f}')")
-          echo "percent=$RATE" >> "$GITHUB_OUTPUT"
-          echo "Coverage: $RATE%"
-
-      - name: Determine badge color
-        if: steps.coverage.outputs.percent != ''
-        id: color
-        run: |
-          RATE="${{ steps.coverage.outputs.percent }}"
-          # bash doesn't do floats — use awk
-          COLOR=$(awk -v r="$RATE" 'BEGIN{
-            if (r+0 >= 90)      print "brightgreen";
-            else if (r+0 >= 80) print "green";
-            else if (r+0 >= 70) print "yellowgreen";
-            else if (r+0 >= 60) print "yellow";
-            else                print "red";
-          }')
-          echo "color=$COLOR" >> "$GITHUB_OUTPUT"
-
-      - name: Update coverage badge (main + Python 3.12 only)
-        if: steps.coverage.outputs.percent != '' && env.GIST_SECRET != ''
-        continue-on-error: true
-        env:
-          GIST_SECRET: ${{ secrets.GIST_SECRET }}
-        uses: schneegans/dynamic-badges-action@0e50b8bad39e7e1afd3e4e9c2b7dd145fad07501 # v1.8.0
+      - name: Upload coverage to Codecov (Python 3.12 only)
+        # Codecov v6 uses OIDC tokenless upload on public repos — no PAT/gist needed.
+        if: matrix.python-version == '3.12' && !cancelled()
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:
-          auth: ${{ secrets.GIST_SECRET }}
-          # Set the Gist ID as a repo secret or variable; see docs/ci-setup.md
-          gistID: ${{ secrets.COVERAGE_GIST_ID }}
-          filename: sp-rtk-base-relay-coverage.json
-          label: coverage
-          message: ${{ steps.coverage.outputs.percent }}%
-          color: ${{ steps.color.outputs.color }}
-          namedLogo: python
+          files: ./coverage.xml
+          flags: unittests
+          name: coverage-py${{ matrix.python-version }}
+          use_oidc: true
+          fail_ci_if_error: false
+          verbose: false
+
+      - name: Upload test results to Codecov (Python 3.12 only)
+        if: matrix.python-version == '3.12' && !cancelled()
+        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1.2.1
+        with:
+          files: ./pytest-junit.xml
+          flags: unittests
+          name: junit-py${{ matrix.python-version }}
+          use_oidc: true
+          fail_ci_if_error: false
 
   # ------------------------------------------------------------------
   # Package build sanity check

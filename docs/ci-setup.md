@@ -1,127 +1,118 @@
-# CI / GitHub Actions Setup
+# CI / Coverage Setup
 
-This document describes the CI pipeline for `sp-rtk-base-relay` and the one-time
-setup required to enable the dynamic coverage badge.
+The project uses GitHub Actions for CI and [Codecov](https://codecov.io) for
+coverage reporting. This document explains the workflow design and the
+one-time manual setup required to activate the Codecov badge.
 
-## Overview
+## Workflow overview (`.github/workflows/ci.yml`)
 
-The CI workflow (`.github/workflows/ci.yml`) runs on:
+Three jobs run on every push/PR to `main`:
 
-- Every push to `main`
-- Every pull request targeting `main`
-- Manual trigger (`workflow_dispatch` from the Actions tab)
+| Job | Python | Purpose | Blocking |
+|-----|--------|---------|----------|
+| **Lint & Type Check** | 3.12 | `ruff check` + `ruff format --check` + `mypy --strict` + `pyright` | ✅ |
+| **Test** (matrix) | 3.10 / 3.11 / 3.12 / 3.13 | `uv run pytest` with coverage | ✅ |
+| **Build distribution** | 3.12 | `uv build` (sdist + wheel) | ✅ |
 
-In-progress runs on the same branch are cancelled when new commits arrive
-(`concurrency.cancel-in-progress: true`).
+Additional advisory steps:
+- `pylint` (`continue-on-error: true`) — noise tolerated, exit code surfaces
+  as a workflow annotation only.
+- Codecov coverage + test-results uploads (Python 3.12 only, OIDC tokenless).
 
-## Jobs
+All external action pins use full commit SHAs for supply-chain safety.
 
-### 1. `lint` — Lint & Type Check
-Fast-fail quality gate running on Python 3.12:
+## Codecov setup (one-time)
 
-| Step | Tool | Blocking? |
-|---|---|---|
-| Lint | `ruff check .` | ✅ Yes |
-| Format check | `ruff format --check .` | ✅ Yes |
-| Strict types | `mypy src` | ✅ Yes |
-| Strict types | `pyright src` | ✅ Yes |
-| Advisory lint | `pylint src` | ❌ Advisory (`continue-on-error`) |
+Codecov is free for public repositories and uses **GitHub OIDC for
+tokenless uploads** — there's no `CODECOV_TOKEN` or any other secret to
+manage for public repos.
 
-### 2. `test` — Unit Tests (matrix)
-Runs the full unit-test suite across **Python 3.10, 3.11, 3.12, 3.13**
-on `ubuntu-latest`. `fail-fast: false`, so all versions always report.
+### 1. Link the repository
 
-- `uv sync --locked --all-extras`
-- `uv run pytest` with coverage (XML + HTML + JUnit)
-- Coverage threshold enforced via `--cov-fail-under=70` in `pyproject.toml`
-- Artifacts uploaded:
-  - `coverage-report` (XML + HTML, from Python 3.12 only)
-  - `pytest-junit-py<VERSION>` (JUnit XML, all versions, even on failure)
+1. Go to <https://app.codecov.io/>
+2. Sign in with GitHub
+3. Click **"Add new repository"** → find and enable
+   `rodenj1/sp-rtk-base-relay`
 
-### 3. `build` — Package Build
-Runs after `test` passes. Verifies the package still builds cleanly:
+That's it for the public-repo happy path. Codecov will automatically accept
+uploads signed by this repo's GitHub OIDC identity the next time CI runs.
 
-- `uv build` → `dist/*.whl` and `dist/*.tar.gz`
-- Uploads the `dist/` directory as an artifact
+### 2. (Optional) Configure Codecov behaviour
 
-## Coverage Badge — One-Time Setup
+Create `codecov.yml` at the repo root to customise coverage thresholds,
+component groupings, PR comments, etc. For this project the defaults are
+fine — coverage sits at ~89 %, well above Codecov's default "informational"
+threshold.
 
-The coverage badge uses a **public GitHub Gist** + **shields.io** (no third-party
-services). Follow these steps once to activate it.
+Minimum useful starter config if you want one:
 
-### Step 1 — Create a public Gist
-
-1. Go to https://gist.github.com
-2. Create a **public** gist with:
-   - **Filename**: `sp-rtk-base-relay-coverage.json`
-   - **Content** (placeholder; the workflow will overwrite):
-     ```json
-     { "schemaVersion": 1, "label": "coverage", "message": "unknown", "color": "lightgrey" }
-     ```
-3. Click **Create public gist**.
-4. Copy the **Gist ID** from the URL
-   (e.g. `https://gist.github.com/rodenj1/abc123def456...` → `abc123def456...`).
-
-### Step 2 — Create a Personal Access Token
-
-1. Go to https://github.com/settings/tokens?type=beta (fine-grained token) or
-   https://github.com/settings/tokens/new (classic).
-2. For a **classic** token: scope = `gist` only. Expiration: ≥ 90 days.
-3. For a **fine-grained** token: resource = just the gist, permission
-   **Gists: Read and write**.
-4. Copy the token value **once** — GitHub won't show it again.
-
-### Step 3 — Add repo secrets
-
-In https://github.com/rodenj1/sp-rtk-base-relay/settings/secrets/actions,
-click **New repository secret** and add two secrets:
-
-| Name | Value |
-|---|---|
-| `GIST_SECRET` | The PAT from Step 2 |
-| `COVERAGE_GIST_ID` | The Gist ID from Step 1 |
-
-### Step 4 — Verify
-
-Push any commit to `main` (or manually run the workflow from the Actions tab).
-The `test (Python 3.12)` job will:
-
-1. Parse `coverage.xml` → compute the coverage percent
-2. Pick a badge color (red < 60, yellow < 70, yellowgreen < 80, green < 90, brightgreen ≥ 90)
-3. Write `{schemaVersion, label, message, color}` to your gist
-
-shields.io reads the gist JSON and serves a live SVG badge at:
-
-```
-https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/rodenj1/<GIST_ID>/raw/sp-rtk-base-relay-coverage.json
+```yaml
+coverage:
+  status:
+    project:
+      default:
+        target: auto          # compare against the parent commit
+        threshold: 1%         # allow 1 % drops without failing
+    patch:
+      default:
+        target: 80%           # new code should be ≥ 80 % covered
+comment:
+  layout: "reach, diff, flags, files"
+  require_changes: true       # only comment when coverage actually changed
 ```
 
-### Step 5 — Update the README badge URL
+### 3. Private repos (not applicable here, but documented for completeness)
 
-After Step 4 succeeds, edit `README.md` and replace `<GIST_ID>` in the coverage
-badge URL with your actual gist ID.
+If the repo were ever made private, OIDC tokenless upload would still work,
+but only if the repo is explicitly enabled in the Codecov UI and OIDC is
+configured there. Otherwise a `CODECOV_TOKEN` secret is needed; see
+<https://docs.codecov.com/docs/codecov-tokens>.
 
-> **Until the secrets are configured**, the badge-update step is silently
-> skipped (`if: env.GIST_SECRET != ''`) and CI continues to pass. The badge in
-> the README will just show "unknown" until the gist is populated.
+## Badge in `README.md`
 
-## Troubleshooting
+The Codecov badge is served directly by Codecov and auto-updates — no
+gist or PAT needed:
 
-### "uv sync --locked" fails with "lock file is out of date"
-Run `uv lock` locally and commit the updated `uv.lock`.
+```markdown
+[![codecov](https://codecov.io/gh/rodenj1/sp-rtk-base-relay/branch/main/graph/badge.svg)](https://codecov.io/gh/rodenj1/sp-rtk-base-relay)
+```
 
-### A Python version's tests fail but others pass
-Check `pytest-junit-py<VERSION>` artifact on that run. Common causes:
-- Version-specific stdlib behavior (asyncio, typing runtime)
-- Third-party library support gaps (most often on new 3.13 release)
+Until the repo is linked in Codecov's UI, the badge shows "unknown".
+Once linked and after the first successful upload, it will show the live
+coverage percentage from `main`.
 
-### Coverage badge shows "unknown"
-1. Check the Actions run for the `Update coverage badge` step.
-2. Verify both `GIST_SECRET` and `COVERAGE_GIST_ID` are set in repo secrets.
-3. Verify the PAT hasn't expired.
-4. Badge updates only on **push to main** — PRs don't update it.
+## What the workflow uploads to Codecov
 
-### Ruff flags code that was just fine
-Check `[tool.ruff.lint.ignore]` in `pyproject.toml`. The legacy baseline
-ignores a set of rules that were present when ruff was introduced — address
-them in follow-up PRs and remove the ignores one-by-one.
+Only the **Python 3.12** matrix leg uploads, to keep the Codecov dashboard
+clean. Two artifacts are sent:
+
+1. **Coverage** (`coverage.xml`) via `codecov/codecov-action@v6` with
+   `use_oidc: true`.
+2. **Test results** (`pytest-junit.xml`) via
+   `codecov/test-results-action@v1.2.1` with `use_oidc: true`, for
+   Codecov's flaky-test + failure analytics.
+
+`fail_ci_if_error: false` ensures that a Codecov outage never blocks CI.
+
+The `id-token: write` permission is scoped to the `test` job only — all
+other jobs retain the default read-only `contents: read` permission
+declared at the workflow level.
+
+## Local parity
+
+Run the exact same checks locally before pushing:
+
+```bash
+# Lint + format
+uv run ruff check .
+uv run ruff format --check .
+
+# Strict type checks
+uv run mypy src
+uv run pyright src
+
+# Full test suite with coverage
+uv run pytest --cov-report=term --cov-report=xml:coverage.xml
+```
+
+Coverage HTML report: `htmlcov/index.html` (generated by pytest).

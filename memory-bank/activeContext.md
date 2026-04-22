@@ -31,13 +31,22 @@ Follow-up fix (commit `d6fb14f`) — resolved pre-existing mypy/pyright strict e
 - Misc pyright-strict annotation clean-ups in `config.py`, `logger.py`, `serial_input.py`, `tcp_input.py`, `rtcm_client.py`.
 - All local checks clean: ruff + ruff format + mypy strict + pyright strict; 1,117 tests pass at 89.34% coverage. CI green.
 
-Node.js 24 upgrade (follow-up commit) — addressed GitHub's Node.js 20 deprecation warnings surfaced on the first green run:
+Node.js 24 upgrade (commit `bbb9e98`) — addressed GitHub's Node.js 20 deprecation warnings surfaced on the first green run:
 - `actions/checkout` v5.0.0 → **v6.0.2** (SHA `de0fac2e…`).
 - `actions/upload-artifact` v4.6.2 → **v6.0.0** (SHA `b7c566a7…`) — v6 is the first release that defaults to Node 24 and requires Actions runner ≥ 2.327.1.
-- `schneegans/dynamic-badges-action` v1.7.0 → **v1.8.0** (SHA `0e50b8ba…`) — switched to Node 24.
+- `schneegans/dynamic-badges-action` v1.7.0 → **v1.8.0** (SHA `0e50b8ba…`) — (subsequently removed when switching to Codecov).
 - `astral-sh/setup-uv@v8.1.0` already runs on Node 24; unchanged.
+- Verified clean via run **24759388902** — success with no deprecation warnings.
 
-One-time manual setup still required: create public Gist, create PAT with `gist` scope, add `GIST_SECRET` + `COVERAGE_GIST_ID` repo secrets, replace `REPLACE_WITH_GIST_ID` in README. See `docs/ci-setup.md`.
+Coverage badge switched to **Codecov** (follow-up commit) — the Gist/PAT approach left a broken shields.io badge until the one-time secret setup was done. Replaced with:
+- `codecov/codecov-action@v6.0.0` (SHA `57e3a136…`) with `use_oidc: true` — tokenless upload via GitHub OIDC, zero secrets required for public repos.
+- `codecov/test-results-action@v1.2.1` (SHA `0fa95f0e…`) for flaky-test analytics, also OIDC tokenless.
+- Removed `schneegans/dynamic-badges-action` step + `Extract coverage percent` / `Determine badge color` helpers from the workflow.
+- Job-scoped `permissions: { contents: read, id-token: write }` on `test` only; workflow default stays `contents: read`.
+- README badge now `https://codecov.io/gh/rodenj1/sp-rtk-base-relay/branch/main/graph/badge.svg` — auto-updates once the repo is enabled at `app.codecov.io`.
+- `docs/ci-setup.md` rewritten to document the Codecov OIDC flow (no gist, no PAT, no repo secrets).
+
+**Remaining one-time manual step**: visit <https://app.codecov.io/>, sign in with GitHub, click "Add new repository", and enable `rodenj1/sp-rtk-base-relay`. Badge will go live on the next push to `main`.
 
 **Previous**: v2.1 merged to `main` via PR #5 → PR #6 (`origin/main` at `313f951`). Prior v2.0 work at commit 8f4f79a.
 **Branch**: `main` (all v2.1 work merged; working directly on main going forward)
@@ -81,7 +90,7 @@ API spec: `docs/relay-engine-api-spec.md`
 **Total unit tests**: 1,106 passing
 
 ### Next Steps
-1. **CI post-merge**: create Gist + PAT, add repo secrets, update README gist ID placeholder (see `docs/ci-setup.md`)
+1. **CI post-merge**: enable `rodenj1/sp-rtk-base-relay` at <https://app.codecov.io/> (OIDC tokenless — no secrets needed). Badge goes live on the next push to main. (See `docs/ci-setup.md`.)
 2. **Phase 6**: sp-rtk-base-relay cleanup (remove probe_gps.py, revert pyubx2, README, integration tests)
 3. **Lint baseline cleanup**: address items in `[tool.ruff.lint.ignore]` legacy baseline in follow-up PRs, then remove the ignores one-by-one
 

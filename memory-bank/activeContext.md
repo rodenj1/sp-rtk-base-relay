@@ -4,7 +4,7 @@
 
 **Primary Objective**: SP-RTK-Base-Relay v2.1 COMPLETE + project renamed + CI added → Next: sp-base integration (April 2026)
 
-**Status**: v2.1 Phases 0–5 COMPLETE. Project renamed `sp-base-relay` → `sp-rtk-base-relay` on `main` (April 21, 2026, commit `f9c2a35`). GitHub Actions CI workflow added (April 21, 2026) — lint + matrix unit tests on Python 3.10/3.11/3.12/3.13 + build. Phase 6 (cleanup) pending. sp-base integration next.
+**Status**: v2.1 Phases 0–5 COMPLETE. Project renamed `sp-base-relay` → `sp-rtk-base-relay` on `main` (April 21, 2026, commit `f9c2a35`). GitHub Actions CI workflow added and **GREEN** on `main` (April 21, 2026, run 24759164665) — lint + matrix unit tests on Python 3.10/3.11/3.12/3.13 + build all passing. Phase 6 (cleanup) pending. sp-base integration next.
 
 ### CI Added (April 21, 2026)
 
@@ -15,13 +15,29 @@
 
 Triggers: push to main, PRs to main, manual dispatch. `concurrency.cancel-in-progress: true`. All actions pinned to full SHAs.
 
-Supporting changes:
+Supporting changes (commit `d411db9`):
 - `pyproject.toml`: added py3.13 classifier, removed `black`, added `ruff>=0.6.0` + `[tool.ruff]` config (line-length 88, py310 target, E/W/F/I/B/UP/N/SIM/RUF rule sets, legacy baseline `ignore` list).
 - Auto-applied `ruff check --fix` + `ruff format` across 74 files; 1,117 tests still pass, coverage 89.35%.
 - `docs/ci-setup.md` — workflow overview + one-time Gist/PAT setup for coverage badge.
 - `README.md` — CI + coverage + ruff badges added; title updated to `SP-RTK-Base-Relay`.
 
-One-time manual setup required post-merge: create public Gist, create PAT with `gist` scope, add `GIST_SECRET` + `COVERAGE_GIST_ID` repo secrets, replace `REPLACE_WITH_GIST_ID` in README. See `docs/ci-setup.md`.
+Follow-up fix (commit `d6fb14f`) — resolved pre-existing mypy/pyright strict errors surfaced by the new CI:
+- Added mypy module override for `bluetooth_manager` + `bluetooth_input` (dbus-fast `ProxyInterface` uses runtime `__getattr__` for `call_*` methods — mypy cannot follow; pyright unaffected).
+- Cast `ProxyInterface` → `Any` at two pyright errors in `bluetooth_manager.py` (`call_set`/`call_get`) with explanatory comments.
+- Annotated `HeartbeatMonitor.socket` attribute so mypy no longer marks defensive None-check as unreachable.
+- Simplified redundant poison-pill check in `TcpServerDestination._broadcast_loop`.
+- Fixed `repr` of non-utf8 auth response bytes (`{response!r}`).
+- Added `dbus_fast` to mypy `ignore_missing_imports`.
+- Misc pyright-strict annotation clean-ups in `config.py`, `logger.py`, `serial_input.py`, `tcp_input.py`, `rtcm_client.py`.
+- All local checks clean: ruff + ruff format + mypy strict + pyright strict; 1,117 tests pass at 89.34% coverage. CI green.
+
+Node.js 24 upgrade (follow-up commit) — addressed GitHub's Node.js 20 deprecation warnings surfaced on the first green run:
+- `actions/checkout` v5.0.0 → **v6.0.2** (SHA `de0fac2e…`).
+- `actions/upload-artifact` v4.6.2 → **v6.0.0** (SHA `b7c566a7…`) — v6 is the first release that defaults to Node 24 and requires Actions runner ≥ 2.327.1.
+- `schneegans/dynamic-badges-action` v1.7.0 → **v1.8.0** (SHA `0e50b8ba…`) — switched to Node 24.
+- `astral-sh/setup-uv@v8.1.0` already runs on Node 24; unchanged.
+
+One-time manual setup still required: create public Gist, create PAT with `gist` scope, add `GIST_SECRET` + `COVERAGE_GIST_ID` repo secrets, replace `REPLACE_WITH_GIST_ID` in README. See `docs/ci-setup.md`.
 
 **Previous**: v2.1 merged to `main` via PR #5 → PR #6 (`origin/main` at `313f951`). Prior v2.0 work at commit 8f4f79a.
 **Branch**: `main` (all v2.1 work merged; working directly on main going forward)

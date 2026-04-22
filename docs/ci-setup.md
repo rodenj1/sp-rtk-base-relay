@@ -17,34 +17,57 @@ Three jobs run on every push/PR to `main`:
 Additional advisory steps:
 - `pylint` (`continue-on-error: true`) — noise tolerated, exit code surfaces
   as a workflow annotation only.
-- Codecov coverage + test-results uploads (Python 3.12 only, OIDC tokenless).
+- Codecov coverage + test-results uploads (Python 3.12 only, token-auth).
 
 All external action pins use full commit SHAs for supply-chain safety.
 
 ## Codecov setup (one-time)
 
-Codecov is free for public repositories and uses **GitHub OIDC for
-tokenless uploads** — there's no `CODECOV_TOKEN` or any other secret to
-manage for public repos.
+Because this repository is **private**, Codecov requires a repository-scoped
+upload token.  (OIDC tokenless upload is public-repo-only.)
 
-### 1. Link the repository
+### 1. Link the repository at Codecov
 
 1. Go to <https://app.codecov.io/>
 2. Sign in with GitHub
-3. Click **"Add new repository"** → find and enable
-   `rodenj1/sp-rtk-base-relay`
+3. If the repo doesn't appear, click **Resync** at the top of the org page;
+   if it's still missing, open **"Codecov's GitHub app"** from the banner
+   and make sure `sp-rtk-base-relay` is included under "Repository access".
+4. Click **Configure** next to `sp-rtk-base-relay`.
+5. Copy the **upload token** shown on the setup page (the UUID next to
+   `CODECOV_TOKEN`).
 
-That's it for the public-repo happy path. Codecov will automatically accept
-uploads signed by this repo's GitHub OIDC identity the next time CI runs.
+### 2. Store the token as a GitHub Actions secret
 
-### 2. (Optional) Configure Codecov behaviour
+```bash
+# From the repo root, with gh CLI authenticated:
+echo "<paste-token-here>" | gh secret set CODECOV_TOKEN
+```
+
+Or in the GitHub UI: **Settings → Secrets and variables → Actions →
+New repository secret**, name `CODECOV_TOKEN`.
+
+The workflow references this via `token: ${{ secrets.CODECOV_TOKEN }}` on
+both Codecov steps (coverage and test-results).
+
+### 3. Grab the badge token
+
+On the Codecov repo page, open **Settings → Badges & Graphs**.  Copy the
+Markdown snippet — it contains a different, read-only "badge token" in the
+URL query string, e.g.:
+
+```markdown
+[![codecov](https://codecov.io/gh/rodenj1/sp-rtk-base-relay/branch/main/graph/badge.svg?token=XXXXXXXXXX)](https://codecov.io/gh/rodenj1/sp-rtk-base-relay)
+```
+
+Paste that into `README.md` in place of any unauthenticated badge URL.  The
+badge token is safe to commit — it only grants read-only access to the
+coverage SVG for this single branch.
+
+### 4. (Optional) Configure Codecov behaviour
 
 Create `codecov.yml` at the repo root to customise coverage thresholds,
-component groupings, PR comments, etc. For this project the defaults are
-fine — coverage sits at ~89 %, well above Codecov's default "informational"
-threshold.
-
-Minimum useful starter config if you want one:
+component groupings, PR comments, etc.  Sensible starter:
 
 ```yaml
 coverage:
@@ -61,43 +84,28 @@ comment:
   require_changes: true       # only comment when coverage actually changed
 ```
 
-### 3. Private repos (not applicable here, but documented for completeness)
+### If the repo ever goes public
 
-If the repo were ever made private, OIDC tokenless upload would still work,
-but only if the repo is explicitly enabled in the Codecov UI and OIDC is
-configured there. Otherwise a `CODECOV_TOKEN` secret is needed; see
-<https://docs.codecov.com/docs/codecov-tokens>.
+Swap back to OIDC tokenless:
 
-## Badge in `README.md`
-
-The Codecov badge is served directly by Codecov and auto-updates — no
-gist or PAT needed:
-
-```markdown
-[![codecov](https://codecov.io/gh/rodenj1/sp-rtk-base-relay/branch/main/graph/badge.svg)](https://codecov.io/gh/rodenj1/sp-rtk-base-relay)
-```
-
-Until the repo is linked in Codecov's UI, the badge shows "unknown".
-Once linked and after the first successful upload, it will show the live
-coverage percentage from `main`.
+1. Replace `token: ${{ secrets.CODECOV_TOKEN }}` with `use_oidc: true` on
+   both Codecov steps.
+2. Add `id-token: write` to the `test` job's `permissions:` block.
+3. (Optional) Delete the `CODECOV_TOKEN` secret — no longer needed.
 
 ## What the workflow uploads to Codecov
 
 Only the **Python 3.12** matrix leg uploads, to keep the Codecov dashboard
-clean. Two artifacts are sent, both via `codecov/codecov-action@v6`:
+clean.  Two artifacts are sent, both via `codecov/codecov-action@v6`:
 
 1. **Coverage** (`coverage.xml`) — default `report_type: coverage`.
 2. **Test results** (`pytest-junit.xml`) — second invocation with
    `report_type: test_results` for Codecov's flaky-test + failure
-   analytics. (The previously separate `codecov/test-results-action`
+   analytics.  (The previously separate `codecov/test-results-action`
    is deprecated in favour of this pattern.)
 
-Both calls use `use_oidc: true` and `fail_ci_if_error: false`, so a
-Codecov outage never blocks CI.
-
-The `id-token: write` permission is scoped to the `test` job only — all
-other jobs retain the default read-only `contents: read` permission
-declared at the workflow level.
+Both calls use the `CODECOV_TOKEN` secret and `fail_ci_if_error: false`,
+so a Codecov outage never blocks CI.
 
 ## Local parity
 

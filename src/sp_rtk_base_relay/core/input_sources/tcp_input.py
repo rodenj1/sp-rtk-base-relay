@@ -380,7 +380,7 @@ class TCPInputSource(InputSource):
             True if service appears to be available
         """
         test_result = self.test_connectivity()
-        return test_result["reachable"]
+        return bool(test_result["reachable"])
 
     @classmethod
     def create_rtkbase_config(

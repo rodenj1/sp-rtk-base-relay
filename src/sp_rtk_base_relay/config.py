@@ -809,14 +809,15 @@ class Config:
             raw_destinations = data["destinations"]
             if (
                 not isinstance(raw_destinations, list)
-                or len(cast(list[Any], raw_destinations)) == 0
+                or len(cast(list[Any], raw_destinations))  # type: ignore[redundant-cast]
+                == 0
             ):
                 raise ConfigurationError(
                     "destinations must be a non-empty list",
                     config_key="destinations",
                 )
 
-            dest_list = cast(list[Any], raw_destinations)
+            dest_list = cast(list[Any], raw_destinations)  # type: ignore[redundant-cast]
             destinations: list[DestinationConfig] = []
             seen_names: set[str] = set()
 
@@ -918,8 +919,23 @@ def _parse_destination(raw: dict[str, Any], index: int) -> DestinationConfig:
             config_key=f"{prefix}.filter",
         )
     filter_data = cast(dict[str, Any], raw_filter)
+    raw_mode = str(filter_data.get("mode", "pass_all"))
+    if raw_mode not in ("pass_all", "allowlist", "blocklist"):
+        raise ConfigurationError(
+            f"{prefix}.filter.mode must be one of "
+            "'pass_all', 'allowlist', 'blocklist' "
+            f"(got {raw_mode!r})",
+            config_key=f"{prefix}.filter.mode",
+        )
+    # After the isinstance-equivalent check above, raw_mode is narrowed to the
+    # Literal union — but mypy doesn't propagate that through the `not in`
+    # check, so we need the cast for mypy strict. pyright considers it
+    # redundant (hence the pyright-ignore comment to appease both).
+    mode_literal = cast(  # pyright: ignore[reportUnnecessaryCast]
+        Literal["pass_all", "allowlist", "blocklist"], raw_mode
+    )
     filter_config = DestinationFilterConfig(
-        mode=str(filter_data.get("mode", "pass_all")),
+        mode=mode_literal,
         message_ids=list(filter_data.get("message_ids", [])),
     )
 
@@ -1013,6 +1029,10 @@ class ConfigManager:
                     )
 
         # Load configuration file
+        # At this point config_file is guaranteed to be a Path (either provided
+        # by caller, via env var, or discovered in DEFAULT_CONFIG_LOCATIONS;
+        # the None case raises ConfigurationError above).
+        assert config_file is not None
         try:
             with open(config_file) as f:
                 raw_data = yaml.safe_load(f)
@@ -1112,7 +1132,7 @@ class ConfigManager:
         # --- Dynamic per-destination env overrides: SP_DEST_<NAME>_<FIELD> ---
         raw_destinations = data.get("destinations")
         if isinstance(raw_destinations, list):
-            for dest_data in cast(list[Any], raw_destinations):
+            for dest_data in cast(list[Any], raw_destinations):  # type: ignore[redundant-cast]
                 if not isinstance(dest_data, dict):
                     continue
                 dest_dict = cast(dict[str, Any], dest_data)

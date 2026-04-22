@@ -228,6 +228,7 @@ class LoggerManager:
             root_logger.handlers.clear()
 
             # Set up formatter
+            formatter: logging.Formatter
             if config.format == "json":
                 formatter = JSONFormatter()
             else:  # text format

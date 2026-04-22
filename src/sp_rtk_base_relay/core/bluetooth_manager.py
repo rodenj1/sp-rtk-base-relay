@@ -440,10 +440,13 @@ class BluetoothManager:
             )
             device_props = device_proxy.get_interface("org.freedesktop.DBus.Properties")
 
-            # Set Trusted property using dbus-fast Variant
-            await device_props.call_set(
+            # Set Trusted property using dbus-fast Variant.
+            # dbus-fast dynamically attaches ``call_*`` methods to ProxyInterface
+            # via __getattr__; both mypy and pyright flag this pattern.
+            device_props_any: Any = device_props
+            await device_props_any.call_set(
                 "org.bluez.Device1", "Trusted", Variant("b", True)
-            )  # type: ignore[attr-defined]
+            )
             logger.info(f"Device {mac_address} is now trusted")
             return True
 
@@ -494,10 +497,13 @@ class BluetoothManager:
             device_iface = device_proxy.get_interface("org.bluez.Device1")
             device_props = device_proxy.get_interface("org.freedesktop.DBus.Properties")
 
-            # Check if already connected
-            connected: bool = await device_props.call_get(
+            # Check if already connected.  dbus-fast dynamically attaches
+            # ``call_*`` methods to ProxyInterface; cast to Any to satisfy
+            # static type-checkers.
+            device_props_any: Any = device_props
+            connected: bool = await device_props_any.call_get(
                 "org.bluez.Device1", "Connected"
-            )  # type: ignore[attr-defined]
+            )
             if connected:
                 logger.info(f"Device {mac_address} already connected")
                 return True

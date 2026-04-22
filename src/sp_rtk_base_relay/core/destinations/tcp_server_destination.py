@@ -271,9 +271,11 @@ class TcpServerDestination(BaseDestination):
                 continue
 
             if data is None:
-                # Poison pill or timeout
-                if not self._running:
-                    break
+                # Poison pill or timeout — re-check the outer while condition
+                # on the next iteration.  We don't short-circuit here because
+                # mypy's flow analysis narrows `_running` to True inside this
+                # block (it can't see cross-thread mutation); the outer loop
+                # handles shutdown cleanly regardless.
                 continue
 
             if not self._clients:

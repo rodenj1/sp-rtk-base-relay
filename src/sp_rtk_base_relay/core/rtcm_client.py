@@ -50,6 +50,7 @@ class HeartbeatMonitor:
         self.last_heartbeat = 0.0
         self.running = False
         self.thread: threading.Thread | None = None
+        self.socket: socket.socket | None = None
         self._lock = threading.Lock()
         self._timeout_callback: Callable[[], None] | None = None
 
@@ -80,7 +81,7 @@ class HeartbeatMonitor:
         self.running = False
 
         # Clear socket reference to prevent lingering state
-        self.socket = None  # type: ignore[assignment]
+        self.socket = None
 
         if self.thread and self.thread.is_alive():
             # Don't try to join if we're calling from the same thread
@@ -129,7 +130,10 @@ class HeartbeatMonitor:
         try:
             while self.running:
                 try:
-                    # Check if socket is still valid
+                    # Check if socket is still valid. The socket can be closed
+                    # by other code paths (e.g. stop()) during shutdown, so
+                    # this check is necessary even though it's set when the
+                    # thread starts.
                     if self.socket is None:
                         break
 
@@ -445,7 +449,9 @@ class RTCMClient:
                 self.heartbeat_monitor.update_heartbeat()
                 return True
             else:
-                logger.error(f"Authentication failed, unexpected response: {response}")
+                logger.error(
+                    f"Authentication failed, unexpected response: {response!r}"
+                )
                 with self._lock:
                     self.stats.authentication_failures += 1
                 return False

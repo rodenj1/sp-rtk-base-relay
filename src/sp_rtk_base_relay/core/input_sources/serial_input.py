@@ -170,9 +170,12 @@ class SerialInputSource(InputSource):
                 self.serial_port.timeout = original_timeout
 
             if data:
-                self._update_read_stats(data)
-                logger.debug(f"Read {len(data)} bytes from serial port")
-                return data
+                # pyserial returns bytes but is not fully typed; the runtime
+                # type is always bytes so we cast for mypy strict.
+                data_bytes: bytes = bytes(data)
+                self._update_read_stats(data_bytes)
+                logger.debug(f"Read {len(data_bytes)} bytes from serial port")
+                return data_bytes
             else:
                 # No data read (timeout or port closed)
                 self._update_read_stats(None)

@@ -109,8 +109,24 @@ strict_equality = true
 module = [
     "serial.*",
     "prometheus_client.*",
+    "dbus_fast.*",
 ]
 ignore_missing_imports = true
+
+# dbus-fast uses dynamic __getattr__ on ProxyInterface to create call_*
+# methods at runtime — pyright (our canonical strict checker per
+# .clinerules) accepts this pattern, but mypy cannot. We relax mypy's
+# strict checks for the Bluetooth modules that consume dbus-fast so
+# both type-checkers can pass. pyright continues to enforce strict
+# typing on these files.
+[[tool.mypy.overrides]]
+module = [
+    "sp_rtk_base_relay.core.bluetooth_manager",
+    "sp_rtk_base_relay.core.input_sources.bluetooth_input",
+]
+warn_unused_ignores = false
+warn_return_any = false
+disable_error_code = ["attr-defined", "union-attr"]
 
 [tool.ruff]
 line-length = 88

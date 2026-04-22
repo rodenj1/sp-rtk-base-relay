@@ -20,7 +20,6 @@ from sp_rtk_base_relay.main import (
     setup_signal_handlers,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -255,9 +254,7 @@ class TestServiceShutdown:
         assert not service._running
         mock_hub.stop.assert_called_once()
 
-    def test_stop_handles_errors(
-        self, mock_config: Mock, mock_hub: Mock
-    ) -> None:
+    def test_stop_handles_errors(self, mock_config: Mock, mock_hub: Mock) -> None:
         service = SPBaseRelayService(mock_config)
         service._running = True
         service.hub = mock_hub
@@ -501,9 +498,7 @@ class TestServiceComponents:
 class TestServiceHealth:
     """Tests for health checking."""
 
-    def test_check_health_when_healthy(
-        self, mock_config: Mock, mock_hub: Mock
-    ) -> None:
+    def test_check_health_when_healthy(self, mock_config: Mock, mock_hub: Mock) -> None:
         service = SPBaseRelayService(mock_config)
         service.hub = mock_hub
         mock_hub.is_running = True
@@ -595,9 +590,7 @@ class TestServiceCleanup:
         mock_input_source.disconnect.assert_called_once()
         mock_metrics.stop_metrics_server.assert_called_once()
 
-    def test_cleanup_handles_errors(
-        self, mock_config: Mock, mock_hub: Mock
-    ) -> None:
+    def test_cleanup_handles_errors(self, mock_config: Mock, mock_hub: Mock) -> None:
         service = SPBaseRelayService(mock_config)
         service.hub = mock_hub
         mock_hub.stop.side_effect = Exception("Cleanup error")

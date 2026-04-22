@@ -27,15 +27,14 @@ from sp_rtk_base_relay.config import (
     NtripDestinationConfig,
 )
 from sp_rtk_base_relay.core.destinations.base_destination import (
-    BaseDestination,
     DEFAULT_QUEUE_SIZE,
+    BaseDestination,
 )
 from sp_rtk_base_relay.core.destinations.destination_factory import (
     DestinationFactory,
 )
 from sp_rtk_base_relay.core.message_filter import FilterConfig
 from sp_rtk_base_relay.exceptions import ConfigurationError, NtripError
-
 
 logger = logging.getLogger(__name__)
 
@@ -124,8 +123,7 @@ class NtripDestination(BaseDestination):
                 )
 
             logger.debug(
-                f"NtripDestination '{self.name}': connecting to "
-                f"{cfg.caster}:{cfg.port}"
+                f"NtripDestination '{self.name}': connecting to {cfg.caster}:{cfg.port}"
             )
             sock.connect((cfg.caster, cfg.port))
 
@@ -177,9 +175,7 @@ class NtripDestination(BaseDestination):
             OSError: If the send fails (triggers reconnection).
         """
         if self._socket is None:
-            raise OSError(
-                f"NtripDestination '{self.name}': socket is None"
-            )
+            raise OSError(f"NtripDestination '{self.name}': socket is None")
 
         if self._config.version == "1.0":
             self._socket.sendall(data)
@@ -275,9 +271,7 @@ class NtripDestination(BaseDestination):
             f"\r\n"
         )
 
-        logger.debug(
-            f"NtripDestination '{self.name}': sending v1.0 SOURCE request"
-        )
+        logger.debug(f"NtripDestination '{self.name}': sending v1.0 SOURCE request")
         sock.sendall(request.encode("ascii"))
 
         response = self._read_response(sock)
@@ -287,9 +281,7 @@ class NtripDestination(BaseDestination):
                 destination_name=self.name,
             )
 
-        logger.debug(
-            f"NtripDestination '{self.name}': v1.0 auth successful"
-        )
+        logger.debug(f"NtripDestination '{self.name}': v1.0 auth successful")
 
     # ------------------------------------------------------------------
     # NTRIP v2.0 authentication
@@ -318,7 +310,7 @@ class NtripDestination(BaseDestination):
         """
         cfg = self._config
         credentials = base64.b64encode(
-            f"{cfg.username}:{cfg.password}".encode("utf-8")
+            f"{cfg.username}:{cfg.password}".encode()
         ).decode("ascii")
 
         request = (
@@ -331,9 +323,7 @@ class NtripDestination(BaseDestination):
             f"\r\n"
         )
 
-        logger.debug(
-            f"NtripDestination '{self.name}': sending v2.0 POST request"
-        )
+        logger.debug(f"NtripDestination '{self.name}': sending v2.0 POST request")
         sock.sendall(request.encode("ascii"))
 
         response = self._read_response(sock)
@@ -343,9 +333,7 @@ class NtripDestination(BaseDestination):
                 destination_name=self.name,
             )
 
-        logger.debug(
-            f"NtripDestination '{self.name}': v2.0 auth successful"
-        )
+        logger.debug(f"NtripDestination '{self.name}': v2.0 auth successful")
 
     # ------------------------------------------------------------------
     # Helpers
@@ -382,10 +370,8 @@ class NtripDestination(BaseDestination):
                 if b"\r\n" in buf:
                     break
             return buf.decode("ascii", errors="replace")
-        except socket.timeout as e:
-            raise NtripError(
-                f"NTRIP auth response timeout after {timeout}s"
-            ) from e
+        except TimeoutError as e:
+            raise NtripError(f"NTRIP auth response timeout after {timeout}s") from e
         finally:
             sock.settimeout(original_timeout)
 

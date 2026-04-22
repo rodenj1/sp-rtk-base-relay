@@ -4,17 +4,17 @@ This module provides shared fixtures and configuration for integration testing,
 including hardware connectivity checks, mock server setup, and test markers.
 """
 
+import logging
 import socket
 import time
-import pytest
-import logging
-from typing import Any
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from typing import Any
 
-from sp_rtk_base_relay.core.input_sources.tcp_input import TCPInputSource, TCPConfig
+import pytest
+
+from sp_rtk_base_relay.core.input_sources.tcp_input import TCPConfig, TCPInputSource
 from tests.fixtures.mock_rtcm_server import MockRTCMServer
-
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,7 @@ def check_hardware_availability(
         logger.info(f"Hardware available at {host}:{port}")
         return True
 
-    except socket.timeout:
+    except TimeoutError:
         logger.warning(f"Hardware connection timeout: {host}:{port}")
         return False
     except ConnectionRefusedError:

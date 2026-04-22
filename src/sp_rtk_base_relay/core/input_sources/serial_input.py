@@ -6,11 +6,11 @@ such as USB-to-serial adapters or direct UART connections.
 """
 
 import logging
-from typing import Any
 from dataclasses import dataclass
+from typing import Any
 
-from .base_input import InputSource
 from ...exceptions import InputSourceError
+from .base_input import InputSource
 
 try:
     import serial

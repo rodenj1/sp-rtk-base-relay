@@ -22,7 +22,7 @@ try:
     from dbus_fast import BusType, DBusError, Variant
     from dbus_fast.aio import MessageBus as AioMessageBus
     from dbus_fast.introspection import Node
-    
+
     _dbus_fast_available = True
 except ImportError:
     _dbus_fast_available = False
@@ -78,11 +78,11 @@ class BluetoothManager:
             )
 
         self.adapter_path = f"/org/bluez/{adapter_name}"
-        self._bus: "AioMessageBus | None" = None
+        self._bus: AioMessageBus | None = None
         self._adapter: Any = None
-        
+
         # Hybrid introspection cache: pre-cache adapter/root, lazy-cache devices
-        self._introspection_cache: dict[str, "Node"] = {}
+        self._introspection_cache: dict[str, Node] = {}
 
         # Create persistent event loop in a background daemon thread
         self._loop = asyncio.new_event_loop()
@@ -388,9 +388,7 @@ class BluetoothManager:
                 "org.bluez", device_path, device_intro
             )
             device_iface = device_proxy.get_interface("org.bluez.Device1")
-            device_props = device_proxy.get_interface(
-                "org.freedesktop.DBus.Properties"
-            )
+            device_props = device_proxy.get_interface("org.freedesktop.DBus.Properties")
 
             # Check if already paired
             paired: bool = await device_props.call_get("org.bluez.Device1", "Paired")  # type: ignore[attr-defined]
@@ -440,12 +438,12 @@ class BluetoothManager:
             device_proxy = self._bus.get_proxy_object(
                 "org.bluez", device_path, device_intro
             )
-            device_props = device_proxy.get_interface(
-                "org.freedesktop.DBus.Properties"
-            )
+            device_props = device_proxy.get_interface("org.freedesktop.DBus.Properties")
 
             # Set Trusted property using dbus-fast Variant
-            await device_props.call_set("org.bluez.Device1", "Trusted", Variant("b", True))  # type: ignore[attr-defined]
+            await device_props.call_set(
+                "org.bluez.Device1", "Trusted", Variant("b", True)
+            )  # type: ignore[attr-defined]
             logger.info(f"Device {mac_address} is now trusted")
             return True
 
@@ -494,12 +492,12 @@ class BluetoothManager:
                 "org.bluez", device_path, device_intro
             )
             device_iface = device_proxy.get_interface("org.bluez.Device1")
-            device_props = device_proxy.get_interface(
-                "org.freedesktop.DBus.Properties"
-            )
+            device_props = device_proxy.get_interface("org.freedesktop.DBus.Properties")
 
             # Check if already connected
-            connected: bool = await device_props.call_get("org.bluez.Device1", "Connected")  # type: ignore[attr-defined]
+            connected: bool = await device_props.call_get(
+                "org.bluez.Device1", "Connected"
+            )  # type: ignore[attr-defined]
             if connected:
                 logger.info(f"Device {mac_address} already connected")
                 return True

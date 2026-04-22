@@ -1,10 +1,14 @@
-# SP-Base-Relay
+# SP-RTK-Base-Relay
 
 A Python service that relays RTCM correction data from RTK GPS base stations to **multiple destinations** simultaneously — Sure-Path servers, NTRIP casters, and local TCP clients.
 
-[![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/rodenj1/sp-rtk-base-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/rodenj1/sp-rtk-base-relay/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/rodenj1/REPLACE_WITH_GIST_ID/raw/sp-rtk-base-relay-coverage.json)](https://github.com/rodenj1/sp-rtk-base-relay/actions/workflows/ci.yml)
+[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Code Coverage](https://img.shields.io/badge/coverage-88%25-brightgreen.svg)](htmlcov/index.html)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
+> **Coverage badge**: After merging, follow [`docs/ci-setup.md`](docs/ci-setup.md) to create a public gist + PAT, then replace `REPLACE_WITH_GIST_ID` above with your Gist ID.
 
 ## Overview
 

@@ -4,12 +4,13 @@ import os
 import tempfile
 from typing import Any
 from unittest.mock import patch
+
 import pytest
 
 from sp_rtk_base_relay.config import (
-    InputConfig,
-    ConfigManager,
     Config,
+    ConfigManager,
+    InputConfig,
 )
 from sp_rtk_base_relay.exceptions import ConfigurationError
 
@@ -45,7 +46,8 @@ def _v2_config_data(
 ) -> dict[str, Any]:
     """Helper to build a complete v2 config dict."""
     data: dict[str, Any] = {
-        "input": input_data or {
+        "input": input_data
+        or {
             "source": "tcp",
             "config": {"host": "127.0.0.1", "port": 5015},
         },
@@ -111,16 +113,22 @@ class TestConfigManagerEdgeCases:
         import yaml
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(_v2_config_data(
-                destinations=[_v2_surepath_dest(host="env-test.example.com")]
-            ), f)
+            yaml.dump(
+                _v2_config_data(
+                    destinations=[_v2_surepath_dest(host="env-test.example.com")]
+                ),
+                f,
+            )
             config_path = f.name
 
         try:
             with patch.dict(os.environ, {"SP_BASE_RELAY_CONFIG": config_path}):
                 config = ConfigManager.load_config()
                 from sp_rtk_base_relay.config import SurePathDestinationConfig
-                assert isinstance(config.destinations[0].config, SurePathDestinationConfig)
+
+                assert isinstance(
+                    config.destinations[0].config, SurePathDestinationConfig
+                )
                 assert config.destinations[0].config.host == "env-test.example.com"
         finally:
             os.unlink(config_path)
@@ -139,9 +147,12 @@ class TestConfigManagerEdgeCases:
         import yaml
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(_v2_config_data(
-                destinations=[_v2_surepath_dest(host="test.example.com")]
-            ), f)
+            yaml.dump(
+                _v2_config_data(
+                    destinations=[_v2_surepath_dest(host="test.example.com")]
+                ),
+                f,
+            )
             config_path = f.name
 
         try:
@@ -152,7 +163,10 @@ class TestConfigManagerEdgeCases:
                     config_path, apply_env_overrides=False
                 )
                 from sp_rtk_base_relay.config import SurePathDestinationConfig
-                assert isinstance(config.destinations[0].config, SurePathDestinationConfig)
+
+                assert isinstance(
+                    config.destinations[0].config, SurePathDestinationConfig
+                )
                 assert config.destinations[0].config.host == "test.example.com"
         finally:
             os.unlink(config_path)
@@ -259,9 +273,7 @@ class TestConfigManagerEdgeCases:
             destinations=[_v2_surepath_dest(host="")]  # Will cause ConfigurationError
         )
 
-        with pytest.raises(
-            ConfigurationError, match="config.host cannot be empty"
-        ):
+        with pytest.raises(ConfigurationError, match="config.host cannot be empty"):
             Config.from_dict(data)
 
     def test_dest_env_override_dynamic(self) -> None:
@@ -283,10 +295,13 @@ class TestConfigManagerEdgeCases:
             ]
         )
 
-        with patch.dict(os.environ, {
-            "SP_DEST_RTK2GO_PASSWORD": "new_pass",
-            "SP_DEST_RTK2GO_PORT": "2102",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "SP_DEST_RTK2GO_PASSWORD": "new_pass",
+                "SP_DEST_RTK2GO_PORT": "2102",
+            },
+        ):
             result = ConfigManager._apply_env_overrides(data)  # type: ignore[attr-defined]
             assert result["destinations"][0]["config"]["password"] == "new_pass"
             assert result["destinations"][0]["config"]["port"] == 2102

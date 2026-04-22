@@ -18,10 +18,10 @@ from sp_rtk_base_relay.config import (
 )
 from sp_rtk_base_relay.exceptions import ConfigurationError
 
-
 # ============================================================================
 # Helpers
 # ============================================================================
+
 
 def _surepath_dest(
     name: str = "surepath",
@@ -118,13 +118,16 @@ def _v2_data(
             "source": "tcp",
             "config": {"host": "127.0.0.1", "port": 5015},
         },
-        "destinations": destinations if destinations is not None else [_surepath_dest()],
+        "destinations": destinations
+        if destinations is not None
+        else [_surepath_dest()],
     }
 
 
 # ============================================================================
 # DestinationFilterConfig
 # ============================================================================
+
 
 class TestDestinationFilterConfig:
     """Tests for DestinationFilterConfig dataclass."""
@@ -186,6 +189,7 @@ class TestDestinationFilterConfig:
 # SurePathDestinationConfig
 # ============================================================================
 
+
 class TestSurePathDestinationConfig:
     """Tests for SurePathDestinationConfig dataclass."""
 
@@ -215,7 +219,9 @@ class TestSurePathDestinationConfig:
             SurePathDestinationConfig(host="h", port=50010, username="u", password="")
 
     def test_invalid_connection_timeout(self) -> None:
-        with pytest.raises(ConfigurationError, match="connection_timeout must be positive"):
+        with pytest.raises(
+            ConfigurationError, match="connection_timeout must be positive"
+        ):
             SurePathDestinationConfig(
                 host="h", port=50010, username="u", password="p", connection_timeout=0
             )
@@ -227,22 +233,32 @@ class TestSurePathDestinationConfig:
             )
 
     def test_invalid_heartbeat_timeout(self) -> None:
-        with pytest.raises(ConfigurationError, match="heartbeat_timeout must be positive"):
+        with pytest.raises(
+            ConfigurationError, match="heartbeat_timeout must be positive"
+        ):
             SurePathDestinationConfig(
                 host="h", port=50010, username="u", password="p", heartbeat_timeout=0
             )
 
     def test_invalid_retry_initial_delay(self) -> None:
-        with pytest.raises(ConfigurationError, match="retry_initial_delay must be positive"):
+        with pytest.raises(
+            ConfigurationError, match="retry_initial_delay must be positive"
+        ):
             SurePathDestinationConfig(
                 host="h", port=50010, username="u", password="p", retry_initial_delay=-1
             )
 
     def test_invalid_retry_max_delay(self) -> None:
-        with pytest.raises(ConfigurationError, match="retry_max_delay.*must be >= retry_initial_delay"):
+        with pytest.raises(
+            ConfigurationError, match="retry_max_delay.*must be >= retry_initial_delay"
+        ):
             SurePathDestinationConfig(
-                host="h", port=50010, username="u", password="p",
-                retry_initial_delay=20, retry_max_delay=10,
+                host="h",
+                port=50010,
+                username="u",
+                password="p",
+                retry_initial_delay=20,
+                retry_max_delay=10,
             )
 
     def test_invalid_retry_multiplier(self) -> None:
@@ -253,8 +269,12 @@ class TestSurePathDestinationConfig:
 
     def test_to_rtcm_server_config(self) -> None:
         c = SurePathDestinationConfig(
-            host="test.com", port=50010, username="u", password="p",
-            connection_timeout=15, retry_multiplier=3.0,
+            host="test.com",
+            port=50010,
+            username="u",
+            password="p",
+            connection_timeout=15,
+            retry_multiplier=3.0,
         )
         rtcm = c.to_rtcm_server_config()
         assert rtcm.host == "test.com"
@@ -267,6 +287,7 @@ class TestSurePathDestinationConfig:
 # ============================================================================
 # NtripDestinationConfig
 # ============================================================================
+
 
 class TestNtripDestinationConfig:
     """Tests for NtripDestinationConfig dataclass."""
@@ -309,22 +330,31 @@ class TestNtripDestinationConfig:
             )
 
     def test_invalid_connection_timeout(self) -> None:
-        with pytest.raises(ConfigurationError, match="connection_timeout must be positive"):
+        with pytest.raises(
+            ConfigurationError, match="connection_timeout must be positive"
+        ):
             NtripDestinationConfig(
                 caster="c", mountpoint="M", password="p", connection_timeout=0
             )
 
     def test_invalid_retry_initial_delay(self) -> None:
-        with pytest.raises(ConfigurationError, match="retry_initial_delay must be positive"):
+        with pytest.raises(
+            ConfigurationError, match="retry_initial_delay must be positive"
+        ):
             NtripDestinationConfig(
                 caster="c", mountpoint="M", password="p", retry_initial_delay=-1
             )
 
     def test_invalid_retry_max_delay(self) -> None:
-        with pytest.raises(ConfigurationError, match="retry_max_delay.*must be >= retry_initial_delay"):
+        with pytest.raises(
+            ConfigurationError, match="retry_max_delay.*must be >= retry_initial_delay"
+        ):
             NtripDestinationConfig(
-                caster="c", mountpoint="M", password="p",
-                retry_initial_delay=20, retry_max_delay=10,
+                caster="c",
+                mountpoint="M",
+                password="p",
+                retry_initial_delay=20,
+                retry_max_delay=10,
             )
 
     def test_invalid_retry_multiplier(self) -> None:
@@ -337,6 +367,7 @@ class TestNtripDestinationConfig:
 # ============================================================================
 # TcpServerDestinationConfig
 # ============================================================================
+
 
 class TestTcpServerDestinationConfig:
     """Tests for TcpServerDestinationConfig dataclass."""
@@ -365,6 +396,7 @@ class TestTcpServerDestinationConfig:
 # ============================================================================
 # DestinationConfig
 # ============================================================================
+
 
 class TestDestinationConfig:
     """Tests for DestinationConfig wrapper."""
@@ -436,6 +468,7 @@ class TestDestinationConfig:
 # Config.from_dict v2 — Destination Parsing
 # ============================================================================
 
+
 class TestConfigV2Destinations:
     """Tests for Config.from_dict v2 destination parsing."""
 
@@ -457,31 +490,43 @@ class TestConfigV2Destinations:
         assert isinstance(config.destinations[0].config, TcpServerDestinationConfig)
 
     def test_multiple_destinations(self) -> None:
-        config = Config.from_dict(_v2_data([
-            _surepath_dest(),
-            _ntrip_dest(name="rtk2go"),
-            _ntrip_dest(name="onocoy", caster="onocoy.com"),
-            _tcp_server_dest(name="local_tcp", enabled=False),
-        ]))
+        config = Config.from_dict(
+            _v2_data(
+                [
+                    _surepath_dest(),
+                    _ntrip_dest(name="rtk2go"),
+                    _ntrip_dest(name="onocoy", caster="onocoy.com"),
+                    _tcp_server_dest(name="local_tcp", enabled=False),
+                ]
+            )
+        )
         assert len(config.destinations) == 4
         assert config.destinations[0].type == "surepath"
         assert config.destinations[1].type == "ntrip"
         assert config.destinations[3].enabled is False
 
     def test_get_enabled_destinations(self) -> None:
-        config = Config.from_dict(_v2_data([
-            _surepath_dest(),
-            _tcp_server_dest(name="local_tcp", enabled=False),
-        ]))
+        config = Config.from_dict(
+            _v2_data(
+                [
+                    _surepath_dest(),
+                    _tcp_server_dest(name="local_tcp", enabled=False),
+                ]
+            )
+        )
         enabled = config.get_enabled_destinations()
         assert len(enabled) == 1
         assert enabled[0].name == "surepath"
 
     def test_get_destination_by_name(self) -> None:
-        config = Config.from_dict(_v2_data([
-            _surepath_dest(),
-            _ntrip_dest(name="rtk2go"),
-        ]))
+        config = Config.from_dict(
+            _v2_data(
+                [
+                    _surepath_dest(),
+                    _ntrip_dest(name="rtk2go"),
+                ]
+            )
+        )
         dest = config.get_destination_by_name("rtk2go")
         assert dest is not None
         assert dest.type == "ntrip"
@@ -491,44 +536,66 @@ class TestConfigV2Destinations:
         assert config.get_destination_by_name("nonexistent") is None
 
     def test_filter_parsing_blocklist(self) -> None:
-        config = Config.from_dict(_v2_data([
-            _ntrip_dest(filter_mode="blocklist", filter_ids=[4072]),
-        ]))
+        config = Config.from_dict(
+            _v2_data(
+                [
+                    _ntrip_dest(filter_mode="blocklist", filter_ids=[4072]),
+                ]
+            )
+        )
         assert config.destinations[0].filter.mode == "blocklist"
         assert config.destinations[0].filter.message_ids == [4072]
 
     def test_filter_parsing_allowlist(self) -> None:
-        config = Config.from_dict(_v2_data([
-            _ntrip_dest(
-                name="rtkdirect",
-                filter_mode="allowlist",
-                filter_ids=[1005, 1077, 1087],
-            ),
-        ]))
+        config = Config.from_dict(
+            _v2_data(
+                [
+                    _ntrip_dest(
+                        name="rtkdirect",
+                        filter_mode="allowlist",
+                        filter_ids=[1005, 1077, 1087],
+                    ),
+                ]
+            )
+        )
         assert config.destinations[0].filter.mode == "allowlist"
         assert config.destinations[0].filter.message_ids == [1005, 1077, 1087]
 
     def test_duplicate_names_rejected(self) -> None:
         with pytest.raises(ConfigurationError, match="Duplicate destination name"):
-            Config.from_dict(_v2_data([
-                _surepath_dest(name="dup"),
-                _ntrip_dest(name="dup"),
-            ]))
+            Config.from_dict(
+                _v2_data(
+                    [
+                        _surepath_dest(name="dup"),
+                        _ntrip_dest(name="dup"),
+                    ]
+                )
+            )
 
     def test_no_enabled_destinations_rejected(self) -> None:
-        with pytest.raises(ConfigurationError, match="At least one destination must be enabled"):
-            Config.from_dict(_v2_data([
-                _surepath_dest(enabled=False),
-            ]))
+        with pytest.raises(
+            ConfigurationError, match="At least one destination must be enabled"
+        ):
+            Config.from_dict(
+                _v2_data(
+                    [
+                        _surepath_dest(enabled=False),
+                    ]
+                )
+            )
 
     def test_empty_destinations_list_rejected(self) -> None:
-        with pytest.raises(ConfigurationError, match="destinations must be a non-empty list"):
+        with pytest.raises(
+            ConfigurationError, match="destinations must be a non-empty list"
+        ):
             Config.from_dict(_v2_data(destinations=[]))
 
     def test_destinations_not_list_rejected(self) -> None:
         data = _v2_data()
         data["destinations"] = "not_a_list"
-        with pytest.raises(ConfigurationError, match="destinations must be a non-empty list"):
+        with pytest.raises(
+            ConfigurationError, match="destinations must be a non-empty list"
+        ):
             Config.from_dict(data)
 
     def test_destination_not_dict_rejected(self) -> None:

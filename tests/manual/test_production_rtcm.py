@@ -29,9 +29,8 @@ from types import FrameType
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from sp_rtk_base_relay.config import ConfigManager, RTCMServerConfig
-from sp_rtk_base_relay.core.input_sources.tcp_input import TCPInputSource, TCPConfig
+from sp_rtk_base_relay.core.input_sources.tcp_input import TCPConfig, TCPInputSource
 from sp_rtk_base_relay.core.rtcm_client import RTCMClient
-
 
 # Global flag for graceful shutdown
 shutdown_requested = False

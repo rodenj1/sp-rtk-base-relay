@@ -10,6 +10,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+# Ensure destination builders are registered on import
+import sp_rtk_base_relay.core.destinations as _destinations_registry  # pyright: ignore[reportUnusedImport]
 from sp_rtk_base_relay import __version__
 from sp_rtk_base_relay.config import Config, ConfigManager
 from sp_rtk_base_relay.core.broadcast_hub import BroadcastHub
@@ -24,9 +26,6 @@ from sp_rtk_base_relay.exceptions import (
 )
 from sp_rtk_base_relay.logger import LoggerManager, get_logger
 from sp_rtk_base_relay.metrics import MetricsCollector
-
-# Ensure destination builders are registered on import
-import sp_rtk_base_relay.core.destinations as _destinations_registry  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 _ = _destinations_registry  # Keep pyright happy
 

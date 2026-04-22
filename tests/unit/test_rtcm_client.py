@@ -5,15 +5,20 @@ Tests the RTCMClient class including connection management, authentication,
 heartbeat monitoring, data transmission, and error handling.
 """
 
-import pytest
 import socket
 import threading
 import time
 from unittest.mock import Mock, patch
 
+import pytest
+
 from sp_rtk_base_relay.config import RTCMServerConfig
-from sp_rtk_base_relay.core.rtcm_client import RTCMClient, HeartbeatMonitor, ConnectionStats
 from sp_rtk_base_relay.core.connection_states import ConnectionState
+from sp_rtk_base_relay.core.rtcm_client import (
+    ConnectionStats,
+    HeartbeatMonitor,
+    RTCMClient,
+)
 
 
 # Simple inline mock server for testing
@@ -104,11 +109,11 @@ class SimpleMockRTCMServer:
                         self.client_socket.sendall(b"FAIL")
                     except:
                         pass
-            except socket.timeout:
+            except TimeoutError:
                 pass
             except Exception:
                 pass
-        except socket.timeout:
+        except TimeoutError:
             pass  # Accept timeout is normal when stopping
         except Exception:
             pass
@@ -222,7 +227,7 @@ class TestHeartbeatMonitor:
         mock_socket = Mock()
         mock_socket.recv.side_effect = [
             b"$HB$",
-            socket.timeout(),
+            TimeoutError(),
             b"",
         ]  # Heartbeat then timeout then disconnect
 
@@ -288,7 +293,9 @@ class TestRTCMClient:
         assert stats.current_retry_delay == rtcm_config.retry_initial_delay
 
     @patch("socket.socket")
-    def test_successful_connection_and_authentication(self, mock_socket_class: Mock, rtcm_config: RTCMServerConfig) -> None:  # type: ignore[misc]
+    def test_successful_connection_and_authentication(
+        self, mock_socket_class: Mock, rtcm_config: RTCMServerConfig
+    ) -> None:  # type: ignore[misc]
         """Test successful connection and authentication flow."""
         # Setup mock socket
         mock_socket = Mock()
@@ -331,7 +338,9 @@ class TestRTCMClient:
             client.disconnect()
 
     @patch("socket.socket")
-    def test_authentication_failure(self, mock_socket_class: Mock, rtcm_config: RTCMServerConfig) -> None:  # type: ignore[misc]
+    def test_authentication_failure(
+        self, mock_socket_class: Mock, rtcm_config: RTCMServerConfig
+    ) -> None:  # type: ignore[misc]
         """Test authentication failure handling."""
         # Setup mock socket
         mock_socket = Mock()
@@ -353,12 +362,14 @@ class TestRTCMClient:
         mock_socket.close.assert_called_once()
 
     @patch("socket.socket")
-    def test_connection_timeout(self, mock_socket_class: Mock, rtcm_config: RTCMServerConfig) -> None:  # type: ignore[misc]
+    def test_connection_timeout(
+        self, mock_socket_class: Mock, rtcm_config: RTCMServerConfig
+    ) -> None:  # type: ignore[misc]
         """Test connection timeout handling."""
         # Setup mock socket to raise timeout
         mock_socket = Mock()
         mock_socket_class.return_value = mock_socket
-        mock_socket.connect.side_effect = socket.timeout()
+        mock_socket.connect.side_effect = TimeoutError()
 
         client = RTCMClient(rtcm_config)
 
@@ -374,7 +385,9 @@ class TestRTCMClient:
         mock_socket.close.assert_called_once()
 
     @patch("socket.socket")
-    def test_connection_refused(self, mock_socket_class: Mock, rtcm_config: RTCMServerConfig) -> None:  # type: ignore[misc]
+    def test_connection_refused(
+        self, mock_socket_class: Mock, rtcm_config: RTCMServerConfig
+    ) -> None:  # type: ignore[misc]
         """Test connection refused handling."""
         # Setup mock socket to raise connection refused
         mock_socket = Mock()
@@ -415,7 +428,9 @@ class TestRTCMClient:
         mock_socket.close.assert_called_once()
 
     @patch("socket.socket")
-    def test_send_rtcm_data_success(self, mock_socket_class: Mock, rtcm_config: RTCMServerConfig) -> None:  # type: ignore[misc]
+    def test_send_rtcm_data_success(
+        self, mock_socket_class: Mock, rtcm_config: RTCMServerConfig
+    ) -> None:  # type: ignore[misc]
         """Test successful RTCM data transmission."""
         client = RTCMClient(rtcm_config)
 
@@ -451,13 +466,15 @@ class TestRTCMClient:
         assert client.stats.messages_sent == 0
 
     @patch("socket.socket")
-    def test_send_rtcm_data_socket_error(self, mock_socket_class: Mock, rtcm_config: RTCMServerConfig) -> None:  # type: ignore[misc]
+    def test_send_rtcm_data_socket_error(
+        self, mock_socket_class: Mock, rtcm_config: RTCMServerConfig
+    ) -> None:  # type: ignore[misc]
         """Test RTCM data sending with socket error."""
         client = RTCMClient(rtcm_config)
 
         # Setup connected state with failing socket
         mock_socket = Mock()
-        mock_socket.sendall.side_effect = socket.error("Connection lost")
+        mock_socket.sendall.side_effect = OSError("Connection lost")
         client.socket = mock_socket
         with client._lock:  # type: ignore[reportPrivateUsage]
             client.state = ConnectionState.CONNECTED

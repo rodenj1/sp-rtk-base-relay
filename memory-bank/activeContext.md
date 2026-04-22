@@ -2,9 +2,26 @@
 
 ## Current Work Focus
 
-**Primary Objective**: SP-RTK-Base-Relay v2.1 COMPLETE + project renamed → Next: sp-base integration (April 2026)
+**Primary Objective**: SP-RTK-Base-Relay v2.1 COMPLETE + project renamed + CI added → Next: sp-base integration (April 2026)
 
-**Status**: v2.1 Phases 0–5 COMPLETE. Project renamed `sp-base-relay` → `sp-rtk-base-relay` on `main` (April 21, 2026, commit `f9c2a35`). Phase 6 (cleanup) pending. sp-base integration next.
+**Status**: v2.1 Phases 0–5 COMPLETE. Project renamed `sp-base-relay` → `sp-rtk-base-relay` on `main` (April 21, 2026, commit `f9c2a35`). GitHub Actions CI workflow added (April 21, 2026) — lint + matrix unit tests on Python 3.10/3.11/3.12/3.13 + build. Phase 6 (cleanup) pending. sp-base integration next.
+
+### CI Added (April 21, 2026)
+
+`.github/workflows/ci.yml` — 3 jobs:
+- **lint** (py3.12): ruff check + ruff format --check + mypy + pyright (blocking); pylint (advisory).
+- **test** (matrix: 3.10/3.11/3.12/3.13, `fail-fast: false`): `uv sync --locked --all-extras` → `uv run pytest` with XML/HTML/JUnit coverage; uploads artifacts. Coverage badge updates on push to main via Gist + shields.io (gated on `GIST_SECRET`).
+- **build** (py3.12): `uv build` → dist artifact.
+
+Triggers: push to main, PRs to main, manual dispatch. `concurrency.cancel-in-progress: true`. All actions pinned to full SHAs.
+
+Supporting changes:
+- `pyproject.toml`: added py3.13 classifier, removed `black`, added `ruff>=0.6.0` + `[tool.ruff]` config (line-length 88, py310 target, E/W/F/I/B/UP/N/SIM/RUF rule sets, legacy baseline `ignore` list).
+- Auto-applied `ruff check --fix` + `ruff format` across 74 files; 1,117 tests still pass, coverage 89.35%.
+- `docs/ci-setup.md` — workflow overview + one-time Gist/PAT setup for coverage badge.
+- `README.md` — CI + coverage + ruff badges added; title updated to `SP-RTK-Base-Relay`.
+
+One-time manual setup required post-merge: create public Gist, create PAT with `gist` scope, add `GIST_SECRET` + `COVERAGE_GIST_ID` repo secrets, replace `REPLACE_WITH_GIST_ID` in README. See `docs/ci-setup.md`.
 
 **Previous**: v2.1 merged to `main` via PR #5 → PR #6 (`origin/main` at `313f951`). Prior v2.0 work at commit 8f4f79a.
 **Branch**: `main` (all v2.1 work merged; working directly on main going forward)
@@ -48,7 +65,9 @@ API spec: `docs/relay-engine-api-spec.md`
 **Total unit tests**: 1,106 passing
 
 ### Next Steps
-1. **Phase 6**: sp-rtk-base-relay cleanup (remove probe_gps.py, revert pyubx2, README, integration tests)
+1. **CI post-merge**: create Gist + PAT, add repo secrets, update README gist ID placeholder (see `docs/ci-setup.md`)
+2. **Phase 6**: sp-rtk-base-relay cleanup (remove probe_gps.py, revert pyubx2, README, integration tests)
+3. **Lint baseline cleanup**: address items in `[tool.ruff.lint.ignore]` legacy baseline in follow-up PRs, then remove the ignores one-by-one
 
 ---
 

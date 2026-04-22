@@ -17,6 +17,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: GIS",
     "Topic :: System :: Networking",
 ]
@@ -35,7 +36,7 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "mypy>=1.5.0",
     "types-PyYAML",
-    "black>=23.0.0",
+    "ruff>=0.6.0",
     "pylint>=2.17.0",
     "pre-commit>=3.0.0",
 ]
@@ -111,23 +112,57 @@ module = [
 ]
 ignore_missing_imports = true
 
-[tool.black]
+[tool.ruff]
 line-length = 88
-target-version = ['py310']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
+target-version = "py310"
+extend-exclude = [
+    "docs",
+    "examples",
+    "tools",
+    "htmlcov",
+    "build",
+    "dist",
+    ".venv",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade (enforces modern Python 3.10+ syntax)
+    "N",    # pep8-naming
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "E501",  # line length (handled by formatter)
+    # --- Legacy baseline (TODO: address in follow-up PRs, then remove) ---
+    "B904",    # raise ... from err inside except
+    "E722",    # bare except
+    "RUF002",  # ambiguous unicode character in docstring
+    "RUF003",  # ambiguous unicode character in comment
+    "RUF012",  # mutable class defaults should use ClassVar
+    "RUF043",  # pytest.raises(match=...) should use raw string / re.escape
+    "RUF059",  # unused unpacked variable (test helpers)
+    "SIM102",  # collapsible if
+    "SIM105",  # use contextlib.suppress
+    "SIM116",  # if/else chain could be dict lookup
+    "E741",    # ambiguous variable name (single-letter in tests)
+    "F841",    # unused local variable (test scaffolding)
+    "W293",    # blank line with whitespace (rare edge cases in multi-line strings)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["B", "N", "SIM"]
+"conftest.py" = ["B", "N"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
 
 [tool.pyright]
 include = ["src"]
@@ -145,4 +180,7 @@ dev = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=7.0.0",
+    "ruff>=0.6.0",
+    "mypy>=1.5.0",
+    "pylint>=2.17.0",
 ]

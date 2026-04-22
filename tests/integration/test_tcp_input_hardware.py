@@ -14,15 +14,15 @@ Usage:
     uv run pytest tests/integration/test_tcp_input_hardware.py::test_connection_establishment -v
 """
 
-import time
-import pytest
 import logging
-from typing import Any
+import time
 from dataclasses import asdict
+from typing import Any
 
-from sp_rtk_base_relay.core.input_sources.tcp_input import TCPInputSource, TCPConfig
+import pytest
+
+from sp_rtk_base_relay.core.input_sources.tcp_input import TCPConfig, TCPInputSource
 from sp_rtk_base_relay.exceptions import InputSourceError
-
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +58,9 @@ class TestTCPConnectionEstablishment:
         # Verify statistics
         stats = asdict(tcp_input_source.connection_statistics)
         assert stats["connection_attempts"] == 1, "Should have 1 connection attempt"
-        assert (
-            stats["successful_connections"] == 1
-        ), "Should have 1 successful connection"
+        assert stats["successful_connections"] == 1, (
+            "Should have 1 successful connection"
+        )
         assert stats["connection_failures"] == 0, "Should have no connection failures"
 
         # Verify connection info
@@ -163,7 +163,7 @@ class TestTCPDataReading:
         read_timeout = 3.0  # Generous timeout for hardware
 
         for i in range(max_reads):
-            logger.info(f"Reading chunk {i+1}/{max_reads}")
+            logger.info(f"Reading chunk {i + 1}/{max_reads}")
             data = connected_tcp_input.read_data(timeout=read_timeout)
 
             if data:
@@ -200,7 +200,7 @@ class TestTCPDataReading:
         rtcm_data = None
 
         for attempt in range(max_attempts):
-            logger.info(f"Attempt {attempt+1}/{max_attempts} to read RTCM data")
+            logger.info(f"Attempt {attempt + 1}/{max_attempts} to read RTCM data")
             data = connected_tcp_input.read_data(timeout=3.0)
 
             if data and len(data) > 0:
@@ -243,9 +243,9 @@ class TestTCPDataReading:
         )
 
         # Connection should still be active
-        assert (
-            connected_tcp_input.is_connected
-        ), "Connection should remain active after timeout"
+        assert connected_tcp_input.is_connected, (
+            "Connection should remain active after timeout"
+        )
 
         # Should be able to read again
         result2 = connected_tcp_input.read_data(timeout=2.0)
@@ -319,10 +319,10 @@ class TestTCPConnectionResilience:
         cycles = 3
 
         for cycle in range(cycles):
-            logger.info(f"Cycle {cycle+1}/{cycles}")
+            logger.info(f"Cycle {cycle + 1}/{cycles}")
 
             # Connect
-            assert tcp_input_source.connect(), f"Connect failed on cycle {cycle+1}"
+            assert tcp_input_source.connect(), f"Connect failed on cycle {cycle + 1}"
 
             # Read some data
             for _ in range(2):
@@ -412,9 +412,9 @@ class TestTCPPerformance:
 
         while time.time() - start_time < test_duration:
             # Verify still connected
-            assert (
-                connected_tcp_input.is_connected
-            ), f"Connection lost after {time.time() - start_time:.1f}s"
+            assert connected_tcp_input.is_connected, (
+                f"Connection lost after {time.time() - start_time:.1f}s"
+            )
 
             # Try reading data
             data = connected_tcp_input.read_data(timeout=2.0)

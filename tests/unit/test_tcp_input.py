@@ -4,15 +4,16 @@ Tests cover configuration validation, connection lifecycle, data reading,
 health monitoring, and error handling for the TCP input source.
 """
 
-import pytest
 import socket
 import threading
 import time
 from unittest.mock import patch
 
+import pytest
+
 from sp_rtk_base_relay.core.input_sources.tcp_input import (
-    TCPInputSource,
     TCPConfig,
+    TCPInputSource,
 )
 from sp_rtk_base_relay.exceptions import InputSourceError
 
@@ -109,12 +110,12 @@ class MockTCPServer:
                                 self.received_data.append(data)
                             else:
                                 break  # Connection closed
-                        except socket.timeout:
+                        except TimeoutError:
                             continue
                         except:
                             break
 
-                except socket.timeout:
+                except TimeoutError:
                     continue
                 except:
                     break

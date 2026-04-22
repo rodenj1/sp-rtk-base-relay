@@ -8,8 +8,8 @@ from various input types.
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Any
 from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

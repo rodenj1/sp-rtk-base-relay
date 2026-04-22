@@ -8,12 +8,11 @@ RTCM data sources.
 import logging
 import socket
 import time
-from typing import Any
 from dataclasses import dataclass
+from typing import Any
 
-from .base_input import InputSource
 from ...exceptions import InputSourceError
-
+from .base_input import InputSource
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +97,7 @@ class TCPInputSource(InputSource):
             self._update_connection_stats(True)
             return True
 
-        except socket.timeout:
+        except TimeoutError:
             error = InputSourceError(
                 f"TCP connection timeout after {self.config.timeout}s to "
                 f"{self.config.host}:{self.config.port}"
@@ -165,11 +164,11 @@ class TCPInputSource(InputSource):
                 self._set_error_state(InputSourceError("TCP connection closed by peer"))
                 return None
 
-        except socket.timeout:
+        except TimeoutError:
             # Timeout is not an error, just no data available
             self._update_read_stats(None)
             return None
-        except socket.error as e:
+        except OSError as e:
             error = InputSourceError(f"TCP read error: {e}")
             self._update_read_stats(None, error)
             self._set_error_state(error)
@@ -301,7 +300,7 @@ class TCPInputSource(InputSource):
             finally:
                 test_socket.close()
 
-        except socket.timeout:
+        except TimeoutError:
             test_result["error"] = f"Connection timeout after {self.config.timeout}s"
             logger.warning(
                 f"TCP connectivity test timeout: {self.config.host}:{self.config.port}"

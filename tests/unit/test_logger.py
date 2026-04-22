@@ -1,25 +1,26 @@
 """Unit tests for SP-Base-Relay logging system."""
 
+import json
 import logging
 import tempfile
-import json
 from unittest.mock import Mock
+
 import pytest
 
-from sp_rtk_base_relay.logger import (
-    JSONFormatter,
-    TextFormatter,
-    LoggerManager,
-    get_logger,
-    setup_logging,
-    LogLevelContext,
-    log_with_context,
-    log_operation_start,
-    log_operation_success,
-    log_operation_error,
-)
 from sp_rtk_base_relay.config import LoggingConfig
 from sp_rtk_base_relay.exceptions import ConfigurationError
+from sp_rtk_base_relay.logger import (
+    JSONFormatter,
+    LoggerManager,
+    LogLevelContext,
+    TextFormatter,
+    get_logger,
+    log_operation_error,
+    log_operation_start,
+    log_operation_success,
+    log_with_context,
+    setup_logging,
+)
 
 
 class TestJSONFormatter:
@@ -211,7 +212,9 @@ class TestLoggerManager:
     def test_setup_logging_file_permission_error(self):
         """Test logging setup with file permission error."""
         config = LoggingConfig(
-            level="INFO", format="json", file="/root/no-permission.log"  # Should fail
+            level="INFO",
+            format="json",
+            file="/root/no-permission.log",  # Should fail
         )
 
         # Should not raise exception, but log warning

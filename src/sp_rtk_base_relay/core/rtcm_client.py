@@ -5,16 +5,15 @@ architecture for handling TCP connections, authentication, heartbeat monitoring,
 and data transmission to the custom RTCM server.
 """
 
+import logging
 import socket
 import threading
 import time
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 
 from ..config import RTCMServerConfig
 from .connection_states import ConnectionState
-
 
 logger = logging.getLogger(__name__)
 
@@ -79,20 +78,20 @@ class HeartbeatMonitor:
     def stop(self) -> None:
         """Stop heartbeat monitoring thread with guaranteed termination."""
         self.running = False
-        
+
         # Clear socket reference to prevent lingering state
         self.socket = None  # type: ignore[assignment]
-        
+
         if self.thread and self.thread.is_alive():
             # Don't try to join if we're calling from the same thread
             # (prevents "cannot join current thread" error)
             if threading.current_thread() != self.thread:
                 thread_name = self.thread.name
                 logger.debug(f"Waiting for {thread_name} to terminate")
-                
+
                 # Wait up to 5 seconds for thread to stop
                 self.thread.join(timeout=5.0)
-                
+
                 # Verify thread actually stopped
                 if self.thread.is_alive():
                     logger.error(
@@ -100,8 +99,10 @@ class HeartbeatMonitor:
                         "this may cause socket issues"
                     )
                 else:
-                    logger.debug(f"HeartbeatMonitor thread {thread_name} terminated successfully")
-        
+                    logger.debug(
+                        f"HeartbeatMonitor thread {thread_name} terminated successfully"
+                    )
+
         logger.debug("Heartbeat monitor stopped")
 
     def update_heartbeat(self) -> None:
@@ -131,7 +132,7 @@ class HeartbeatMonitor:
                     # Check if socket is still valid
                     if self.socket is None:
                         break
-                    
+
                     # Set socket timeout for non-blocking reads
                     self.socket.settimeout(1.0)
                     data = self.socket.recv(4096)
@@ -167,7 +168,7 @@ class HeartbeatMonitor:
                             self._timeout_callback()
                         break
 
-                except socket.timeout:
+                except TimeoutError:
                     # Check for timeout on each iteration
                     if self.is_timeout() and self.last_heartbeat > 0:
                         logger.info(
@@ -267,13 +268,13 @@ class RTCMClient:
                 logger.warning("Old socket exists during connect, forcing cleanup")
                 self._cleanup_connection()
                 time.sleep(0.2)  # Extra time for OS to release FD
-            
+
             # Create and configure TCP socket
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            
+
             # Set SO_REUSEADDR to allow quick reconnection to same address
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            
+
             self.socket.settimeout(self.config.connection_timeout)
 
             # Optimize socket for low latency
@@ -293,7 +294,9 @@ class RTCMClient:
                 self.socket.connect((self.config.host, self.config.port))
             except OSError as e:
                 if e.errno == 9:  # EBADF - Bad file descriptor
-                    logger.error(f"Socket became invalid during connection (errno 9): {e}")
+                    logger.error(
+                        f"Socket became invalid during connection (errno 9): {e}"
+                    )
                 else:
                     logger.error(f"Connection failed with OS error: {e}")
                 raise
@@ -309,7 +312,7 @@ class RTCMClient:
                     self.state = ConnectionState.CONNECTED
                     self.stats.successful_connections += 1
                     self.stats.connected_since = time.time()
-                
+
                 # Reset retry delay after successful connection
                 self.reset_retry_delay()
 
@@ -323,7 +326,7 @@ class RTCMClient:
                 self._cleanup_connection()
                 return False
 
-        except socket.timeout:
+        except TimeoutError:
             logger.error(f"Connection timeout after {self.config.connection_timeout}s")
             self._cleanup_connection()
             return False
@@ -386,7 +389,7 @@ class RTCMClient:
             logger.debug(f"Sent {len(data)} bytes of RTCM data")
             return True
 
-        except socket.error as e:
+        except OSError as e:
             logger.error(f"Failed to send RTCM data: {e}")
             self._on_connection_lost()
             return False
@@ -447,7 +450,7 @@ class RTCMClient:
                     self.stats.authentication_failures += 1
                 return False
 
-        except socket.timeout:
+        except TimeoutError:
             logger.error(f"Authentication timeout after {self.config.read_timeout}s")
             with self._lock:
                 self.stats.authentication_failures += 1
@@ -468,15 +471,17 @@ class RTCMClient:
                     logger.debug("Socket shutdown completed")
                 except OSError as e:
                     # Socket might already be disconnected - this is OK
-                    logger.debug(f"Socket shutdown failed (expected if already disconnected): {e}")
-                
+                    logger.debug(
+                        f"Socket shutdown failed (expected if already disconnected): {e}"
+                    )
+
                 # Now close the socket
                 self.socket.close()
                 logger.debug("Socket closed")
-                
+
                 # Small delay to let OS release file descriptor
                 time.sleep(0.1)
-                
+
             except Exception as e:
                 # Log but continue - we need to clear the reference
                 logger.warning(f"Error during socket cleanup: {e}")
@@ -519,7 +524,7 @@ class RTCMClient:
 
     def reset_retry_delay(self) -> None:
         """Reset retry delay to initial value.
-        
+
         This is typically called before reconnection attempts to ensure
         the initial configured delay is used rather than an exponentially
         backed-off value.

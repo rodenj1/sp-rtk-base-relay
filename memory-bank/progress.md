@@ -1,15 +1,56 @@
 # Progress
 
-## Current Status — v2.1 Complete + Project Renamed (April 21, 2026)
+## Current Status — v2.1 Complete + Project Renamed + CI Added (April 21, 2026)
 
 **v1.x**: All phases complete (production-running)
 **v2.0**: All phases complete (956 tests, 88.46% coverage, commit 8f4f79a)
 **v2.1**: Phases 0–5 COMPLETE. Merged to `main` via PR #5 → PR #6. Ready for cleanup; sp-base consuming RelayEngine API.
 **Rename**: Project renamed `sp-base-relay` → `sp-rtk-base-relay` on `main` (commit `f9c2a35`, April 21, 2026) in preparation for public release.
+**CI**: GitHub Actions workflow added (April 21, 2026) — lint + matrix tests on Python 3.10/3.11/3.12/3.13 + build.
 **Version**: 2.1.0
-**Tests**: 1,117 unit tests passing, 89.49% coverage (post-rename verification)
+**Tests**: 1,117 unit tests passing, 89.35% coverage (post-CI verification)
 **Branch**: `main` (v2.1 merged; working directly on main)
 **GitHub**: `https://github.com/rodenj1/sp-rtk-base-relay` (renamed via `gh repo rename`; GitHub auto-redirects old URL)
+
+---
+
+## GitHub Actions CI — COMPLETE ✅ (April 21, 2026)
+
+**Workflow**: `.github/workflows/ci.yml` — runs on push to `main`, PRs to `main`, and `workflow_dispatch`. Uses `concurrency.cancel-in-progress: true` to supersede in-flight runs.
+
+**Three jobs**:
+1. **`lint`** (Python 3.12 only, blocking gate before tests run):
+   - `uv run ruff check .` (blocking)
+   - `uv run ruff format --check .` (blocking)
+   - `uv run mypy src` (strict, blocking)
+   - `uv run pyright src` (strict, blocking)
+   - `uv run pylint src` (advisory, `continue-on-error: true`)
+2. **`test`** (matrix: Python 3.10, 3.11, 3.12, 3.13, `fail-fast: false`):
+   - `uv sync --locked --all-extras`
+   - `uv run pytest` with coverage (XML + HTML + JUnit reports)
+   - Artifacts uploaded: `coverage-report` (3.12 only) + `pytest-junit-py<VERSION>` (all versions, `if: always()`)
+   - Coverage badge updated on push to `main` via Gist + shields.io (gated on `GIST_SECRET` secret so CI still passes before one-time setup is done)
+3. **`build`** (Python 3.12, runs after `test`):
+   - `uv build` → sdist + wheel → artifact
+
+**Action pinning**: `actions/checkout@v5.0.0`, `astral-sh/setup-uv@v8.1.0`, `actions/upload-artifact@v4.6.2`, `schneegans/dynamic-badges-action@v1.7.0` — all pinned to full SHAs for supply-chain safety.
+
+**Caching**: `astral-sh/setup-uv` with `enable-cache: true` + `cache-dependency-glob: pyproject.toml + uv.lock`.
+
+**Supporting changes**:
+- `pyproject.toml`: added `Python :: 3.13` classifier, removed `black` (replaced by `ruff format`), added `ruff>=0.6.0` to dev + dependency-groups.dev, added `[tool.ruff]` config (line-length 88, target-version py310, selecting E/W/F/I/B/UP/N/SIM/RUF rule sets), added a legacy-baseline `ignore` list for pre-existing findings (to be addressed in follow-up PRs).
+- **Auto-applied `ruff check --fix` + `ruff format`** across 74 files: fixed ~412 issues (unsorted imports, unused noqa, modern syntax upgrades via pyupgrade, etc.) and reformatted 41 files. All 1,117 tests still pass, coverage 89.35%.
+- `docs/ci-setup.md`: new doc — workflow overview + step-by-step Gist/PAT setup for the coverage badge.
+- `README.md`: replaced static coverage/Python badges with dynamic CI badge, shields.io endpoint badge (reads coverage JSON from Gist), py 3.10|3.11|3.12|3.13 badge, and ruff badge. Includes a note pointing to `docs/ci-setup.md` for gist setup.
+
+**Post-merge manual TODO** (one-time, see `docs/ci-setup.md`):
+1. Create a public Gist named `sp-rtk-base-relay-coverage.json`
+2. Create a PAT with `gist` scope
+3. Add repo secrets `GIST_SECRET` + `COVERAGE_GIST_ID`
+4. Replace `REPLACE_WITH_GIST_ID` in `README.md` with the actual Gist ID
+
+---
+
 
 ---
 

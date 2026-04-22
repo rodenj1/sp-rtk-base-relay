@@ -9,15 +9,14 @@ import logging
 import queue
 import threading
 import time
-from typing import Any
-from dataclasses import dataclass
 from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
-from .input_sources.base_input import InputSource
-from .rtcm_client import RTCMClient
 from ..exceptions import ServiceError
 from ..rtcm_decoder import RTCMMessageDecoder
-
+from .input_sources.base_input import InputSource
+from .rtcm_client import RTCMClient
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +259,9 @@ class DataPipelineCoordinator:
                     # Get data from input thread with timeout
                     try:
                         data = self.data_queue.get(timeout=1.0)
-                        receive_time = time.perf_counter()  # Mark receive time for latency
+                        receive_time = (
+                            time.perf_counter()
+                        )  # Mark receive time for latency
                     except queue.Empty:
                         # No data available, check connection health
                         if not self._check_connections_health():
@@ -298,11 +299,15 @@ class DataPipelineCoordinator:
 
                             # Decode each complete frame
                             for frame in complete_frames:
-                                msg_ids = RTCMMessageDecoder.extract_all_message_ids(frame)
+                                msg_ids = RTCMMessageDecoder.extract_all_message_ids(
+                                    frame
+                                )
                                 if msg_ids:
                                     # Count each message ID found
                                     for msg_id in msg_ids:
-                                        self.metrics_collector.increment_message_id_counter(msg_id)
+                                        self.metrics_collector.increment_message_id_counter(
+                                            msg_id
+                                        )
                                     logger.debug(
                                         f"Decoded {len(msg_ids)} RTCM message IDs from "
                                         f"{len(frame)}-byte frame"
@@ -392,7 +397,7 @@ class DataPipelineCoordinator:
 
                 # Extract complete frame
                 frame = self._frame_buffer[offset : offset + expected_frame_length]
-                
+
                 # Validate frame before adding to results
                 if RTCMMessageDecoder.is_valid_rtcm_frame(frame):
                     complete_frames.append(frame)

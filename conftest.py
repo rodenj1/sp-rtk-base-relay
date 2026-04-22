@@ -4,6 +4,7 @@ This file ensures that the project root is added to sys.path,
 making the 'tests' package discoverable for pytest runs.
 This is needed for 'from tests.fixtures...' style imports to work.
 """
+
 import sys
 from pathlib import Path
 

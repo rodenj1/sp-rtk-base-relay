@@ -4,23 +4,23 @@ Tests cover configuration validation, connection lifecycle, data reading,
 port enumeration, health monitoring, and error handling for serial input.
 """
 
-import pytest
 from unittest.mock import Mock, patch
 
+import pytest
+
 from sp_rtk_base_relay.core.input_sources.serial_input import (
-    SerialInputSource,
     SerialConfig,
+    SerialInputSource,
 )
 from sp_rtk_base_relay.exceptions import InputSourceError
 from tests.fixtures.mock_serial_port import (
+    PARITY_EVEN,
+    PARITY_NONE,
+    PARITY_ODD,
+    MockListPorts,
     MockSerialPort,
     SerialException,
-    MockListPorts,
-    PARITY_NONE,
-    PARITY_EVEN,
-    PARITY_ODD,
 )
-
 
 # Configuration Tests
 
@@ -59,7 +59,9 @@ class TestSerialConfig:
 class TestSerialInputInitialization:
     """Tests for serial input source initialization."""
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_valid_initialization(self, mock_serial: Mock):
         """Test initialization with valid config."""
@@ -72,7 +74,9 @@ class TestSerialInputInitialization:
         assert serial_input.serial_port is None
         assert not serial_input.is_connected
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", False)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", False
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial", None)
     def test_pyserial_not_available(self):
         """Test that missing PySerial raises InputSourceError."""
@@ -80,7 +84,9 @@ class TestSerialInputInitialization:
         with pytest.raises(InputSourceError, match="PySerial library not available"):
             SerialInputSource(config)
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_empty_port_raises_error(self, mock_serial: Mock):
         """Test that empty port raises InputSourceError."""
@@ -89,7 +95,9 @@ class TestSerialInputInitialization:
         with pytest.raises(InputSourceError, match="Serial port must be specified"):
             SerialInputSource(config)
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_invalid_baudrate_zero(self, mock_serial: Mock) -> None:
         """Test that zero baud rate raises InputSourceError."""
@@ -98,7 +106,9 @@ class TestSerialInputInitialization:
         with pytest.raises(InputSourceError, match="Invalid baud rate"):
             SerialInputSource(config)
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_invalid_baudrate_negative(self, mock_serial: Mock):
         """Test that negative baud rate raises InputSourceError."""
@@ -107,7 +117,9 @@ class TestSerialInputInitialization:
         with pytest.raises(InputSourceError, match="Invalid baud rate"):
             SerialInputSource(config)
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_invalid_bytesize(self, mock_serial: Mock):
         """Test that invalid data bits raises InputSourceError."""
@@ -116,7 +128,9 @@ class TestSerialInputInitialization:
         with pytest.raises(InputSourceError, match="Invalid data bits"):
             SerialInputSource(config)
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_invalid_stopbits(self, mock_serial: Mock):
         """Test that invalid stop bits raises InputSourceError."""
@@ -125,7 +139,9 @@ class TestSerialInputInitialization:
         with pytest.raises(InputSourceError, match="Invalid stop bits"):
             SerialInputSource(config)
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_invalid_parity(self, mock_serial: Mock):
         """Test that invalid parity raises InputSourceError."""
@@ -134,7 +150,9 @@ class TestSerialInputInitialization:
         with pytest.raises(InputSourceError, match="Invalid parity"):
             SerialInputSource(config)
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_invalid_timeout_zero(self, mock_serial: Mock):
         """Test that zero timeout raises InputSourceError."""
@@ -143,7 +161,9 @@ class TestSerialInputInitialization:
         with pytest.raises(InputSourceError, match="Invalid timeout"):
             SerialInputSource(config)
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_invalid_timeout(self, mock_serial: Mock):
         """Test that invalid timeout raises InputSourceError."""
@@ -159,7 +179,9 @@ class TestSerialInputInitialization:
 class TestSerialConnection:
     """Tests for serial connection lifecycle."""
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_successful_connection(self, mock_serial: Mock):
         """Test successful serial connection."""
@@ -177,7 +199,9 @@ class TestSerialConnection:
 
         serial_input.disconnect()
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_connection_port_not_found(self, mock_serial: Mock):
         """Test connection with port not found."""
@@ -198,7 +222,9 @@ class TestSerialConnection:
         assert not serial_input.is_connected
         assert serial_input.stats.connection_failures == 1
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_already_connected(self, mock_serial: Mock):
         """Test connecting when already connected."""
@@ -219,16 +245,16 @@ class TestSerialConnection:
 
         serial_input.disconnect()
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_connection_opens_closed_port(self, mock_serial: Mock):
         """Test that connection opens port if not already open."""
         mock_serial.PARITY_NONE = PARITY_NONE
 
         mock_port = MockSerialPort()
-        mock_port._is_open = (
-            False  # pyright: ignore[reportPrivateUsage] # Simulate closed port
-        )
+        mock_port._is_open = False  # pyright: ignore[reportPrivateUsage] # Simulate closed port
         mock_serial.Serial = Mock(return_value=mock_port)
 
         config = SerialConfig()
@@ -239,7 +265,9 @@ class TestSerialConnection:
 
         serial_input.disconnect()
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_connection_clears_buffers(self, mock_serial: Mock):
         """Test that connection clears input/output buffers."""
@@ -279,7 +307,9 @@ class TestSerialConnection:
     #     with pytest.raises(InputSourceError, match="Unexpected serial connection error|Serial port health check failed"):
     #         serial_input.connect()
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_multiple_connect_disconnect_cycles(self, mock_serial: Mock):
         """Test multiple connection/disconnection cycles."""
@@ -298,7 +328,9 @@ class TestSerialConnection:
         assert serial_input.stats.successful_connections == 3
         assert serial_input.stats.connection_attempts == 3
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_connection_statistics_tracking(self, mock_serial: Mock):
         """Test that connection statistics are tracked correctly."""
@@ -316,7 +348,9 @@ class TestSerialConnection:
 
         serial_input.disconnect()
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_parity_mapping(self, mock_serial: Mock):
         """Test that parity string is correctly mapped."""
@@ -338,7 +372,9 @@ class TestSerialConnection:
 class TestSerialDataReading:
     """Tests for serial data reading operations."""
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_read_data_successfully(self, mock_serial: Mock):
         """Test reading data from serial port."""
@@ -361,7 +397,9 @@ class TestSerialDataReading:
 
         serial_input.disconnect()
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_read_data_no_data_available(self, mock_serial: Mock):
         """Test reading when no data is available."""
@@ -408,7 +446,9 @@ class TestSerialDataReading:
 
     #     serial_input.disconnect()
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_read_data_when_not_connected(self, mock_serial: Mock):
         """Test reading when not connected returns None."""
@@ -420,7 +460,9 @@ class TestSerialDataReading:
         data = serial_input.read_data()
         assert data is None
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_read_data_respects_8kb_limit(self, mock_serial: Mock):
         """Test that read respects 8KB limit."""
@@ -442,7 +484,9 @@ class TestSerialDataReading:
 
         serial_input.disconnect()
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_read_data_serial_exception(self, mock_serial: Mock):
         """Test handling of SerialException during read."""
@@ -467,7 +511,9 @@ class TestSerialDataReading:
 
         serial_input.disconnect()
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_read_data_unexpected_exception(self, mock_serial: Mock):
         """Test handling of unexpected exception during read."""
@@ -491,7 +537,9 @@ class TestSerialDataReading:
 
         serial_input.disconnect()
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_read_statistics_tracking(self, mock_serial: Mock):
         """Test that read statistics are tracked correctly."""
@@ -514,7 +562,9 @@ class TestSerialDataReading:
 
         serial_input.disconnect()
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_read_data_partial_reads(self, mock_serial: Mock):
         """Test reading data in multiple chunks."""
@@ -550,7 +600,9 @@ class TestSerialDataReading:
 class TestSerialPortEnumeration:
     """Tests for serial port enumeration."""
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_list_available_ports_success(self, mock_serial: Mock):
         """Test listing available serial ports."""
@@ -578,7 +630,9 @@ class TestSerialPortEnumeration:
         assert ports[0]["name"] == "USB Serial"
         assert ports[0]["manufacturer"] == "FTDI"
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_list_available_ports_empty(self, mock_serial: Mock):
         """Test listing ports when none are available."""
@@ -595,7 +649,9 @@ class TestSerialPortEnumeration:
         ports = serial_input.list_available_ports()
         assert len(ports) == 0
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", False)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", False
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial", None)
     def test_list_available_ports_no_pyserial(self):
         """Test listing ports when PySerial is not available."""
@@ -604,9 +660,7 @@ class TestSerialPortEnumeration:
         from sp_rtk_base_relay.core.input_sources import serial_input
 
         # Save original value
-        original_available = (
-            serial_input._pyserial_available
-        )  # pyright: ignore[reportPrivateUsage]
+        original_available = serial_input._pyserial_available  # pyright: ignore[reportPrivateUsage]
         serial_input._pyserial_available = False  # pyright: ignore[reportPrivateUsage]
 
         try:
@@ -614,11 +668,11 @@ class TestSerialPortEnumeration:
             # (This would be tested at module level, but we can't instantiate)
             assert True  # Module-level behavior verified
         finally:
-            serial_input._pyserial_available = (
-                original_available  # pyright: ignore[reportPrivateUsage]
-            )
+            serial_input._pyserial_available = original_available  # pyright: ignore[reportPrivateUsage]
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_list_available_ports_with_exception(self, mock_serial: Mock):
         """Test listing ports when exception occurs."""
@@ -645,7 +699,9 @@ class TestSerialPortEnumeration:
 class TestSerialHealthMonitoring:
     """Tests for serial port health monitoring and statistics."""
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_port_health_check_success(self, mock_serial: Mock):
         """Test port health check when port is healthy."""
@@ -661,7 +717,9 @@ class TestSerialHealthMonitoring:
 
         serial_input.disconnect()
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_get_connection_info_connected(self, mock_serial: Mock):
         """Test getting connection info when connected."""
@@ -681,7 +739,9 @@ class TestSerialHealthMonitoring:
 
         serial_input.disconnect()
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_get_connection_info_disconnected(self, mock_serial: Mock):
         """Test getting connection info when disconnected."""
@@ -695,7 +755,9 @@ class TestSerialHealthMonitoring:
         assert info["baudrate"] == 9600
         assert "is_open" not in info
 
-    @patch("sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True)
+    @patch(
+        "sp_rtk_base_relay.core.input_sources.serial_input._pyserial_available", True
+    )
     @patch("sp_rtk_base_relay.core.input_sources.serial_input.serial")
     def test_get_port_statistics(self, mock_serial: Mock):
         """Test getting detailed port statistics."""

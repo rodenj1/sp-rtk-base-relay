@@ -20,7 +20,6 @@ from typing import Any
 
 from sp_rtk_base_relay.core.message_filter import FilterConfig, MessageFilter
 
-
 logger = logging.getLogger(__name__)
 
 # Default maximum queue size per destination (DR-2)
@@ -260,9 +259,7 @@ class BaseDestination(ABC):
             except Exception as e:
                 self.stats.errors += 1
                 self.stats.last_error = str(e)
-                logger.error(
-                    f"Destination '{self.name}' send error: {e}"
-                )
+                logger.error(f"Destination '{self.name}' send error: {e}")
                 self._disconnect()
 
         logger.info(f"Destination '{self.name}' run loop exited")

@@ -15,7 +15,6 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -51,17 +50,17 @@ class FilterConfig:
                 "pass_all filter mode must have empty message_ids, "
                 f"got {len(self.message_ids)} IDs"
             )
-        if self.mode in (FilterMode.ALLOWLIST, FilterMode.BLOCKLIST) and not self.message_ids:
+        if (
+            self.mode in (FilterMode.ALLOWLIST, FilterMode.BLOCKLIST)
+            and not self.message_ids
+        ):
             raise ValueError(
                 f"{self.mode.value} filter mode requires at least one message ID"
             )
         # Validate RTCM message ID range (12-bit field: 0-4095)
         for msg_id in self.message_ids:
             if not 0 <= msg_id <= 4095:
-                raise ValueError(
-                    f"Invalid RTCM message ID: {msg_id} "
-                    "(must be 0-4095)"
-                )
+                raise ValueError(f"Invalid RTCM message ID: {msg_id} (must be 0-4095)")
 
     @classmethod
     def pass_all(cls) -> "FilterConfig":
@@ -73,7 +72,9 @@ class FilterConfig:
         return cls(mode=FilterMode.PASS_ALL, message_ids=frozenset())
 
     @classmethod
-    def allowlist(cls, message_ids: set[int] | frozenset[int] | list[int]) -> "FilterConfig":
+    def allowlist(
+        cls, message_ids: set[int] | frozenset[int] | list[int]
+    ) -> "FilterConfig":
         """Create an allowlist filter configuration.
 
         Args:
@@ -88,7 +89,9 @@ class FilterConfig:
         return cls(mode=FilterMode.ALLOWLIST, message_ids=frozenset(message_ids))
 
     @classmethod
-    def blocklist(cls, message_ids: set[int] | frozenset[int] | list[int]) -> "FilterConfig":
+    def blocklist(
+        cls, message_ids: set[int] | frozenset[int] | list[int]
+    ) -> "FilterConfig":
         """Create a blocklist filter configuration.
 
         Args:
@@ -177,9 +180,7 @@ class MessageFilter:
         else:  # BLOCKLIST
             return message_id not in self._config.message_ids
 
-    def filter_frames(
-        self, frames: list[tuple[int, bytes]]
-    ) -> list[bytes]:
+    def filter_frames(self, frames: list[tuple[int, bytes]]) -> list[bytes]:
         """Filter a list of parsed RTCM frames.
 
         Takes pre-parsed frames (message_id, frame_bytes) and returns

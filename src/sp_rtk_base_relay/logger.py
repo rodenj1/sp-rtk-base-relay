@@ -185,9 +185,7 @@ class TextFormatter(logging.Formatter):
                 extra_fields[key] = value
 
         if extra_fields:
-            extra_str = " | ".join(
-                f"{str(k)}={str(v)}" for k, v in extra_fields.items()
-            )
+            extra_str = " | ".join(f"{k!s}={v!s}" for k, v in extra_fields.items())
             message += f" | {extra_str}"
 
         return message

@@ -4,23 +4,23 @@ Tests the data pipeline coordination between input sources and RTCM client,
 including multi-threading, error handling, and coordinated restart logic.
 """
 
-import pytest
-import time
-import threading
-from unittest.mock import Mock
 import queue
-
+import threading
+import time
 from typing import Any
+from unittest.mock import Mock
 
+import pytest
+
+from sp_rtk_base_relay.config import RTCMServerConfig
+from sp_rtk_base_relay.core.connection_states import ConnectionState
 from sp_rtk_base_relay.core.data_pipeline import (
     DataPipelineCoordinator,
     PipelineStats,
 )
-from sp_rtk_base_relay.core.rtcm_client import RTCMClient
-from sp_rtk_base_relay.core.connection_states import ConnectionState
 from sp_rtk_base_relay.core.input_sources.base_input import InputSource
-from sp_rtk_base_relay.config import RTCMServerConfig
-from sp_rtk_base_relay.exceptions import ServiceError, InputSourceError
+from sp_rtk_base_relay.core.rtcm_client import RTCMClient
+from sp_rtk_base_relay.exceptions import InputSourceError, ServiceError
 
 
 # Simple mock input source for testing (inline)

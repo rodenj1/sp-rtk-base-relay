@@ -6,17 +6,16 @@
 These tests target specific uncovered lines identified in coverage analysis.
 """
 
-import time
 import threading
+import time
+from typing import Any
 from unittest.mock import Mock, patch
 
-from sp_rtk_base_relay.core.data_pipeline import DataPipelineCoordinator
-from sp_rtk_base_relay.core.rtcm_client import RTCMClient
-from sp_rtk_base_relay.core.connection_states import ConnectionState
-from sp_rtk_base_relay.core.input_sources.base_input import InputSource
 from sp_rtk_base_relay.config import RTCMServerConfig
-
-from typing import Any
+from sp_rtk_base_relay.core.connection_states import ConnectionState
+from sp_rtk_base_relay.core.data_pipeline import DataPipelineCoordinator
+from sp_rtk_base_relay.core.input_sources.base_input import InputSource
+from sp_rtk_base_relay.core.rtcm_client import RTCMClient
 
 
 class EdgeCaseMockInputSource(InputSource):
@@ -88,9 +87,7 @@ class TestDataPipelineEdgeCases:
         coordinator.running = True
 
         # Start input thread
-        input_thread = threading.Thread(
-            target=coordinator._input_thread_worker
-        )  # pyright: ignore[reportPrivateUsage]
+        input_thread = threading.Thread(target=coordinator._input_thread_worker)  # pyright: ignore[reportPrivateUsage]
         input_thread.start()
 
         try:
@@ -101,9 +98,7 @@ class TestDataPipelineEdgeCases:
             input_thread.join(timeout=2.0)
             assert not input_thread.is_alive()
             assert coordinator.stats.input_errors >= 1
-            assert (
-                coordinator._restart_requested.is_set()
-            )  # pyright: ignore[reportPrivateUsage]
+            assert coordinator._restart_requested.is_set()  # pyright: ignore[reportPrivateUsage]
         finally:
             coordinator.running = False
             coordinator._stop_event.set()  # pyright: ignore[reportPrivateUsage]
@@ -127,9 +122,7 @@ class TestDataPipelineEdgeCases:
         coordinator.running = True
 
         # Start input thread
-        input_thread = threading.Thread(
-            target=coordinator._input_thread_worker
-        )  # pyright: ignore[reportPrivateUsage]
+        input_thread = threading.Thread(target=coordinator._input_thread_worker)  # pyright: ignore[reportPrivateUsage]
         input_thread.start()
 
         try:
@@ -163,9 +156,7 @@ class TestDataPipelineEdgeCases:
         coordinator.running = True
 
         # Start input thread
-        input_thread = threading.Thread(
-            target=coordinator._input_thread_worker
-        )  # pyright: ignore[reportPrivateUsage]
+        input_thread = threading.Thread(target=coordinator._input_thread_worker)  # pyright: ignore[reportPrivateUsage]
         input_thread.start()
 
         try:
@@ -175,9 +166,7 @@ class TestDataPipelineEdgeCases:
             # Should have stopped and recorded error
             assert not input_thread.is_alive()
             assert coordinator.stats.input_errors >= 1
-            assert (
-                coordinator._restart_requested.is_set()
-            )  # pyright: ignore[reportPrivateUsage]
+            assert coordinator._restart_requested.is_set()  # pyright: ignore[reportPrivateUsage]
         finally:
             coordinator.running = False
             coordinator._stop_event.set()  # pyright: ignore[reportPrivateUsage]
@@ -199,9 +188,7 @@ class TestDataPipelineEdgeCases:
         coordinator.running = True
 
         # Start coordinator in thread
-        coordinator_thread = threading.Thread(
-            target=coordinator._coordinator_loop
-        )  # pyright: ignore[reportPrivateUsage]
+        coordinator_thread = threading.Thread(target=coordinator._coordinator_loop)  # pyright: ignore[reportPrivateUsage]
         coordinator_thread.start()
 
         try:
@@ -235,9 +222,7 @@ class TestDataPipelineEdgeCases:
         coordinator.running = True
 
         # Start coordinator in thread
-        coordinator_thread = threading.Thread(
-            target=coordinator._coordinator_loop
-        )  # pyright: ignore[reportPrivateUsage]
+        coordinator_thread = threading.Thread(target=coordinator._coordinator_loop)  # pyright: ignore[reportPrivateUsage]
         coordinator_thread.start()
 
         try:
@@ -283,9 +268,7 @@ class TestDataPipelineEdgeCases:
 
         # Should have detected send failure
         assert coordinator.stats.rtcm_errors >= 1
-        assert (
-            coordinator._restart_requested.is_set()
-        )  # pyright: ignore[reportPrivateUsage]
+        assert coordinator._restart_requested.is_set()  # pyright: ignore[reportPrivateUsage]
 
     def test_coordinator_handles_exception_in_loop(self):
         """Test coordinator handles unexpected exception in main loop."""
@@ -315,9 +298,7 @@ class TestDataPipelineEdgeCases:
 
         # Should have recorded coordination error
         assert coordinator.stats.coordination_errors >= 1
-        assert (
-            coordinator._restart_requested.is_set()
-        )  # pyright: ignore[reportPrivateUsage]
+        assert coordinator._restart_requested.is_set()  # pyright: ignore[reportPrivateUsage]
 
     def test_cleanup_connections_handles_rtcm_exception(self):
         """Test cleanup handles exception when disconnecting RTCM client."""

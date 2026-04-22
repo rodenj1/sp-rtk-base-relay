@@ -123,8 +123,7 @@ class TcpServerDestination(BaseDestination):
         broadcast loop until ``self._running`` is cleared.
         """
         logger.info(
-            "Destination '%s' starting TCP server on %s:%d "
-            "(max_clients=%d)",
+            "Destination '%s' starting TCP server on %s:%d (max_clients=%d)",
             self.name,
             self._host,
             self._port,
@@ -139,9 +138,7 @@ class TcpServerDestination(BaseDestination):
         except Exception as exc:
             self.stats.errors += 1
             self.stats.last_error = str(exc)
-            logger.error(
-                "Destination '%s' TCP server error: %s", self.name, exc
-            )
+            logger.error("Destination '%s' TCP server error: %s", self.name, exc)
         finally:
             # Clean up all remaining clients
             self._loop.run_until_complete(self._close_all_clients())
@@ -204,8 +201,7 @@ class TcpServerDestination(BaseDestination):
         # Enforce max clients
         if len(self._clients) >= self._max_clients:
             logger.warning(
-                "Destination '%s' rejecting client %s "
-                "(max_clients=%d reached)",
+                "Destination '%s' rejecting client %s (max_clients=%d reached)",
                 self.name,
                 peer_str,
                 self._max_clients,
@@ -311,9 +307,7 @@ class TcpServerDestination(BaseDestination):
         for writer in list(self._clients):
             try:
                 writer.write(data)
-                await asyncio.wait_for(
-                    writer.drain(), timeout=CLIENT_WRITE_TIMEOUT
-                )
+                await asyncio.wait_for(writer.drain(), timeout=CLIENT_WRITE_TIMEOUT)
             except (
                 asyncio.TimeoutError,
                 ConnectionResetError,

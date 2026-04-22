@@ -8,14 +8,13 @@ metrics, global input/service health metrics, and delta-based counter updates.
 from __future__ import annotations
 
 import time
+from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
-from unittest.mock import Mock, patch, PropertyMock
 from prometheus_client import REGISTRY
 
-from sp_rtk_base_relay.metrics import MetricsCollector, _DestSnapshot, _inc_delta
 from sp_rtk_base_relay.core.destinations.base_destination import DestinationStats
-
+from sp_rtk_base_relay.metrics import MetricsCollector, _DestSnapshot, _inc_delta
 
 # ======================================================================
 # Fixtures
@@ -364,7 +363,9 @@ class TestMultiDestinationIsolation:
         ]
         mc.update_all(dests)
 
-        assert mc.dest_connection_status.labels(destination="surepath")._value.get() == 1
+        assert (
+            mc.dest_connection_status.labels(destination="surepath")._value.get() == 1
+        )
         assert mc.dest_connection_status.labels(destination="rtk2go")._value.get() == 0
         assert mc.dest_connection_status.labels(destination="onocoy")._value.get() == 1
 
@@ -556,12 +557,16 @@ class TestUpdateAllEndToEnd:
 
         dests = [
             _mock_destination(
-                name="surepath", connected=True,
-                bytes_sent=1000, messages_sent=50,
+                name="surepath",
+                connected=True,
+                bytes_sent=1000,
+                messages_sent=50,
             ),
             _mock_destination(
-                name="rtk2go", connected=False,
-                bytes_sent=500, messages_sent=25,
+                name="rtk2go",
+                connected=False,
+                bytes_sent=500,
+                messages_sent=25,
             ),
         ]
 
@@ -569,7 +574,9 @@ class TestUpdateAllEndToEnd:
         mc.update_all(dests, hub=hub, input_connected=True)
 
         # Verify gauges
-        assert mc.dest_connection_status.labels(destination="surepath")._value.get() == 1
+        assert (
+            mc.dest_connection_status.labels(destination="surepath")._value.get() == 1
+        )
         assert mc.dest_connection_status.labels(destination="rtk2go")._value.get() == 0
         assert mc.active_destinations_count._value.get() == 1
         assert mc.input_connection_status._value.get() == 1
@@ -579,12 +586,16 @@ class TestUpdateAllEndToEnd:
         # Second update with new stats
         dests2 = [
             _mock_destination(
-                name="surepath", connected=True,
-                bytes_sent=2000, messages_sent=100,
+                name="surepath",
+                connected=True,
+                bytes_sent=2000,
+                messages_sent=100,
             ),
             _mock_destination(
-                name="rtk2go", connected=True,
-                bytes_sent=800, messages_sent=40,
+                name="rtk2go",
+                connected=True,
+                bytes_sent=800,
+                messages_sent=40,
             ),
         ]
         mc.update_all(dests2, hub=hub, input_connected=True)

@@ -2,21 +2,22 @@
 
 import os
 import tempfile
-import yaml
-from unittest.mock import patch, mock_open
-import pytest
 from typing import Any
+from unittest.mock import mock_open, patch
+
+import pytest
+import yaml
 
 from sp_rtk_base_relay.config import (
-    ServerConfig,
-    TCPInputConfig,
-    SerialInputConfig,
-    InputConfig,
-    MonitoringConfig,
-    MetricsConfig,
-    LoggingConfig,
     Config,
     ConfigManager,
+    InputConfig,
+    LoggingConfig,
+    MetricsConfig,
+    MonitoringConfig,
+    SerialInputConfig,
+    ServerConfig,
+    TCPInputConfig,
 )
 from sp_rtk_base_relay.exceptions import ConfigurationError
 
@@ -91,7 +92,9 @@ class TestServerConfig:
             ConfigurationError,
             match="server.port must be an integer between 1 and 65535",
         ):
-            ServerConfig(host="example.com", port="8080", username="user", password="pass")  # type: ignore
+            ServerConfig(
+                host="example.com", port="8080", username="user", password="pass"
+            )  # type: ignore
 
     def test_empty_username(self):
         """Test empty username validation."""
@@ -575,7 +578,8 @@ def _v2_config_data(
 ) -> dict[str, Any]:
     """Helper to build a complete v2 config dict."""
     data: dict[str, Any] = {
-        "input": input_data or {
+        "input": input_data
+        or {
             "source": "tcp",
             "config": {"host": "127.0.0.1", "port": 5015},
         },
@@ -621,9 +625,7 @@ class TestConfig:
         data = {
             "input": {"source": "tcp", "config": {"host": "127.0.0.1", "port": 5015}}
         }
-        with pytest.raises(
-            ConfigurationError, match="destinations list is required"
-        ):
+        with pytest.raises(ConfigurationError, match="destinations list is required"):
             Config.from_dict(data)
 
     def test_config_from_dict_missing_input_source(self):
@@ -727,10 +729,14 @@ destinations:
         config = ConfigManager.load_config("/test/config.yaml")
         assert len(config.destinations) == 1
         from sp_rtk_base_relay.config import SurePathDestinationConfig
+
         assert isinstance(config.destinations[0].config, SurePathDestinationConfig)
         assert config.destinations[0].config.host == "test.example.com"
 
-    @patch.dict(os.environ, {"SP_DEST_SUREPATH_HOST": "env.example.com", "SP_DEST_SUREPATH_PORT": "9090"})
+    @patch.dict(
+        os.environ,
+        {"SP_DEST_SUREPATH_HOST": "env.example.com", "SP_DEST_SUREPATH_PORT": "9090"},
+    )
     @patch(
         "builtins.open",
         new_callable=mock_open,
@@ -760,6 +766,7 @@ destinations:
 
         config = ConfigManager.load_config("/test/config.yaml")
         from sp_rtk_base_relay.config import SurePathDestinationConfig
+
         assert isinstance(config.destinations[0].config, SurePathDestinationConfig)
         assert config.destinations[0].config.host == "env.example.com"
         assert config.destinations[0].config.port == 9090

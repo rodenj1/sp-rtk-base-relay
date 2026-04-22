@@ -18,7 +18,6 @@ from sp_rtk_base_relay.core.message_filter import FilterConfig
 from sp_rtk_base_relay.exceptions import NtripError
 from tests.fixtures.mock_ntrip_caster import MockNtripCaster
 
-
 # ======================================================================
 # Helpers
 # ======================================================================

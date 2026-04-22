@@ -29,15 +29,14 @@ from sp_rtk_base_relay.config import (
     DestinationFilterConfig,
     TcpServerDestinationConfig,
 )
+from sp_rtk_base_relay.core.destinations.destination_factory import DestinationFactory
 from sp_rtk_base_relay.core.destinations.tcp_server_destination import (
     CLIENT_WRITE_TIMEOUT,
     TcpServerDestination,
     build_tcp_server_destination,
 )
-from sp_rtk_base_relay.core.destinations.destination_factory import DestinationFactory
 from sp_rtk_base_relay.core.message_filter import FilterConfig
 from sp_rtk_base_relay.exceptions import DestinationError
-
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
@@ -189,7 +188,9 @@ class TestTcpServerFactory:
             filter=DestinationFilterConfig(mode="pass_all"),
             config=MagicMock(),  # wrong type
         )
-        with pytest.raises(DestinationError, match="Expected TcpServerDestinationConfig"):
+        with pytest.raises(
+            DestinationError, match="Expected TcpServerDestinationConfig"
+        ):
             build_tcp_server_destination(cfg)
 
     def test_factory_create(self) -> None:
@@ -199,9 +200,7 @@ class TestTcpServerFactory:
             type="tcp_server",
             enabled=True,
             filter=DestinationFilterConfig(mode="pass_all"),
-            config=TcpServerDestinationConfig(
-                host="127.0.0.1", port=port
-            ),
+            config=TcpServerDestinationConfig(host="127.0.0.1", port=port),
         )
         dest = DestinationFactory.create(cfg)
         assert isinstance(dest, TcpServerDestination)

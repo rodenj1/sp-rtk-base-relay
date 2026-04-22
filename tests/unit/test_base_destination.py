@@ -6,17 +6,16 @@ behavior including queue management, statistics, and thread lifecycle.
 
 import threading
 import time
+from typing import Any
 
 import pytest
 
 from sp_rtk_base_relay.core.destinations.base_destination import (
+    DEFAULT_QUEUE_SIZE,
     BaseDestination,
     DestinationStats,
-    DEFAULT_QUEUE_SIZE,
 )
 from sp_rtk_base_relay.core.message_filter import FilterConfig, FilterMode
-from typing import Any
-
 
 # ============================================================================
 # Mock Destination for Testing

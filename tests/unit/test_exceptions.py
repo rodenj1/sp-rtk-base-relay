@@ -3,15 +3,15 @@
 import pytest
 
 from sp_rtk_base_relay.exceptions import (
-    SPBaseRelayError,
+    AuthenticationError,
     ConfigurationError,
     ConnectionError,
-    AuthenticationError,
-    InputSourceError,
     DataProcessingError,
-    ServiceError,
     DestinationError,
+    InputSourceError,
     NtripError,
+    ServiceError,
+    SPBaseRelayError,
 )
 
 

@@ -4,13 +4,12 @@
 These tests target specific uncovered lines in rtcm_client.py.
 """
 
-import socket
 import time
 from unittest.mock import Mock
 
-from sp_rtk_base_relay.core.rtcm_client import RTCMClient
 from sp_rtk_base_relay.config import RTCMServerConfig
 from sp_rtk_base_relay.core.connection_states import ConnectionState
+from sp_rtk_base_relay.core.rtcm_client import RTCMClient
 
 
 class TestRTCMClientConnectionErrors:
@@ -62,7 +61,7 @@ class TestRTCMClientConnectionErrors:
 
         # Set up mock socket that raises error
         mock_socket = Mock()
-        mock_socket.sendall = Mock(side_effect=socket.error("Send failed"))
+        mock_socket.sendall = Mock(side_effect=OSError("Send failed"))
 
         client.socket = mock_socket
         client.state = ConnectionState.CONNECTED
@@ -107,7 +106,7 @@ class TestRTCMClientConnectionErrors:
         # Set up mock socket that times out on recv
         mock_socket = Mock()
         mock_socket.sendall = Mock()
-        mock_socket.recv = Mock(side_effect=socket.timeout("Timeout"))
+        mock_socket.recv = Mock(side_effect=TimeoutError("Timeout"))
 
         client.socket = mock_socket
         client.state = ConnectionState.CONNECTING

@@ -113,8 +113,7 @@ class DestinationFactory:
         if dest_type not in cls._builders:
             available = ", ".join(cls.get_available_types()) or "(none)"
             raise ConfigurationError(
-                f"Unknown destination type '{dest_type}'. "
-                f"Available types: {available}",
+                f"Unknown destination type '{dest_type}'. Available types: {available}",
                 config_key=f"destinations[{dest_config.name}].type",
             )
 
@@ -175,9 +174,7 @@ class DestinationFactory:
 
         for cfg in configs:
             if skip_disabled and not cfg.enabled:
-                logger.info(
-                    "Skipping disabled destination '%s'", cfg.name
-                )
+                logger.info("Skipping disabled destination '%s'", cfg.name)
                 continue
             destinations.append(cls.create(cfg))
 

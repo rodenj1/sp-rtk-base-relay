@@ -6,13 +6,12 @@ types with proper validation and error handling.
 """
 
 import logging
-from typing import Any
 from collections.abc import Callable
+from typing import Any
 
+from ...exceptions import ConfigurationError, InputSourceError
 from .base_input import InputSource
-from .serial_input import SerialInputSource, SerialConfig
-from ...exceptions import InputSourceError, ConfigurationError
-
+from .serial_input import SerialConfig, SerialInputSource
 
 logger = logging.getLogger(__name__)
 
@@ -324,9 +323,9 @@ class InputSourceFactory:
         for param_name, param_info in schema.items():
             if "default" in param_info:
                 example_config[param_name] = param_info["default"]
-            elif "examples" in param_info and param_info["examples"]:
+            elif param_info.get("examples"):
                 example_config[param_name] = param_info["examples"][0]
-            elif "choices" in param_info and param_info["choices"]:
+            elif param_info.get("choices"):
                 example_config[param_name] = param_info["choices"][0]
 
         return example_config
@@ -385,7 +384,7 @@ class InputSourceFactory:
 def _register_tcp_source() -> None:
     """Register TCP input source if available."""
     try:
-        from .tcp_input import TCPInputSource, TCPConfig
+        from .tcp_input import TCPConfig, TCPInputSource
 
         InputSourceFactory.register_source_type(
             "tcp", TCPInputSource, lambda cfg: TCPConfig(**cfg)
@@ -401,7 +400,7 @@ def _register_tcp_source() -> None:
 def _register_bluetooth_source() -> None:
     """Register Bluetooth input source if available."""
     try:
-        from .bluetooth_input import BluetoothInputSource, BluetoothConfig
+        from .bluetooth_input import BluetoothConfig, BluetoothInputSource
 
         InputSourceFactory.register_source_type(
             "bluetooth", BluetoothInputSource, lambda cfg: BluetoothConfig(**cfg)

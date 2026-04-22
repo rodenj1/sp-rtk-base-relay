@@ -15,17 +15,17 @@ Usage:
     uv run pytest tests/integration/test_end_to_end_integration.py::TestBasicPipelineFlow::test_tcp_to_rtcm_flow -v
 """
 
-import time
-import pytest
 import logging
-from typing import Any
+import time
 from dataclasses import asdict
+from typing import Any
 
+import pytest
+
+from sp_rtk_base_relay.config import RTCMServerConfig
 from sp_rtk_base_relay.core.input_sources.tcp_input import TCPInputSource
 from sp_rtk_base_relay.core.rtcm_client import RTCMClient
-from sp_rtk_base_relay.config import RTCMServerConfig
 from tests.fixtures.mock_rtcm_server import MockRTCMServer
-
 
 logger = logging.getLogger(__name__)
 
@@ -75,12 +75,12 @@ class TestBasicPipelineFlow:
 
             # Verify server received connection
             server_stats = mock_rtcm_server.get_stats()
-            assert (
-                server_stats.connections_accepted > 0
-            ), "Server should accept connection"
-            assert (
-                server_stats.successful_authentications > 0
-            ), "Authentication should succeed"
+            assert server_stats.connections_accepted > 0, (
+                "Server should accept connection"
+            )
+            assert server_stats.successful_authentications > 0, (
+                "Authentication should succeed"
+            )
 
             logger.info(f"Server stats: {server_stats}")
 
@@ -111,9 +111,9 @@ class TestBasicPipelineFlow:
             time.sleep(2.0)  # Wait for at least one heartbeat
 
             server_stats = mock_rtcm_server.get_stats()
-            assert (
-                server_stats.heartbeats_sent > initial_heartbeats
-            ), "Server should send heartbeats"
+            assert server_stats.heartbeats_sent > initial_heartbeats, (
+                "Server should send heartbeats"
+            )
 
             logger.info("End-to-end flow test successful")
 
@@ -154,7 +154,7 @@ class TestBasicPipelineFlow:
             max_transmissions = 5
 
             for i in range(max_transmissions):
-                logger.info(f"Transmission {i+1}/{max_transmissions}")
+                logger.info(f"Transmission {i + 1}/{max_transmissions}")
 
                 data = connected_tcp_input.read_data(timeout=2.0)
                 if data:
@@ -173,9 +173,9 @@ class TestBasicPipelineFlow:
             logger.info(f"Server received: {server_stats.bytes_received} bytes total")
 
             if transmissions > 0:
-                assert (
-                    server_stats.bytes_received > 0
-                ), "Server should have received data"
+                assert server_stats.bytes_received > 0, (
+                    "Server should have received data"
+                )
 
         finally:
             rtcm_client.disconnect()
@@ -413,9 +413,9 @@ class TestMultiThreadedOperation:
             logger.info(f"Heartbeats received: {heartbeats_received}")
 
             # Should have received at least a few heartbeats (1 per second)
-            assert (
-                heartbeats_received >= 3
-            ), "Should receive heartbeats during data flow"
+            assert heartbeats_received >= 3, (
+                "Should receive heartbeats during data flow"
+            )
 
         finally:
             rtcm_client.disconnect()
@@ -461,7 +461,9 @@ class TestErrorScenarios:
             # Try reading with very short timeout multiple times
             for i in range(5):
                 data = connected_tcp_input.read_data(timeout=0.1)
-                logger.info(f"Read attempt {i+1}: {'Got data' if data else 'Timeout'}")
+                logger.info(
+                    f"Read attempt {i + 1}: {'Got data' if data else 'Timeout'}"
+                )
                 time.sleep(0.1)
 
             # Connections should still be active
@@ -507,9 +509,9 @@ class TestErrorScenarios:
 
                 if data:
                     rtcm_client.send_rtcm_data(data)
-                    logger.info(f"Attempt {i+1}: Sent data")
+                    logger.info(f"Attempt {i + 1}: Sent data")
                 else:
-                    logger.info(f"Attempt {i+1}: No data available")
+                    logger.info(f"Attempt {i + 1}: No data available")
 
                 time.sleep(0.2)
 
@@ -581,12 +583,12 @@ class TestLongRunning:
                     elapsed = time.time() - start_time
 
                     # Verify connections still active
-                    assert (
-                        connected_tcp_input.is_connected
-                    ), f"Input disconnected at {elapsed:.1f}s"
-                    assert (
-                        rtcm_client.is_connected
-                    ), f"RTCM disconnected at {elapsed:.1f}s"
+                    assert connected_tcp_input.is_connected, (
+                        f"Input disconnected at {elapsed:.1f}s"
+                    )
+                    assert rtcm_client.is_connected, (
+                        f"RTCM disconnected at {elapsed:.1f}s"
+                    )
 
                     # Log progress
                     input_stats = asdict(connected_tcp_input.connection_statistics)

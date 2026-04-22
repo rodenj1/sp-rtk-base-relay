@@ -23,8 +23,8 @@ from sp_rtk_base_relay.config import (
     SurePathDestinationConfig,
 )
 from sp_rtk_base_relay.core.destinations.base_destination import (
-    BaseDestination,
     DEFAULT_QUEUE_SIZE,
+    BaseDestination,
 )
 from sp_rtk_base_relay.core.destinations.destination_factory import (
     DestinationFactory,
@@ -32,7 +32,6 @@ from sp_rtk_base_relay.core.destinations.destination_factory import (
 from sp_rtk_base_relay.core.message_filter import FilterConfig
 from sp_rtk_base_relay.core.rtcm_client import RTCMClient
 from sp_rtk_base_relay.exceptions import ConfigurationError, DestinationError
-
 
 logger = logging.getLogger(__name__)
 

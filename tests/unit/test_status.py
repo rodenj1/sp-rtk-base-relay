@@ -28,7 +28,6 @@ from sp_rtk_base_relay.core.status import (
     build_relay_status,
 )
 
-
 # =========================================================================
 # Helpers — mock factories
 # =========================================================================
@@ -181,12 +180,23 @@ class TestDestinationStatus:
     def test_destination_status_is_frozen(self) -> None:
         """Test that DestinationStatus is immutable."""
         status = DestinationStatus(
-            name="test", destination_type="ntrip", enabled=True,
-            running=True, connected=True, filter_mode="all",
-            bytes_sent=0, messages_sent=0, messages_dropped=0,
-            messages_filtered=0, errors=0, last_error=None,
-            queue_depth=0, connected_since=None, uptime_seconds=None,
-            connection_attempts=0, successful_connections=0,
+            name="test",
+            destination_type="ntrip",
+            enabled=True,
+            running=True,
+            connected=True,
+            filter_mode="all",
+            bytes_sent=0,
+            messages_sent=0,
+            messages_dropped=0,
+            messages_filtered=0,
+            errors=0,
+            last_error=None,
+            queue_depth=0,
+            connected_since=None,
+            uptime_seconds=None,
+            connection_attempts=0,
+            successful_connections=0,
         )
         with pytest.raises(AttributeError):
             status.name = "modified"  # type: ignore[misc]
@@ -194,12 +204,23 @@ class TestDestinationStatus:
     def test_destination_status_with_error(self) -> None:
         """Test DestinationStatus with an error recorded."""
         status = DestinationStatus(
-            name="broken", destination_type="ntrip", enabled=True,
-            running=True, connected=False, filter_mode="all",
-            bytes_sent=100, messages_sent=5, messages_dropped=10,
-            messages_filtered=0, errors=3, last_error="Connection refused",
-            queue_depth=50, connected_since=None, uptime_seconds=None,
-            connection_attempts=10, successful_connections=2,
+            name="broken",
+            destination_type="ntrip",
+            enabled=True,
+            running=True,
+            connected=False,
+            filter_mode="all",
+            bytes_sent=100,
+            messages_sent=5,
+            messages_dropped=10,
+            messages_filtered=0,
+            errors=3,
+            last_error="Connection refused",
+            queue_depth=50,
+            connected_since=None,
+            uptime_seconds=None,
+            connection_attempts=10,
+            successful_connections=2,
         )
         assert status.connected is False
         assert status.last_error == "Connection refused"
@@ -208,20 +229,42 @@ class TestDestinationStatus:
     def test_destination_status_equality(self) -> None:
         """Test equality of DestinationStatus instances."""
         s1 = DestinationStatus(
-            name="test", destination_type="ntrip", enabled=True,
-            running=True, connected=True, filter_mode="all",
-            bytes_sent=100, messages_sent=10, messages_dropped=0,
-            messages_filtered=0, errors=0, last_error=None,
-            queue_depth=0, connected_since=1000.0, uptime_seconds=10.0,
-            connection_attempts=1, successful_connections=1,
+            name="test",
+            destination_type="ntrip",
+            enabled=True,
+            running=True,
+            connected=True,
+            filter_mode="all",
+            bytes_sent=100,
+            messages_sent=10,
+            messages_dropped=0,
+            messages_filtered=0,
+            errors=0,
+            last_error=None,
+            queue_depth=0,
+            connected_since=1000.0,
+            uptime_seconds=10.0,
+            connection_attempts=1,
+            successful_connections=1,
         )
         s2 = DestinationStatus(
-            name="test", destination_type="ntrip", enabled=True,
-            running=True, connected=True, filter_mode="all",
-            bytes_sent=100, messages_sent=10, messages_dropped=0,
-            messages_filtered=0, errors=0, last_error=None,
-            queue_depth=0, connected_since=1000.0, uptime_seconds=10.0,
-            connection_attempts=1, successful_connections=1,
+            name="test",
+            destination_type="ntrip",
+            enabled=True,
+            running=True,
+            connected=True,
+            filter_mode="all",
+            bytes_sent=100,
+            messages_sent=10,
+            messages_dropped=0,
+            messages_filtered=0,
+            errors=0,
+            last_error=None,
+            queue_depth=0,
+            connected_since=1000.0,
+            uptime_seconds=10.0,
+            connection_attempts=1,
+            successful_connections=1,
         )
         assert s1 == s2
 
@@ -254,9 +297,13 @@ class TestInputStatus:
     def test_input_status_is_frozen(self) -> None:
         """Test that InputStatus is immutable."""
         status = InputStatus(
-            connected=True, source_type="tcp", bytes_received=0,
-            messages_received=0, seconds_since_last_data=-1.0,
-            reconnect_attempts=0, reconnect_successes=0,
+            connected=True,
+            source_type="tcp",
+            bytes_received=0,
+            messages_received=0,
+            seconds_since_last_data=-1.0,
+            reconnect_attempts=0,
+            reconnect_successes=0,
             connected_since=None,
         )
         with pytest.raises(AttributeError):
@@ -265,9 +312,13 @@ class TestInputStatus:
     def test_input_status_disconnected(self) -> None:
         """Test InputStatus for a disconnected input."""
         status = InputStatus(
-            connected=False, source_type="serial", bytes_received=0,
-            messages_received=0, seconds_since_last_data=-1.0,
-            reconnect_attempts=5, reconnect_successes=0,
+            connected=False,
+            source_type="serial",
+            bytes_received=0,
+            messages_received=0,
+            seconds_since_last_data=-1.0,
+            reconnect_attempts=5,
+            reconnect_successes=0,
             connected_since=None,
         )
         assert status.connected is False
@@ -277,15 +328,23 @@ class TestInputStatus:
     def test_input_status_equality(self) -> None:
         """Test equality of InputStatus instances."""
         s1 = InputStatus(
-            connected=True, source_type="tcp", bytes_received=100,
-            messages_received=10, seconds_since_last_data=2.0,
-            reconnect_attempts=1, reconnect_successes=1,
+            connected=True,
+            source_type="tcp",
+            bytes_received=100,
+            messages_received=10,
+            seconds_since_last_data=2.0,
+            reconnect_attempts=1,
+            reconnect_successes=1,
             connected_since=1000.0,
         )
         s2 = InputStatus(
-            connected=True, source_type="tcp", bytes_received=100,
-            messages_received=10, seconds_since_last_data=2.0,
-            reconnect_attempts=1, reconnect_successes=1,
+            connected=True,
+            source_type="tcp",
+            bytes_received=100,
+            messages_received=10,
+            seconds_since_last_data=2.0,
+            reconnect_attempts=1,
+            reconnect_successes=1,
             connected_since=1000.0,
         )
         assert s1 == s2
@@ -302,18 +361,33 @@ class TestRelayStatus:
     def test_create_relay_status(self) -> None:
         """Test creating a RelayStatus with all fields."""
         input_s = InputStatus(
-            connected=True, source_type="serial", bytes_received=5000,
-            messages_received=200, seconds_since_last_data=1.0,
-            reconnect_attempts=1, reconnect_successes=1,
+            connected=True,
+            source_type="serial",
+            bytes_received=5000,
+            messages_received=200,
+            seconds_since_last_data=1.0,
+            reconnect_attempts=1,
+            reconnect_successes=1,
             connected_since=1000.0,
         )
         dest_s = DestinationStatus(
-            name="rtk2go", destination_type="ntrip", enabled=True,
-            running=True, connected=True, filter_mode="all",
-            bytes_sent=1000, messages_sent=50, messages_dropped=0,
-            messages_filtered=0, errors=0, last_error=None,
-            queue_depth=0, connected_since=1000.0, uptime_seconds=60.0,
-            connection_attempts=1, successful_connections=1,
+            name="rtk2go",
+            destination_type="ntrip",
+            enabled=True,
+            running=True,
+            connected=True,
+            filter_mode="all",
+            bytes_sent=1000,
+            messages_sent=50,
+            messages_dropped=0,
+            messages_filtered=0,
+            errors=0,
+            last_error=None,
+            queue_depth=0,
+            connected_since=1000.0,
+            uptime_seconds=60.0,
+            connection_attempts=1,
+            successful_connections=1,
         )
         status = RelayStatus(
             running=True,
@@ -337,16 +411,26 @@ class TestRelayStatus:
     def test_relay_status_is_frozen(self) -> None:
         """Test that RelayStatus is immutable."""
         input_s = InputStatus(
-            connected=True, source_type="serial", bytes_received=0,
-            messages_received=0, seconds_since_last_data=-1.0,
-            reconnect_attempts=0, reconnect_successes=0,
+            connected=True,
+            source_type="serial",
+            bytes_received=0,
+            messages_received=0,
+            seconds_since_last_data=-1.0,
+            reconnect_attempts=0,
+            reconnect_successes=0,
             connected_since=None,
         )
         status = RelayStatus(
-            running=True, uptime_seconds=0.0, input=input_s,
-            destinations=[], active_destination_count=0,
-            total_destination_count=0, bytes_received=0,
-            chunks_distributed=0, frames_parsed=0, no_data_warnings=0,
+            running=True,
+            uptime_seconds=0.0,
+            input=input_s,
+            destinations=[],
+            active_destination_count=0,
+            total_destination_count=0,
+            bytes_received=0,
+            chunks_distributed=0,
+            frames_parsed=0,
+            no_data_warnings=0,
         )
         with pytest.raises(AttributeError):
             status.running = False  # type: ignore[misc]
@@ -354,16 +438,26 @@ class TestRelayStatus:
     def test_relay_status_no_destinations(self) -> None:
         """Test RelayStatus with no destinations."""
         input_s = InputStatus(
-            connected=True, source_type="tcp", bytes_received=0,
-            messages_received=0, seconds_since_last_data=-1.0,
-            reconnect_attempts=1, reconnect_successes=1,
+            connected=True,
+            source_type="tcp",
+            bytes_received=0,
+            messages_received=0,
+            seconds_since_last_data=-1.0,
+            reconnect_attempts=1,
+            reconnect_successes=1,
             connected_since=1000.0,
         )
         status = RelayStatus(
-            running=True, uptime_seconds=60.0, input=input_s,
-            destinations=[], active_destination_count=0,
-            total_destination_count=0, bytes_received=0,
-            chunks_distributed=0, frames_parsed=0, no_data_warnings=0,
+            running=True,
+            uptime_seconds=60.0,
+            input=input_s,
+            destinations=[],
+            active_destination_count=0,
+            total_destination_count=0,
+            bytes_received=0,
+            chunks_distributed=0,
+            frames_parsed=0,
+            no_data_warnings=0,
         )
         assert status.total_destination_count == 0
         assert status.active_destination_count == 0

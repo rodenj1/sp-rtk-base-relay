@@ -77,9 +77,7 @@ class RelayEngine:
         self._hub: BroadcastHub | None = None
         self._running = False
 
-        logger.debug(
-            "RelayEngine created for input source=%s", input_config.source
-        )
+        logger.debug("RelayEngine created for input source=%s", input_config.source)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -314,6 +312,4 @@ class RelayEngine:
     def _require_running(self, method_name: str) -> None:
         """Raise :class:`ServiceError` if the engine is not running."""
         if not self._running:
-            raise ServiceError(
-                f"Cannot call {method_name}(): engine is not running"
-            )
+            raise ServiceError(f"Cannot call {method_name}(): engine is not running")

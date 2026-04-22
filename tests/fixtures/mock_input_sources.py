@@ -6,15 +6,15 @@ RTCM data for testing purposes without requiring actual hardware connections.
 
 import logging
 import random
-import time
 import threading
-from typing import Any
+import time
 from dataclasses import dataclass
+from typing import Any
 
 from src.sp_rtk_base_relay.core.input_sources.base_input import InputSource
 from src.sp_rtk_base_relay.exceptions import InputSourceError
-from .rtcm_generator import RTCMGenerator
 
+from .rtcm_generator import RTCMGenerator
 
 logger = logging.getLogger(__name__)
 

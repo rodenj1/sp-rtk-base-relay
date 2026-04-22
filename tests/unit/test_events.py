@@ -42,7 +42,6 @@ from sp_rtk_base_relay.core.events import (
     RelayEvent,
 )
 
-
 # =========================================================================
 # RelayEvent Tests
 # =========================================================================
@@ -152,9 +151,7 @@ class TestEventSubscription:
         """Test delivering an event to a subscription."""
         bus = EventBus()
         sub = bus.subscribe()
-        event = RelayEvent(
-            event_type="test", message="test", timestamp=time.time()
-        )
+        event = RelayEvent(event_type="test", message="test", timestamp=time.time())
         assert sub.deliver(event) is True
         assert sub.pending_count == 1
         sub.close()
@@ -164,18 +161,14 @@ class TestEventSubscription:
         bus = EventBus()
         sub = bus.subscribe()
         sub.close()
-        event = RelayEvent(
-            event_type="test", message="test", timestamp=time.time()
-        )
+        event = RelayEvent(event_type="test", message="test", timestamp=time.time())
         assert sub.deliver(event) is False
 
     def test_deliver_to_full_queue(self) -> None:
         """Test delivering to a full queue returns False."""
         bus = EventBus(subscriber_queue_size=2)
         sub = bus.subscribe()
-        event = RelayEvent(
-            event_type="test", message="test", timestamp=time.time()
-        )
+        event = RelayEvent(event_type="test", message="test", timestamp=time.time())
         assert sub.deliver(event) is True
         assert sub.deliver(event) is True
         # Queue is full now
@@ -186,9 +179,7 @@ class TestEventSubscription:
         """Test getting an event from the subscription."""
         bus = EventBus()
         sub = bus.subscribe()
-        event = RelayEvent(
-            event_type="test", message="hello", timestamp=time.time()
-        )
+        event = RelayEvent(event_type="test", message="hello", timestamp=time.time())
         sub.deliver(event)
         result = sub.get_event(timeout=0.1)
         assert result is not None
@@ -250,9 +241,7 @@ class TestEventSubscription:
         """Test drain stops when encountering a poison pill."""
         bus = EventBus()
         sub = bus.subscribe()
-        event = RelayEvent(
-            event_type="test", message="before", timestamp=time.time()
-        )
+        event = RelayEvent(event_type="test", message="before", timestamp=time.time())
         sub.deliver(event)
         sub.send_poison_pill()
         events = sub.drain()
@@ -341,9 +330,7 @@ class TestEventSubscription:
         """Test send_poison_pill makes room if queue is full."""
         bus = EventBus(subscriber_queue_size=1)
         sub = bus.subscribe()
-        event = RelayEvent(
-            event_type="test", message="fill", timestamp=time.time()
-        )
+        event = RelayEvent(event_type="test", message="fill", timestamp=time.time())
         sub.deliver(event)
         # Queue is full, poison pill should still get through
         sub.send_poison_pill()
@@ -634,8 +621,7 @@ class TestEventBusThreadSafety:
                 bus.emit("test", f"t{thread_id}-e{i}", thread=thread_id)
 
         threads = [
-            threading.Thread(target=emitter, args=(i,))
-            for i in range(num_threads)
+            threading.Thread(target=emitter, args=(i,)) for i in range(num_threads)
         ]
         for t in threads:
             t.start()
@@ -661,10 +647,7 @@ class TestEventBusThreadSafety:
             except Exception as e:
                 errors.append(e)
 
-        threads = [
-            threading.Thread(target=subscriber_lifecycle)
-            for _ in range(5)
-        ]
+        threads = [threading.Thread(target=subscriber_lifecycle) for _ in range(5)]
         for t in threads:
             t.start()
         for t in threads:
@@ -697,9 +680,7 @@ class TestEventBusThreadSafety:
                 errors.append(e)
 
         emit_thread = threading.Thread(target=emitter)
-        sub_threads = [
-            threading.Thread(target=subscriber) for _ in range(3)
-        ]
+        sub_threads = [threading.Thread(target=subscriber) for _ in range(3)]
 
         emit_thread.start()
         for t in sub_threads:
@@ -754,14 +735,24 @@ class TestEventTypeConstants:
     def test_all_event_types_use_dot_notation(self) -> None:
         """Verify all event type constants follow dot-notation pattern."""
         all_types = [
-            HUB_STARTED, HUB_STOPPED,
-            INPUT_CONNECTED, INPUT_DISCONNECTED, INPUT_RECONNECTING,
-            INPUT_RECONNECTED, INPUT_NO_DATA_WARNING,
-            DESTINATION_STARTED, DESTINATION_STOPPED,
-            DESTINATION_CONNECTED, DESTINATION_DISCONNECTED,
-            DESTINATION_ERROR, DESTINATION_ADDED, DESTINATION_REMOVED,
-            DESTINATION_RECONNECTING, DESTINATION_RECONNECTED,
-            ENGINE_STARTED, ENGINE_STOPPED,
+            HUB_STARTED,
+            HUB_STOPPED,
+            INPUT_CONNECTED,
+            INPUT_DISCONNECTED,
+            INPUT_RECONNECTING,
+            INPUT_RECONNECTED,
+            INPUT_NO_DATA_WARNING,
+            DESTINATION_STARTED,
+            DESTINATION_STOPPED,
+            DESTINATION_CONNECTED,
+            DESTINATION_DISCONNECTED,
+            DESTINATION_ERROR,
+            DESTINATION_ADDED,
+            DESTINATION_REMOVED,
+            DESTINATION_RECONNECTING,
+            DESTINATION_RECONNECTED,
+            ENGINE_STARTED,
+            ENGINE_STOPPED,
         ]
         for event_type in all_types:
             assert "." in event_type, f"{event_type} missing dot notation"
@@ -875,14 +866,24 @@ class TestEventBusIntegration:
         sub = bus.subscribe()
 
         all_types = [
-            HUB_STARTED, HUB_STOPPED,
-            INPUT_CONNECTED, INPUT_DISCONNECTED, INPUT_RECONNECTING,
-            INPUT_RECONNECTED, INPUT_NO_DATA_WARNING,
-            DESTINATION_STARTED, DESTINATION_STOPPED,
-            DESTINATION_CONNECTED, DESTINATION_DISCONNECTED,
-            DESTINATION_ERROR, DESTINATION_ADDED, DESTINATION_REMOVED,
-            DESTINATION_RECONNECTING, DESTINATION_RECONNECTED,
-            ENGINE_STARTED, ENGINE_STOPPED,
+            HUB_STARTED,
+            HUB_STOPPED,
+            INPUT_CONNECTED,
+            INPUT_DISCONNECTED,
+            INPUT_RECONNECTING,
+            INPUT_RECONNECTED,
+            INPUT_NO_DATA_WARNING,
+            DESTINATION_STARTED,
+            DESTINATION_STOPPED,
+            DESTINATION_CONNECTED,
+            DESTINATION_DISCONNECTED,
+            DESTINATION_ERROR,
+            DESTINATION_ADDED,
+            DESTINATION_REMOVED,
+            DESTINATION_RECONNECTING,
+            DESTINATION_RECONNECTED,
+            ENGINE_STARTED,
+            ENGINE_STOPPED,
         ]
 
         for event_type in all_types:

@@ -7,12 +7,12 @@ Uses native BlueZ D-Bus API via dbus-fast and native Python Bluetooth sockets.
 
 import logging
 import socket
-from typing import TYPE_CHECKING, Any
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
-from .base_input import InputSource
-from ..bluetooth_manager import BluetoothManager, BluetoothError
 from ...exceptions import InputSourceError
+from ..bluetooth_manager import BluetoothError, BluetoothManager
+from .base_input import InputSource
 
 # Bluetooth socket constants (Linux-only)
 if TYPE_CHECKING:
@@ -103,36 +103,36 @@ class BluetoothInputSource(InputSource):
             try:
                 mac, channel = self.bt_manager.ensure_device_ready(
                     device_name=self.config.device_name,
-                    mac_address=self.config.mac_address
+                    mac_address=self.config.mac_address,
                 )
                 self.connected_mac = mac
                 self.rfcomm_channel = channel
-                logger.info(
-                    f"Bluetooth device ready: {mac} on channel {channel}"
-                )
+                logger.info(f"Bluetooth device ready: {mac} on channel {channel}")
             except BluetoothError as e:
                 raise InputSourceError(f"Failed to prepare Bluetooth device: {e}")
 
             # Create native Bluetooth socket for data transfer
             try:
-                logger.info(f"Creating native Bluetooth socket for {self.connected_mac}:{self.rfcomm_channel}")
-                
+                logger.info(
+                    f"Creating native Bluetooth socket for {self.connected_mac}:{self.rfcomm_channel}"
+                )
+
                 # Create AF_BLUETOOTH socket
                 self.bt_socket = socket.socket(
                     AF_BLUETOOTH,  # type: ignore[arg-type]
                     socket.SOCK_STREAM,
-                    BTPROTO_RFCOMM  # type: ignore[arg-type]
+                    BTPROTO_RFCOMM,  # type: ignore[arg-type]
                 )
                 self.bt_socket.settimeout(self.config.connect_timeout)
-                
+
                 # Connect to device
                 self.bt_socket.connect((self.connected_mac, self.rfcomm_channel))
-                
+
                 # Set read timeout
                 self.bt_socket.settimeout(self.config.read_timeout)
-                
+
                 logger.info("Bluetooth socket connected successfully")
-            except socket.error as e:
+            except OSError as e:
                 raise InputSourceError(f"Bluetooth socket connection failed: {e}")
             except Exception as e:
                 raise InputSourceError(f"Unexpected socket error: {e}")
@@ -248,11 +248,13 @@ class BluetoothInputSource(InputSource):
         }
 
         if self.is_connected:
-            info.update({
-                "connected_mac": self.connected_mac,
-                "rfcomm_channel": self.rfcomm_channel,
-                "socket_connected": self.bt_socket is not None,
-            })
+            info.update(
+                {
+                    "connected_mac": self.connected_mac,
+                    "rfcomm_channel": self.rfcomm_channel,
+                    "socket_connected": self.bt_socket is not None,
+                }
+            )
 
         return info
 

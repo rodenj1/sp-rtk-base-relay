@@ -11,8 +11,8 @@ Pull model: ``update_all()`` reads from ``DestinationStats`` and
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
 import time
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from prometheus_client import (
@@ -133,9 +133,7 @@ class MetricsCollector:
     # Server lifecycle
     # ================================================================
 
-    def start_metrics_server(
-        self, port: int = 9090, host: str = "0.0.0.0"
-    ) -> None:
+    def start_metrics_server(self, port: int = 9090, host: str = "0.0.0.0") -> None:
         """Start Prometheus metrics HTTP server.
 
         Args:
@@ -205,16 +203,14 @@ class MetricsCollector:
             self.dest_connection_status.labels(destination=name).set(
                 1 if dest.is_connected else 0
             )
-            self.dest_queue_depth.labels(destination=name).set(
-                stats.queue_depth
-            )
+            self.dest_queue_depth.labels(destination=name).set(stats.queue_depth)
 
             # TCP server client count (only for tcp_server destinations)
             if dest.destination_type == "tcp_server":
                 client_count = getattr(dest, "client_count", 0)
-                self.tcp_server_connected_clients.labels(
-                    destination=name
-                ).set(client_count)
+                self.tcp_server_connected_clients.labels(destination=name).set(
+                    client_count
+                )
 
             # Counters — increment by delta since last update
             if prev is not None:
@@ -303,11 +299,11 @@ class _DestSnapshot:
 
     __slots__ = (
         "bytes_sent",
-        "messages_sent",
-        "messages_dropped",
-        "messages_filtered",
         "connection_attempts",
         "errors",
+        "messages_dropped",
+        "messages_filtered",
+        "messages_sent",
     )
 
     def __init__(

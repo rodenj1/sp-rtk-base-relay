@@ -13,8 +13,8 @@ feed data **before** waiting for `caster.wait_for_connection()`.
 from __future__ import annotations
 
 import socket
-import time
 import threading
+import time
 from typing import Any
 
 from sp_rtk_base_relay.config import (
@@ -26,12 +26,11 @@ from sp_rtk_base_relay.core.destinations.ntrip_destination import NtripDestinati
 from sp_rtk_base_relay.core.destinations.tcp_server_destination import (
     TcpServerDestination,
 )
-from sp_rtk_base_relay.core.message_filter import FilterConfig
 from sp_rtk_base_relay.core.input_sources.base_input import InputSource
+from sp_rtk_base_relay.core.message_filter import FilterConfig
 from sp_rtk_base_relay.metrics import MetricsCollector
 from tests.fixtures.mock_ntrip_caster import MockNtripCaster
 from tests.fixtures.rtcm_generator import RTCMGenerator
-
 
 # ======================================================================
 # Helpers
@@ -62,7 +61,7 @@ class FeedInputSource(InputSource):
         self._update_connection_stats(True)
         return True
 
-    def read_data(self, timeout: float | None = None) -> bytes | None:  # noqa: ARG002
+    def read_data(self, timeout: float | None = None) -> bytes | None:
         with self._lock:
             if self._chunks:
                 chunk = self._chunks.pop(0)
@@ -193,8 +192,10 @@ class TestBroadcastToNtrip:
 
     def test_hub_to_dual_ntrip_casters(self) -> None:
         """BroadcastHub fans out to two NTRIP casters simultaneously."""
-        with MockNtripCaster(port=0, password=PASSWORD) as c1, \
-             MockNtripCaster(port=0, password=PASSWORD) as c2:
+        with (
+            MockNtripCaster(port=0, password=PASSWORD) as c1,
+            MockNtripCaster(port=0, password=PASSWORD) as c2,
+        ):
             feed = FeedInputSource()
             d1 = _make_ntrip_dest(c1.port, version="2.0", name="caster-a")
             d2 = _make_ntrip_dest(c2.port, version="1.0", name="caster-b")
@@ -287,7 +288,7 @@ class TestBroadcastToTcpServer:
                     if not chunk:
                         break
                     data.extend(chunk)
-            except socket.timeout:
+            except TimeoutError:
                 pass
 
             client.close()
@@ -334,7 +335,7 @@ class TestBroadcastToTcpServer:
                         if not chunk:
                             break
                         data.extend(chunk)
-                except socket.timeout:
+                except TimeoutError:
                     pass
                 c.close()
                 assert len(data) > 0, f"Client {i} should receive data"
@@ -349,9 +350,7 @@ class TestBroadcastToTcpServer:
             ntrip_dest = _make_ntrip_dest(caster.port, version="1.0", name="ntrip-ok")
             tcp_dest = _make_tcp_server_dest(name="tcp-srv-disc")
 
-            hub = BroadcastHub(
-                input_source=feed, destinations=[ntrip_dest, tcp_dest]
-            )
+            hub = BroadcastHub(input_source=feed, destinations=[ntrip_dest, tcp_dest])
             feed.connect()
             hub.start()
 
@@ -392,14 +391,10 @@ class TestMultiDestinationFanOut:
         """Both NTRIP caster and TCP client receive same data from BroadcastHub."""
         with MockNtripCaster(port=0, password=PASSWORD) as caster:
             feed = FeedInputSource()
-            ntrip_dest = _make_ntrip_dest(
-                caster.port, version="1.0", name="ntrip-fan"
-            )
+            ntrip_dest = _make_ntrip_dest(caster.port, version="1.0", name="ntrip-fan")
             tcp_dest = _make_tcp_server_dest(name="tcp-fan")
 
-            hub = BroadcastHub(
-                input_source=feed, destinations=[ntrip_dest, tcp_dest]
-            )
+            hub = BroadcastHub(input_source=feed, destinations=[ntrip_dest, tcp_dest])
             feed.connect()
             hub.start()
 
@@ -423,7 +418,9 @@ class TestMultiDestinationFanOut:
 
                 # NTRIP caster should have it
                 ntrip_data = caster.get_received_data()
-                assert ntrip_data == payload, "NTRIP caster should receive exact payload"
+                assert ntrip_data == payload, (
+                    "NTRIP caster should receive exact payload"
+                )
 
                 # TCP client should have it
                 tcp_data = bytearray()
@@ -433,10 +430,12 @@ class TestMultiDestinationFanOut:
                         if not chunk:
                             break
                         tcp_data.extend(chunk)
-                except socket.timeout:
+                except TimeoutError:
                     pass
                 client.close()
-                assert bytes(tcp_data) == payload, "TCP client should receive exact payload"
+                assert bytes(tcp_data) == payload, (
+                    "TCP client should receive exact payload"
+                )
             finally:
                 hub.stop()
 
@@ -451,9 +450,7 @@ class TestMultiDestinationFanOut:
             )
             tcp_dest = _make_tcp_server_dest(name="tcp-survives")
 
-            hub = BroadcastHub(
-                input_source=feed, destinations=[ntrip_dest, tcp_dest]
-            )
+            hub = BroadcastHub(input_source=feed, destinations=[ntrip_dest, tcp_dest])
             feed.connect()
             hub.start()
 
@@ -483,7 +480,7 @@ class TestMultiDestinationFanOut:
                         if not chunk:
                             break
                         tcp_data.extend(chunk)
-                except socket.timeout:
+                except TimeoutError:
                     pass
                 client.close()
                 assert len(tcp_data) > 0, "TCP dest should survive caster crash"
@@ -538,22 +535,26 @@ class TestMessageFilteringIntegration:
         frames and only forwards those that match. The caster should
         receive **less** data than the full blob that was fed.
         """
-        with MockNtripCaster(port=0, password=PASSWORD) as c_all, \
-             MockNtripCaster(port=0, password=PASSWORD) as c_filt:
+        with (
+            MockNtripCaster(port=0, password=PASSWORD) as c_all,
+            MockNtripCaster(port=0, password=PASSWORD) as c_filt,
+        ):
             feed = FeedInputSource()
             # One pass_all, one allowlist — proves filtering happened
             d_all = _make_ntrip_dest(
-                c_all.port, version="1.0", name="all-ref",
+                c_all.port,
+                version="1.0",
+                name="all-ref",
                 filter_config=FilterConfig.pass_all(),
             )
             d_filt = _make_ntrip_dest(
-                c_filt.port, version="1.0", name="filtered",
+                c_filt.port,
+                version="1.0",
+                name="filtered",
                 filter_config=FilterConfig.allowlist([1077]),
             )
 
-            hub = BroadcastHub(
-                input_source=feed, destinations=[d_all, d_filt]
-            )
+            hub = BroadcastHub(input_source=feed, destinations=[d_all, d_filt])
             feed.connect()
             hub.start()
 
@@ -563,8 +564,12 @@ class TestMessageFilteringIntegration:
                 frame_1087 = _build_rtcm_frame(1087, 20)
                 feed.feed(frame_1077 + frame_1087)
 
-                assert c_all.wait_for_connection(timeout=5.0), "ref caster never connected"
-                assert c_filt.wait_for_connection(timeout=5.0), "filtered caster never connected"
+                assert c_all.wait_for_connection(timeout=5.0), (
+                    "ref caster never connected"
+                )
+                assert c_filt.wait_for_connection(timeout=5.0), (
+                    "filtered caster never connected"
+                )
                 time.sleep(1.5)
 
                 all_data = c_all.get_received_data()
@@ -582,22 +587,26 @@ class TestMessageFilteringIntegration:
 
     def test_pass_all_vs_filtered_different_byte_counts(self) -> None:
         """pass_all dest gets more data than filtered dest."""
-        with MockNtripCaster(port=0, password=PASSWORD) as c_all, \
-             MockNtripCaster(port=0, password=PASSWORD) as c_filt:
+        with (
+            MockNtripCaster(port=0, password=PASSWORD) as c_all,
+            MockNtripCaster(port=0, password=PASSWORD) as c_filt,
+        ):
             feed = FeedInputSource()
 
             d_all = _make_ntrip_dest(
-                c_all.port, version="1.0", name="all",
+                c_all.port,
+                version="1.0",
+                name="all",
                 filter_config=FilterConfig.pass_all(),
             )
             d_filt = _make_ntrip_dest(
-                c_filt.port, version="1.0", name="filt",
+                c_filt.port,
+                version="1.0",
+                name="filt",
                 filter_config=FilterConfig.allowlist([1077]),
             )
 
-            hub = BroadcastHub(
-                input_source=feed, destinations=[d_all, d_filt]
-            )
+            hub = BroadcastHub(input_source=feed, destinations=[d_all, d_filt])
             feed.connect()
             hub.start()
 
@@ -610,8 +619,12 @@ class TestMessageFilteringIntegration:
                 )
                 feed.feed(frames)
 
-                assert c_all.wait_for_connection(timeout=5.0), "pass_all caster never connected"
-                assert c_filt.wait_for_connection(timeout=5.0), "filtered caster never connected"
+                assert c_all.wait_for_connection(timeout=5.0), (
+                    "pass_all caster never connected"
+                )
+                assert c_filt.wait_for_connection(timeout=5.0), (
+                    "filtered caster never connected"
+                )
                 time.sleep(2.0)
 
                 all_data = c_all.get_received_data()
@@ -632,21 +645,25 @@ class TestMessageFilteringIntegration:
         Compare a pass_all dest with a blocklist dest to prove the
         blocklist receives fewer bytes.
         """
-        with MockNtripCaster(port=0, password=PASSWORD) as c_all, \
-             MockNtripCaster(port=0, password=PASSWORD) as c_blk:
+        with (
+            MockNtripCaster(port=0, password=PASSWORD) as c_all,
+            MockNtripCaster(port=0, password=PASSWORD) as c_blk,
+        ):
             feed = FeedInputSource()
             d_all = _make_ntrip_dest(
-                c_all.port, version="1.0", name="all-ref-blk",
+                c_all.port,
+                version="1.0",
+                name="all-ref-blk",
                 filter_config=FilterConfig.pass_all(),
             )
             d_blk = _make_ntrip_dest(
-                c_blk.port, version="1.0", name="blocked",
+                c_blk.port,
+                version="1.0",
+                name="blocked",
                 filter_config=FilterConfig.blocklist([1087]),
             )
 
-            hub = BroadcastHub(
-                input_source=feed, destinations=[d_all, d_blk]
-            )
+            hub = BroadcastHub(input_source=feed, destinations=[d_all, d_blk])
             feed.connect()
             hub.start()
 
@@ -655,8 +672,12 @@ class TestMessageFilteringIntegration:
                 frame_1087 = _build_rtcm_frame(1087, 20)
                 feed.feed(frame_1077 + frame_1087)
 
-                assert c_all.wait_for_connection(timeout=5.0), "ref caster never connected"
-                assert c_blk.wait_for_connection(timeout=5.0), "blocklist caster never connected"
+                assert c_all.wait_for_connection(timeout=5.0), (
+                    "ref caster never connected"
+                )
+                assert c_blk.wait_for_connection(timeout=5.0), (
+                    "blocklist caster never connected"
+                )
                 time.sleep(1.5)
 
                 all_data = c_all.get_received_data()
@@ -684,9 +705,7 @@ class TestMetricsIntegration:
         """MetricsCollector.update_all() reads stats from live destinations."""
         with MockNtripCaster(port=0, password=PASSWORD) as caster:
             feed = FeedInputSource()
-            dest = _make_ntrip_dest(
-                caster.port, version="1.0", name="metrics-test"
-            )
+            dest = _make_ntrip_dest(caster.port, version="1.0", name="metrics-test")
 
             hub = BroadcastHub(input_source=feed, destinations=[dest])
             feed.connect()

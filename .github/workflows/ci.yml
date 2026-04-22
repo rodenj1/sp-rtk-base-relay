@@ -1,0 +1,181 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel in-progress runs on the same branch/PR when new commits arrive.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Pinned action SHAs (supply-chain safety). Versions noted in comments.
+env:
+  # astral-sh/setup-uv v8.1.0
+  SETUP_UV_SHA: "08807647e7069bb48b6ef5acd8ec9567f424441b"
+
+jobs:
+  # ------------------------------------------------------------------
+  # Lint / format / type-check (single Python version, fast-fail gate)
+  # ------------------------------------------------------------------
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Install uv and Python 3.12
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked --all-extras
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: mypy (strict)
+        run: uv run mypy src
+
+      - name: pyright (strict)
+        run: uv run pyright src
+
+      - name: pylint (advisory)
+        continue-on-error: true
+        run: uv run pylint src
+
+  # ------------------------------------------------------------------
+  # Unit tests — matrix across Python 3.10, 3.11, 3.12, 3.13
+  # ------------------------------------------------------------------
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Install uv and Python ${{ matrix.python-version }}
+        id: setup-uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked --all-extras
+
+      - name: Run pytest with coverage
+        run: |
+          uv run pytest \
+            --cov-report=term \
+            --cov-report=xml:coverage.xml \
+            --cov-report=html:htmlcov \
+            --junitxml=pytest-junit.xml
+
+      - name: Upload coverage artifacts (Python 3.12 only)
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            htmlcov/
+          retention-days: 14
+
+      - name: Upload pytest JUnit report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pytest-junit-py${{ matrix.python-version }}
+          path: pytest-junit.xml
+          retention-days: 14
+
+      - name: Extract coverage percent
+        if: matrix.python-version == '3.12' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: coverage
+        run: |
+          # coverage.xml has <coverage line-rate="0.8935" ...> at the root
+          RATE=$(python -c "import xml.etree.ElementTree as ET; r=ET.parse('coverage.xml').getroot(); print(f'{float(r.attrib[\"line-rate\"])*100:.2f}')")
+          echo "percent=$RATE" >> "$GITHUB_OUTPUT"
+          echo "Coverage: $RATE%"
+
+      - name: Determine badge color
+        if: steps.coverage.outputs.percent != ''
+        id: color
+        run: |
+          RATE="${{ steps.coverage.outputs.percent }}"
+          # bash doesn't do floats — use awk
+          COLOR=$(awk -v r="$RATE" 'BEGIN{
+            if (r+0 >= 90)      print "brightgreen";
+            else if (r+0 >= 80) print "green";
+            else if (r+0 >= 70) print "yellowgreen";
+            else if (r+0 >= 60) print "yellow";
+            else                print "red";
+          }')
+          echo "color=$COLOR" >> "$GITHUB_OUTPUT"
+
+      - name: Update coverage badge (main + Python 3.12 only)
+        if: steps.coverage.outputs.percent != '' && env.GIST_SECRET != ''
+        continue-on-error: true
+        env:
+          GIST_SECRET: ${{ secrets.GIST_SECRET }}
+        uses: schneegans/dynamic-badges-action@e9a478b16159b4d31420099ba146cdc50f134483 # v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          # Set the Gist ID as a repo secret or variable; see docs/ci-setup.md
+          gistID: ${{ secrets.COVERAGE_GIST_ID }}
+          filename: sp-rtk-base-relay-coverage.json
+          label: coverage
+          message: ${{ steps.coverage.outputs.percent }}%
+          color: ${{ steps.color.outputs.color }}
+          namedLogo: python
+
+  # ------------------------------------------------------------------
+  # Package build sanity check
+  # ------------------------------------------------------------------
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Install uv and Python 3.12
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist
+          path: dist/
+          retention-days: 14

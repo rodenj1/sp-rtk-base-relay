@@ -6,16 +6,16 @@ and USB serial adapters.
 """
 
 from .base_input import InputSource, InputSourceStats
-from .serial_input import SerialInputSource, SerialConfig
-from .tcp_input import TCPInputSource, TCPConfig
 from .input_factory import InputSourceFactory
+from .serial_input import SerialConfig, SerialInputSource
+from .tcp_input import TCPConfig, TCPInputSource
 
 __all__ = [
     "InputSource",
-    "InputSourceStats",
-    "SerialInputSource",
-    "SerialConfig",
-    "TCPInputSource",
-    "TCPConfig",
     "InputSourceFactory",
+    "InputSourceStats",
+    "SerialConfig",
+    "SerialInputSource",
+    "TCPConfig",
+    "TCPInputSource",
 ]

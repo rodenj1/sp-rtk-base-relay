@@ -33,7 +33,6 @@ from sp_rtk_base_relay.core.message_filter import FilterConfig, FilterMode
 from sp_rtk_base_relay.core.rtcm_client import ConnectionStats, RTCMClient
 from sp_rtk_base_relay.exceptions import ConfigurationError, DestinationError
 
-
 # ============================================================================
 # Helpers
 # ============================================================================
@@ -342,9 +341,7 @@ class TestFactoryBuilder:
     """build_surepath_destination + auto-registration."""
 
     @patch("sp_rtk_base_relay.core.destinations.surepath_destination.RTCMClient")
-    def test_build_creates_surepath_destination(
-        self, mock_cls: MagicMock
-    ) -> None:
+    def test_build_creates_surepath_destination(self, mock_cls: MagicMock) -> None:
         cfg = _make_destination_config()
         dest = build_surepath_destination(cfg)
         assert isinstance(dest, SurePathDestination)
@@ -383,7 +380,9 @@ class TestFactoryBuilder:
                 password="pass",
             ),
         )
-        with pytest.raises(ConfigurationError, match="Expected SurePathDestinationConfig"):
+        with pytest.raises(
+            ConfigurationError, match="Expected SurePathDestinationConfig"
+        ):
             build_surepath_destination(cfg)
 
     def test_surepath_auto_registered_in_factory(self) -> None:

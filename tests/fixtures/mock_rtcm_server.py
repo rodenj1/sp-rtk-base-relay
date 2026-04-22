@@ -4,13 +4,12 @@ This module provides a mock implementation of the custom RTCM server protocol
 for automated testing of the RTCM client functionality.
 """
 
+import logging
 import socket
 import threading
 import time
-import logging
-from typing import Any
 from dataclasses import dataclass, field
-
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +209,7 @@ class MockRTCMServer:
                     with self._lock:
                         self._client_threads.append(client_thread)
 
-                except socket.error as e:
+                except OSError as e:
                     if self.running:
                         logger.error(f"Accept error: {e}")
                     break
@@ -341,7 +340,7 @@ class MockRTCMServer:
                     # Wait for next heartbeat
                     time.sleep(self.heartbeat_interval)
 
-                except socket.error as e:
+                except OSError as e:
                     logger.debug(f"Heartbeat send error for {client.address}: {e}")
                     break
                 except Exception as e:
@@ -394,10 +393,10 @@ class MockRTCMServer:
                         if len(buffer) > 8192:
                             buffer = buffer[-1024:]  # Keep last 1KB
 
-                except socket.timeout:
+                except TimeoutError:
                     # Timeout is normal, continue loop
                     continue
-                except socket.error as e:
+                except OSError as e:
                     logger.debug(f"Data reception error for {client.address}: {e}")
                     break
                 except Exception as e:
@@ -456,7 +455,8 @@ class MockRTCMServerContext:
 
 # Convenience function for testing
 def create_test_server(
-    port: int = 50011, **kwargs: Any  # Different port to avoid conflicts
+    port: int = 50011,
+    **kwargs: Any,  # Different port to avoid conflicts
 ) -> MockRTCMServerContext:
     """Create a mock RTCM server for testing.
 

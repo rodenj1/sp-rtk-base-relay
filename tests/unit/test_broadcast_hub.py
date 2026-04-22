@@ -28,12 +28,11 @@ from sp_rtk_base_relay.core.broadcast_hub import (
     BroadcastStats,
 )
 from sp_rtk_base_relay.core.destinations.base_destination import (
-    BaseDestination,
     DEFAULT_QUEUE_SIZE,
+    BaseDestination,
 )
 from sp_rtk_base_relay.core.input_sources.base_input import InputSource
 from sp_rtk_base_relay.core.message_filter import FilterConfig
-
 
 # ============================================================================
 # Lightweight mocks (no threading in the destination — we test the hub only)
@@ -137,6 +136,7 @@ class FakeDestination(BaseDestination):
 # Helpers
 # ============================================================================
 
+
 def _wait_for(predicate: Any, timeout: float = 2.0, interval: float = 0.05) -> bool:
     """Poll *predicate* until it returns True or timeout expires."""
     deadline = time.time() + timeout
@@ -194,17 +194,21 @@ class TestBroadcastHubInit:
         assert hub.seconds_since_last_data == 0.0
 
     def test_all_pass_all_no_parsing_needed(self) -> None:
-        hub, _, _ = _make_hub(destinations=[
-            FakeDestination("a"),
-            FakeDestination("b"),
-        ])
+        hub, _, _ = _make_hub(
+            destinations=[
+                FakeDestination("a"),
+                FakeDestination("b"),
+            ]
+        )
         assert hub._any_needs_parsing is False
 
     def test_mixed_filters_needs_parsing(self) -> None:
-        hub, _, _ = _make_hub(destinations=[
-            FakeDestination("a"),
-            FakeDestination("b", filter_config=FilterConfig.allowlist({1005})),
-        ])
+        hub, _, _ = _make_hub(
+            destinations=[
+                FakeDestination("a"),
+                FakeDestination("b", filter_config=FilterConfig.allowlist({1005})),
+            ]
+        )
         assert hub._any_needs_parsing is True
 
 
@@ -306,9 +310,7 @@ class TestDistributeRaw:
         hub.start()
         try:
             src.push(b"chunk1")
-            assert _wait_for(lambda: all(
-                len(d.received) >= 1 for d in [d1, d2, d3]
-            ))
+            assert _wait_for(lambda: all(len(d.received) >= 1 for d in [d1, d2, d3]))
             for d in [d1, d2, d3]:
                 assert d.received[0] == b"chunk1"
         finally:
@@ -857,16 +859,12 @@ class TestDynamicDestinationManagement:
     def test_add_recalculates_parsing_flag(self) -> None:
         hub = BroadcastHub(FakeInputSource(), [])
         assert hub._any_needs_parsing is False
-        filtered = FakeDestination(
-            "filt", filter_config=FilterConfig.allowlist({1005})
-        )
+        filtered = FakeDestination("filt", filter_config=FilterConfig.allowlist({1005}))
         hub.add_destination(filtered)  # type: ignore[arg-type]
         assert hub._any_needs_parsing is True
 
     def test_remove_recalculates_parsing_flag(self) -> None:
-        filtered = FakeDestination(
-            "filt", filter_config=FilterConfig.allowlist({1005})
-        )
+        filtered = FakeDestination("filt", filter_config=FilterConfig.allowlist({1005}))
         hub, _, _ = _make_hub(destinations=[filtered])
         assert hub._any_needs_parsing is True
         hub.remove_destination("filt")
@@ -895,9 +893,14 @@ class TestEventEmissions:
     def test_hub_start_emits_events(self) -> None:
         from sp_rtk_base_relay.core.events import (
             HUB_STARTED as _HUB_STARTED,
+        )
+        from sp_rtk_base_relay.core.events import (
             INPUT_CONNECTED as _INPUT_CONNECTED,
+        )
+        from sp_rtk_base_relay.core.events import (
             EventBus,
         )
+
         bus = EventBus()
         sub = bus.subscribe()
 
@@ -915,8 +918,11 @@ class TestEventEmissions:
     def test_hub_stop_emits_event(self) -> None:
         from sp_rtk_base_relay.core.events import (
             HUB_STOPPED as _HUB_STOPPED,
+        )
+        from sp_rtk_base_relay.core.events import (
             EventBus,
         )
+
         bus = EventBus()
         sub = bus.subscribe()
 
@@ -931,8 +937,11 @@ class TestEventEmissions:
     def test_add_destination_emits_event(self) -> None:
         from sp_rtk_base_relay.core.events import (
             DESTINATION_ADDED as _DEST_ADDED,
+        )
+        from sp_rtk_base_relay.core.events import (
             EventBus,
         )
+
         bus = EventBus()
         sub = bus.subscribe()
 
@@ -945,8 +954,11 @@ class TestEventEmissions:
     def test_remove_destination_emits_event(self) -> None:
         from sp_rtk_base_relay.core.events import (
             DESTINATION_REMOVED as _DEST_REMOVED,
+        )
+        from sp_rtk_base_relay.core.events import (
             EventBus,
         )
+
         bus = EventBus()
         sub = bus.subscribe()
 
@@ -968,8 +980,11 @@ class TestEventEmissions:
     def test_watchdog_emits_no_data_warning(self) -> None:
         from sp_rtk_base_relay.core.events import (
             INPUT_NO_DATA_WARNING as _NO_DATA,
+        )
+        from sp_rtk_base_relay.core.events import (
             EventBus,
         )
+
         bus = EventBus()
         sub = bus.subscribe()
 

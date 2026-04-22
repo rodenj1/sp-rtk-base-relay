@@ -38,7 +38,6 @@ from sp_rtk_base_relay.core.events import (
 from sp_rtk_base_relay.core.input_sources.base_input import InputSource
 from sp_rtk_base_relay.rtcm_decoder import RTCMMessageDecoder
 
-
 logger = logging.getLogger(__name__)
 
 # Watchdog: warn if no data received for this many seconds (DR-7)
@@ -185,9 +184,7 @@ class BroadcastHub:
         with self._destinations_lock:
             for existing in self._destinations:
                 if existing.name == dest.name:
-                    raise ValueError(
-                        f"Destination '{dest.name}' already exists"
-                    )
+                    raise ValueError(f"Destination '{dest.name}' already exists")
             self._destinations.append(dest)
             self._recalculate_needs_parsing()
 
@@ -321,8 +318,7 @@ class BroadcastHub:
         if not self._input_source.is_connected:
             if not self._input_source.connect():
                 raise ConnectionError(
-                    f"Failed to connect input source "
-                    f"({self._input_source.source_type})"
+                    f"Failed to connect input source ({self._input_source.source_type})"
                 )
         self._emit(
             INPUT_CONNECTED,
@@ -396,7 +392,7 @@ class BroadcastHub:
         # Disconnect input source
         try:
             self._input_source.disconnect()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("Error disconnecting input source: %s", exc)
 
         # Drain input queue
@@ -438,11 +434,11 @@ class BroadcastHub:
 
             try:
                 data = self._input_source.read_data(timeout=1.0)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.error("Input read error: %s", exc)
                 try:
                     self._input_source.disconnect()
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
                 continue
 
@@ -455,7 +451,9 @@ class BroadcastHub:
             try:
                 self._input_queue.put(data, timeout=0.5)
             except queue.Full:
-                logger.warning("Input queue full — dropping chunk (%d bytes)", len(data))
+                logger.warning(
+                    "Input queue full — dropping chunk (%d bytes)", len(data)
+                )
                 continue
 
         logger.debug("Input thread exited")
@@ -488,7 +486,7 @@ class BroadcastHub:
                     )
                     logger.info("Input source reconnected")
                     return
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("Input reconnect failed: %s", exc)
 
             # Backoff
@@ -661,10 +659,12 @@ class BroadcastHub:
                 warning_count=self.stats.no_data_warnings,
             )
             # Only log every ~30s to avoid log flooding
-            if self.stats.no_data_warnings <= 1 or self.stats.no_data_warnings % 10 == 0:
+            if (
+                self.stats.no_data_warnings <= 1
+                or self.stats.no_data_warnings % 10 == 0
+            ):
                 logger.warning(
-                    "No data from input source for %.0f seconds "
-                    "(warning #%d)",
+                    "No data from input source for %.0f seconds (warning #%d)",
                     elapsed,
                     self.stats.no_data_warnings,
                 )

@@ -13,10 +13,11 @@ This module provides comprehensive configuration management including:
 from __future__ import annotations
 
 import os
-import yaml
-from pathlib import Path
-from typing import Any, Literal, cast, TYPE_CHECKING
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal, cast
+
+import yaml
 
 if TYPE_CHECKING:
     from .core.message_filter import FilterConfig
@@ -727,7 +728,7 @@ class Config:
         return None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Config":
+    def from_dict(cls, data: dict[str, Any]) -> Config:
         """Create configuration from dictionary data.
 
         Args:
@@ -806,9 +807,10 @@ class Config:
                 )
 
             raw_destinations = data["destinations"]
-            if not isinstance(raw_destinations, list) or len(
-                cast(list[Any], raw_destinations)
-            ) == 0:
+            if (
+                not isinstance(raw_destinations, list)
+                or len(cast(list[Any], raw_destinations)) == 0
+            ):
                 raise ConfigurationError(
                     "destinations must be a non-empty list",
                     config_key="destinations",
@@ -825,9 +827,7 @@ class Config:
                         config_key=f"destinations[{i}]",
                     )
 
-                dest = _parse_destination(
-                    cast(dict[str, Any], raw_dest), i
-                )
+                dest = _parse_destination(cast(dict[str, Any], raw_dest), i)
                 if dest.name in seen_names:
                     raise ConfigurationError(
                         f"Duplicate destination name: '{dest.name}'",
@@ -1014,7 +1014,7 @@ class ConfigManager:
 
         # Load configuration file
         try:
-            with open(config_file, "r") as f:
+            with open(config_file) as f:
                 raw_data = yaml.safe_load(f)
         except FileNotFoundError:
             raise ConfigurationError(
@@ -1056,9 +1056,16 @@ class ConfigManager:
 
     # Fields that should be converted to int from env vars
     _INT_FIELDS = {
-        "port", "baudrate", "bytesize", "heartbeat_timeout",
-        "reconnect_max_delay", "connection_timeout", "read_timeout",
-        "retry_initial_delay", "retry_max_delay", "max_clients",
+        "port",
+        "baudrate",
+        "bytesize",
+        "heartbeat_timeout",
+        "reconnect_max_delay",
+        "connection_timeout",
+        "read_timeout",
+        "retry_initial_delay",
+        "retry_max_delay",
+        "max_clients",
     }
     # Fields that should be converted to float from env vars
     _FLOAT_FIELDS = {"retry_multiplier", "timeout", "stopbits"}
@@ -1115,7 +1122,7 @@ class ConfigManager:
                 env_prefix = f"{cls.ENV_PREFIX}DEST_{name.upper()}_"
                 for env_key, env_value in os.environ.items():
                     if env_key.startswith(env_prefix):
-                        field_name = env_key[len(env_prefix):].lower()
+                        field_name = env_key[len(env_prefix) :].lower()
                         if "config" not in dest_dict:
                             dest_dict["config"] = {}
                         config_dict = cast(dict[str, Any], dest_dict["config"])
@@ -1139,7 +1146,9 @@ class ConfigManager:
         current[final_key] = cls._convert_env_value(final_key, value)
 
     @classmethod
-    def _convert_env_value(cls, field_name: str, value: str) -> str | int | float | bool:
+    def _convert_env_value(
+        cls, field_name: str, value: str
+    ) -> str | int | float | bool:
         """Convert a string env value to the appropriate Python type."""
         if field_name in cls._INT_FIELDS:
             try:

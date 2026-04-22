@@ -4,7 +4,7 @@
 import base64
 import socket
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -20,7 +20,6 @@ from sp_rtk_base_relay.core.destinations.ntrip_destination import (
 )
 from sp_rtk_base_relay.core.message_filter import FilterConfig
 from sp_rtk_base_relay.exceptions import ConfigurationError, NtripError
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -207,7 +206,7 @@ class TestNtripConnectionV2:
     ) -> None:
         mock_sock = MagicMock()
         mock_socket_cls.return_value = mock_sock
-        mock_sock.recv.side_effect = socket.timeout("timed out")
+        mock_sock.recv.side_effect = TimeoutError("timed out")
 
         with pytest.raises(NtripError, match="timeout"):
             dest_v2._connect()
@@ -224,7 +223,8 @@ class TestNtripConnectionV2:
 
         # Verify SO_KEEPALIVE was set
         keepalive_calls = [
-            c for c in mock_sock.setsockopt.call_args_list
+            c
+            for c in mock_sock.setsockopt.call_args_list
             if c[0][0] == socket.SOL_SOCKET and c[0][1] == socket.SO_KEEPALIVE
         ]
         assert len(keepalive_calls) == 1
@@ -254,9 +254,7 @@ class TestNtripDisconnect:
         dest_v1._disconnect()  # Should not raise
         assert dest_v1._socket is None
 
-    def test_disconnect_handles_socket_error(
-        self, dest_v1: NtripDestination
-    ) -> None:
+    def test_disconnect_handles_socket_error(self, dest_v1: NtripDestination) -> None:
         mock_sock = MagicMock()
         mock_sock.close.side_effect = OSError("close error")
         dest_v1._socket = mock_sock
@@ -361,9 +359,7 @@ class TestNtripConnectionInfo:
 class TestNtripBackoff:
     """Tests for exponential backoff reconnection."""
 
-    def test_attempt_connect_respects_backoff(
-        self, dest_v1: NtripDestination
-    ) -> None:
+    def test_attempt_connect_respects_backoff(self, dest_v1: NtripDestination) -> None:
         dest_v1._next_connect_time = time.time() + 999
         with patch.object(dest_v1, "_connect") as mock_connect:
             dest_v1._attempt_connect()
@@ -386,9 +382,7 @@ class TestNtripBackoff:
     def test_attempt_connect_failure_increases_backoff(
         self, dest_v1: NtripDestination
     ) -> None:
-        with patch.object(
-            dest_v1, "_connect", side_effect=NtripError("fail")
-        ):
+        with patch.object(dest_v1, "_connect", side_effect=NtripError("fail")):
             dest_v1._attempt_connect()
 
         assert dest_v1._retry_delay == 10.0  # 5 * 2.0
@@ -433,7 +427,7 @@ class TestReadResponse:
 
     def test_timeout_raises_ntrip_error(self) -> None:
         mock_sock = MagicMock()
-        mock_sock.recv.side_effect = socket.timeout("timed out")
+        mock_sock.recv.side_effect = TimeoutError("timed out")
         with pytest.raises(NtripError, match="timeout"):
             NtripDestination._read_response(mock_sock, timeout=1.0)
 
@@ -486,6 +480,7 @@ class TestBuildNtripDestination:
         from sp_rtk_base_relay.core.destinations.destination_factory import (
             DestinationFactory,
         )
+
         assert "ntrip" in DestinationFactory._builders
 
 
@@ -534,9 +529,7 @@ class TestProtocolFormat:
         assert any("Authorization: Basic" in l for l in lines)
         assert lines[-1] == ""  # Empty line terminates headers
 
-    def test_v2_chunked_encoding_format(
-        self, dest_v2: NtripDestination
-    ) -> None:
+    def test_v2_chunked_encoding_format(self, dest_v2: NtripDestination) -> None:
         """Verify chunked encoding follows HTTP spec: hex_len\\r\\ndata\\r\\n."""
         mock_sock = MagicMock()
         dest_v2._socket = mock_sock
@@ -548,9 +541,7 @@ class TestProtocolFormat:
         # 100 bytes hex = "64"
         assert sent == b"64\r\n" + data + b"\r\n"
 
-    def test_v1_raw_send_no_framing(
-        self, dest_v1: NtripDestination
-    ) -> None:
+    def test_v1_raw_send_no_framing(self, dest_v1: NtripDestination) -> None:
         """Verify v1 sends raw bytes with no framing."""
         mock_sock = MagicMock()
         dest_v1._socket = mock_sock

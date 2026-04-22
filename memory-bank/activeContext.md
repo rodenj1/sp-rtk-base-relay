@@ -38,15 +38,26 @@ Node.js 24 upgrade (commit `bbb9e98`) — addressed GitHub's Node.js 20 deprecat
 - `astral-sh/setup-uv@v8.1.0` already runs on Node 24; unchanged.
 - Verified clean via run **24759388902** — success with no deprecation warnings.
 
-Coverage badge switched to **Codecov** (follow-up commit) — the Gist/PAT approach left a broken shields.io badge until the one-time secret setup was done. Replaced with:
-- `codecov/codecov-action@v6.0.0` (SHA `57e3a136…`) with `use_oidc: true` — tokenless upload via GitHub OIDC, zero secrets required for public repos.
-- `codecov/test-results-action@v1.2.1` (SHA `0fa95f0e…`) for flaky-test analytics, also OIDC tokenless.
-- Removed `schneegans/dynamic-badges-action` step + `Extract coverage percent` / `Determine badge color` helpers from the workflow.
-- Job-scoped `permissions: { contents: read, id-token: write }` on `test` only; workflow default stays `contents: read`.
-- README badge now `https://codecov.io/gh/rodenj1/sp-rtk-base-relay/branch/main/graph/badge.svg` — auto-updates once the repo is enabled at `app.codecov.io`.
-- `docs/ci-setup.md` rewritten to document the Codecov OIDC flow (no gist, no PAT, no repo secrets).
+Coverage badge migrated to **Codecov**, iterated through three configurations before settling on token auth:
 
-**Remaining one-time manual step**: visit <https://app.codecov.io/>, sign in with GitHub, click "Add new repository", and enable `rodenj1/sp-rtk-base-relay`. Badge will go live on the next push to `main`.
+1. **Initial (OIDC)** — commit `c4182cd` switched to `codecov/codecov-action@v6.0.0` with `use_oidc: true` + separate `codecov/test-results-action@v1.2.1`.  Workflow ran green but badge showed "unknown" and `app.codecov.io/gh/rodenj1/sp-rtk-base-relay` returned 404.
+2. **Consolidation** — commit `59b904b` cleared the `codecov/test-results-action` deprecation annotation by calling `codecov-action` twice instead (second invocation with `report_type: test_results`).  Run `24759889898` green; badge still broken.
+3. **Final (token auth)** — commit `f1926f6`.  Root cause: `sp-rtk-base-relay` is a **private repo**, and Codecov's OIDC tokenless upload is public-repo-only.  Every OIDC upload was being rejected with HTTP 500 by `ingest.codecov.io` (visible only via `gh run view --log` — the action itself was silent because `fail_ci_if_error: false`).  Run `24760379477` on `f1926f6` shows the fix working:
+   ```
+   info -- Your upload is now processing. When finished, results will be
+   available at: https://app.codecov.io/github/rodenj1/sp-rtk-base-relay/
+                 commit/f1926f6f137b440089f9c9beaf0cd295f0f666ed
+   info -- Process Upload complete
+   ```
+
+Final configuration:
+- `codecov/codecov-action@v6.0.0` (SHA `57e3a136…`) invoked twice (coverage + test-results), both with `token: ${{ secrets.CODECOV_TOKEN }}`.
+- `CODECOV_TOKEN` repository secret set via `gh secret set CODECOV_TOKEN` (upload token from app.codecov.io onboarding page).  Note: this UUID was exposed in chat history during setup and should be **rotated via Codecov → Settings → Coverage** when convenient.
+- `id-token: write` permission removed from the `test` job (no longer needed).
+- README badge uses the separate read-only **badge token** `T5XTVO92KQ` as `?token=...` query param — safe to commit, grants read-only access to the badge SVG for this single branch only.
+- `docs/ci-setup.md` fully rewritten to document the private-repo token flow (upload token vs badge token), with a short section on how to swap back to OIDC if the repo ever goes public.
+
+**Codecov setup complete.** Badge renders live coverage percentage from latest successful upload; dashboard at <https://app.codecov.io/github/rodenj1/sp-rtk-base-relay> shows commit-by-commit trend, flaky-test analytics, and PR coverage comments.
 
 **Previous**: v2.1 merged to `main` via PR #5 → PR #6 (`origin/main` at `313f951`). Prior v2.0 work at commit 8f4f79a.
 **Branch**: `main` (all v2.1 work merged; working directly on main going forward)
@@ -90,7 +101,7 @@ API spec: `docs/relay-engine-api-spec.md`
 **Total unit tests**: 1,106 passing
 
 ### Next Steps
-1. **CI post-merge**: enable `rodenj1/sp-rtk-base-relay` at <https://app.codecov.io/> (OIDC tokenless — no secrets needed). Badge goes live on the next push to main. (See `docs/ci-setup.md`.)
+1. **(Optional) Rotate `CODECOV_TOKEN`** via Codecov → Settings → Coverage — the UUID was exposed in chat history during setup. Not urgent (private repo, Codecov only), but good hygiene.
 2. **Phase 6**: sp-rtk-base-relay cleanup (remove probe_gps.py, revert pyubx2, README, integration tests)
 3. **Lint baseline cleanup**: address items in `[tool.ruff.lint.ignore]` legacy baseline in follow-up PRs, then remove the ignores one-by-one
 

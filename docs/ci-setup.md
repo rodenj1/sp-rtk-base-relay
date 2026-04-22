@@ -84,15 +84,16 @@ coverage percentage from `main`.
 ## What the workflow uploads to Codecov
 
 Only the **Python 3.12** matrix leg uploads, to keep the Codecov dashboard
-clean. Two artifacts are sent:
+clean. Two artifacts are sent, both via `codecov/codecov-action@v6`:
 
-1. **Coverage** (`coverage.xml`) via `codecov/codecov-action@v6` with
-   `use_oidc: true`.
-2. **Test results** (`pytest-junit.xml`) via
-   `codecov/test-results-action@v1.2.1` with `use_oidc: true`, for
-   Codecov's flaky-test + failure analytics.
+1. **Coverage** (`coverage.xml`) — default `report_type: coverage`.
+2. **Test results** (`pytest-junit.xml`) — second invocation with
+   `report_type: test_results` for Codecov's flaky-test + failure
+   analytics. (The previously separate `codecov/test-results-action`
+   is deprecated in favour of this pattern.)
 
-`fail_ci_if_error: false` ensures that a Codecov outage never blocks CI.
+Both calls use `use_oidc: true` and `fail_ci_if_error: false`, so a
+Codecov outage never blocks CI.
 
 The `id-token: write` permission is scoped to the `test` job only — all
 other jobs retain the default read-only `contents: read` permission

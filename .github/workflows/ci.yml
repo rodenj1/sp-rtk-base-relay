@@ -127,12 +127,15 @@ jobs:
           verbose: false
 
       - name: Upload test results to Codecov (Python 3.12 only)
+        # codecov/test-results-action is deprecated; run codecov-action again
+        # with report_type: test_results instead (see codecov/test-results-action README).
         if: matrix.python-version == '3.12' && !cancelled()
-        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3 # v1.2.1
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:
           files: ./pytest-junit.xml
           flags: unittests
           name: junit-py${{ matrix.python-version }}
+          report_type: test_results
           use_oidc: true
           fail_ci_if_error: false
 

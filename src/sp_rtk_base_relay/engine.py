@@ -47,6 +47,7 @@ from sp_rtk_base_relay.exceptions import ConfigurationError, ServiceError
 if TYPE_CHECKING:
     from sp_rtk_base_relay.core.destinations.base_destination import BaseDestination
     from sp_rtk_base_relay.core.input_sources.base_input import InputSource
+    from sp_rtk_base_relay.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -64,15 +65,24 @@ class RelayEngine:
 
     Args:
         input_config: Input source configuration (serial, TCP, bluetooth, etc.).
+        metrics_collector: Optional :class:`MetricsCollector` wired into
+            the event bus for Prometheus telemetry. When provided, the
+            engine will push events to ``events_emitted_total{event_type}``
+            and poll the engine/hub state via :meth:`update_metrics`.
     """
 
     # ------------------------------------------------------------------
     # Construction
     # ------------------------------------------------------------------
 
-    def __init__(self, input_config: InputConfig) -> None:
+    def __init__(
+        self,
+        input_config: InputConfig,
+        metrics_collector: MetricsCollector | None = None,
+    ) -> None:
         self._input_config = input_config
-        self._event_bus = EventBus()
+        self._metrics: MetricsCollector | None = metrics_collector
+        self._event_bus = EventBus(metrics_collector=metrics_collector)
         self._input_source: InputSource | None = None
         self._hub: BroadcastHub | None = None
         self._running = False
@@ -304,6 +314,37 @@ class RelayEngine:
     def event_bus(self) -> EventBus:
         """Direct access to the event bus (advanced usage)."""
         return self._event_bus
+
+    # ------------------------------------------------------------------
+    # Metrics integration
+    # ------------------------------------------------------------------
+
+    @property
+    def metrics_collector(self) -> MetricsCollector | None:
+        """The :class:`MetricsCollector` attached to this engine, if any."""
+        return self._metrics
+
+    def update_metrics(self) -> None:
+        """Refresh all Prometheus metrics from live engine state.
+
+        No-op if no :class:`MetricsCollector` was supplied at
+        construction. Safe to call whether the engine is running or
+        stopped — when stopped, the collector sees the engine's
+        ``engine_running`` flag flip to 0.
+        """
+        if self._metrics is None:
+            return
+
+        destinations: list[BaseDestination] = (
+            list(self._hub.destinations) if self._hub is not None else []
+        )
+        self._metrics.update_all(
+            destinations=destinations,
+            hub=self._hub,
+            input_source=self._input_source,
+            event_bus=self._event_bus,
+            engine_running=self._running,
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers

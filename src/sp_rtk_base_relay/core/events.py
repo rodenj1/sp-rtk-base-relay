@@ -28,7 +28,10 @@ import time
 from collections import deque
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from sp_rtk_base_relay.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -308,12 +311,17 @@ class EventBus:
         self,
         ring_buffer_size: int = DEFAULT_RING_BUFFER_SIZE,
         subscriber_queue_size: int = DEFAULT_SUBSCRIBER_QUEUE_SIZE,
+        metrics_collector: MetricsCollector | None = None,
     ) -> None:
         """Initialize the event bus.
 
         Args:
             ring_buffer_size: Maximum events to keep in the ring buffer.
             subscriber_queue_size: Maximum queue size per subscriber.
+            metrics_collector: Optional :class:`MetricsCollector` for
+                push-model Prometheus counters (events_emitted_total,
+                etc.). When provided, ``record_event()`` is invoked on
+                every :meth:`emit` call.
         """
         self._subscribers: list[EventSubscription] = []
         self._subscribers_lock = threading.Lock()
@@ -321,6 +329,7 @@ class EventBus:
         self._subscriber_queue_size = subscriber_queue_size
         self._total_events_emitted: int = 0
         self._total_events_dropped: int = 0
+        self._metrics_collector: MetricsCollector | None = metrics_collector
 
     @property
     def subscriber_count(self) -> int:
@@ -370,6 +379,14 @@ class EventBus:
         for sub in subs:
             if not sub.deliver(event):
                 self._total_events_dropped += 1
+
+        # Push to Prometheus counter (best-effort — never let a metrics
+        # hook break event delivery).
+        if self._metrics_collector is not None:
+            try:
+                self._metrics_collector.record_event(event_type)
+            except Exception:  # pragma: no cover — defensive
+                logger.debug("metrics_collector.record_event failed", exc_info=True)
 
         logger.debug("Event emitted: %s", event)
         return event

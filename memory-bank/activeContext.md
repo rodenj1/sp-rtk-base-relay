@@ -2,9 +2,37 @@
 
 ## Current Work Focus
 
-**Primary Objective**: SP-RTK-Base-Relay v2.1 COMPLETE + project renamed + CI added → Next: sp-base integration (April 2026)
+**Primary Objective**: SP-RTK-Base-Relay v2.1 COMPLETE + project renamed + CI added + **v2.1 observability expansion + new Grafana dashboard** → Next: sp-base integration (April 2026)
 
 **Status**: v2.1 Phases 0–5 COMPLETE. Project renamed `sp-base-relay` → `sp-rtk-base-relay` on `main` (April 21, 2026, commit `f9c2a35`). GitHub Actions CI workflow added and **GREEN** on `main` (April 21, 2026, run 24759164665) — lint + matrix unit tests on Python 3.10/3.11/3.12/3.13 + build all passing. Phase 6 (cleanup) pending. sp-base integration next.
+
+### Metrics v2.1 expansion + Grafana v2.1 dashboard (April 22, 2026)
+
+Following the v2.1 architecture refactor (RelayEngine + EventBus + BroadcastHub), the metrics surface was widened to expose every new component. `MetricsCollector` now also publishes input-source, hub, event-bus, engine and per-destination metadata families — 23 new metrics total, additive over v2.0.
+
+Added metrics (all under `sp_rtk_base_relay_*`):
+- **Engine**: `engine_running_status`.
+- **Input source**: `input_info{source_type}`, `input_connected_since_timestamp`, `input_bytes_received_total`, `input_messages_received_total`, `input_reconnect_attempts_total`, `input_reconnect_successes_total`.
+- **Hub**: `hub_bytes_received_total`, `hub_chunks_received_total`, `hub_chunks_distributed_total`, `hub_frames_parsed_total`, `hub_no_data_warnings_total`, `hub_registered_destinations_count`.
+- **Event bus**: `events_emitted_total{event_type}`, `events_dropped_total`, `event_subscribers_count`, `event_ring_buffer_depth`.
+- **Destination metadata**: `dest_info{destination,type,filter_mode}`, `dest_enabled`, `dest_running`, `dest_connected_since_timestamp`, `dest_last_send_timestamp`, `dest_connection_failures_total`.
+
+Wiring:
+- `metrics.py` — extended `MetricsCollector.update_all()` signature with `input_source`, `event_bus`, `engine_running` kwargs; added push-model `record_event(event_type)`. Delta-based counter semantics preserved (test_metrics 100 % line coverage).
+- `events.py` — `EventBus` takes optional `metrics_collector`; every published event bumps `events_emitted_total{event_type}`. Drop counter derived live in `update_all()` from `EventBus.total_events_dropped`.
+- `engine.py` — `RelayEngine(metrics_collector=...)` forwards the collector to its EventBus and exposes `update_metrics()` helper that calls `update_all()` with the hub/input/event-bus/engine refs.
+- `main.py` — existing `_update_metrics()` now passes `input_source` and `engine_running` through to the collector so input-source + engine metrics populate even when running via main.py (pre-RelayEngine wiring).
+- Old dashboard archived to `templates/archive/grafana_dashboard_v1.json`.
+
+Grafana v2.1 dashboard (`templates/grafana_dashboard.json`):
+- schemaVersion 41 (Grafana 11.x), UID `sp-rtk-base-relay-v2-1`, 27 panels across 8 rows.
+- Rows: Service Overview · Hub Throughput · Per-Destination Health · Per-Destination Throughput · Drops/Filters/Queues · Connection Reliability · TCP-Server Destinations · Event Bus.
+- Template variables: `DS_PROMETHEUS` (datasource), `destination` + `dest_type` (multi-select) using `label_values(sp_rtk_base_relay_dest_info, ...)`.
+- Joined destination-health table uses Grafana's `joinByField` transformation to merge five queries keyed on the `destination` label.
+
+Docs: `docs/metrics-guide.md` updated to **v2.1** with five new metric tables and a rewritten Grafana section (layout, variables, import steps).
+
+Verification: `uv run pytest tests/unit/ -q` → **1143 tests pass, 89.78 % coverage**. `metrics.py` 100 %, `engine.py` 99 %, `events.py` 100 %. Dashboard JSON validates (`json.load`) as schemaVersion 41 / 27 panels / 3 vars.
 
 ### CI Added (April 21, 2026)
 

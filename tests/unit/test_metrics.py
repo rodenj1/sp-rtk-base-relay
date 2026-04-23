@@ -13,7 +13,9 @@ from unittest.mock import Mock, PropertyMock, patch
 import pytest
 from prometheus_client import REGISTRY
 
+from sp_rtk_base_relay.core.broadcast_hub import BroadcastStats
 from sp_rtk_base_relay.core.destinations.base_destination import DestinationStats
+from sp_rtk_base_relay.core.input_sources.base_input import InputSourceStats
 from sp_rtk_base_relay.metrics import MetricsCollector, _DestSnapshot, _inc_delta
 
 # ======================================================================
@@ -49,14 +51,29 @@ def _mock_destination(
     messages_dropped: int = 0,
     messages_filtered: int = 0,
     connection_attempts: int = 0,
+    successful_connections: int = 0,
+    connection_failures: int = 0,
     errors: int = 0,
     queue_depth: int = 0,
+    enabled: bool = True,
+    running: bool = True,
+    destination_type: str = "test",
+    filter_mode: str = "passthrough",
+    connected_since: float | None = None,
+    last_send_time: float = 0.0,
 ) -> Mock:
     """Create a mock BaseDestination with configurable stats."""
     dest = Mock()
     dest.name = name
-    dest.destination_type = "test"
+    dest.destination_type = destination_type
+    dest.enabled = enabled
     type(dest).is_connected = PropertyMock(return_value=connected)
+    type(dest).is_running = PropertyMock(return_value=running)
+
+    # Stub the message filter so dest_info publication works
+    filter_mock = Mock()
+    filter_mock.mode.value = filter_mode
+    dest.message_filter = filter_mock
 
     stats = DestinationStats(
         bytes_sent=bytes_sent,
@@ -64,8 +81,12 @@ def _mock_destination(
         messages_dropped=messages_dropped,
         messages_filtered=messages_filtered,
         connection_attempts=connection_attempts,
+        successful_connections=successful_connections,
+        connection_failures=connection_failures,
         errors=errors,
         queue_depth=queue_depth,
+        connected_since=connected_since,
+        last_send_time=last_send_time,
     )
     dest.get_stats.return_value = stats
     return dest
@@ -74,12 +95,62 @@ def _mock_destination(
 def _mock_hub(
     running: bool = True,
     last_data_time: float = 0.0,
+    bytes_received: int = 0,
+    chunks_received: int = 0,
+    chunks_distributed: int = 0,
+    frames_parsed: int = 0,
+    no_data_warnings: int = 0,
 ) -> Mock:
-    """Create a mock BroadcastHub."""
+    """Create a mock BroadcastHub with a live ``stats`` attribute."""
     hub = Mock()
     type(hub).is_running = PropertyMock(return_value=running)
     type(hub).last_data_time = PropertyMock(return_value=last_data_time)
+    hub.stats = BroadcastStats(
+        bytes_received=bytes_received,
+        chunks_received=chunks_received,
+        chunks_distributed=chunks_distributed,
+        frames_parsed=frames_parsed,
+        no_data_warnings=no_data_warnings,
+    )
     return hub
+
+
+def _mock_input_source(
+    source_type: str = "tcp",
+    connected: bool = True,
+    bytes_read: int = 0,
+    messages_read: int = 0,
+    connection_attempts: int = 0,
+    successful_connections: int = 0,
+    connected_since: float | None = None,
+) -> Mock:
+    """Create a mock InputSource with a live ``stats`` attribute."""
+    src = Mock()
+    src.source_type = source_type
+    type(src).is_connected = PropertyMock(return_value=connected)
+    src.stats = InputSourceStats(
+        bytes_read=bytes_read,
+        messages_read=messages_read,
+        connection_attempts=connection_attempts,
+        successful_connections=successful_connections,
+        connected_since=connected_since,
+    )
+    return src
+
+
+def _mock_event_bus(
+    subscriber_count: int = 0,
+    total_events_dropped: int = 0,
+    recent_count: int = 0,
+) -> Mock:
+    """Create a mock EventBus with the properties read by metrics."""
+    bus = Mock()
+    type(bus).subscriber_count = PropertyMock(return_value=subscriber_count)
+    type(bus).total_events_dropped = PropertyMock(
+        return_value=total_events_dropped,
+    )
+    bus.get_recent.return_value = [Mock() for _ in range(recent_count)]
+    return bus
 
 
 # ======================================================================
@@ -626,3 +697,215 @@ class TestUpdateAllEndToEnd:
 
         mc.update_all([], input_connected=False)
         assert mc.input_connection_status._value.get() == 0
+
+
+# ======================================================================
+# v2.1: Push hooks + new metrics
+# ======================================================================
+
+
+class TestRecordEvent:
+    """record_event() push-model hook."""
+
+    def test_single_event(self) -> None:
+        mc = MetricsCollector()
+        mc.record_event("hub.started")
+        val = mc.events_emitted.labels(event_type="hub.started")._value.get()
+        assert val == 1
+
+    def test_multiple_events_same_type(self) -> None:
+        mc = MetricsCollector()
+        mc.record_event("destination.connected")
+        mc.record_event("destination.connected")
+        mc.record_event("destination.connected")
+        val = mc.events_emitted.labels(event_type="destination.connected")._value.get()
+        assert val == 3
+
+    def test_multiple_event_types_isolated(self) -> None:
+        mc = MetricsCollector()
+        mc.record_event("a")
+        mc.record_event("b")
+        mc.record_event("a")
+        assert mc.events_emitted.labels(event_type="a")._value.get() == 2
+        assert mc.events_emitted.labels(event_type="b")._value.get() == 1
+
+
+class TestInputSourceMetrics:
+    """Input-source metrics driven by InputSource (not just connected flag)."""
+
+    def test_input_info_published_once(self) -> None:
+        mc = MetricsCollector()
+        src = _mock_input_source(source_type="tcp")
+        mc.update_all([], input_source=src)
+        mc.update_all([], input_source=src)
+        val = mc.input_info.labels(source_type="tcp")._value.get()
+        assert val == 1
+
+    def test_input_connected_since_timestamp(self) -> None:
+        mc = MetricsCollector()
+        ts = 1_700_000_000.0
+        src = _mock_input_source(connected=True, connected_since=ts)
+        mc.update_all([], input_source=src)
+        assert mc.input_connected_since_timestamp._value.get() == ts
+
+    def test_input_connected_since_none_maps_to_zero(self) -> None:
+        mc = MetricsCollector()
+        src = _mock_input_source(connected=False, connected_since=None)
+        mc.update_all([], input_source=src)
+        assert mc.input_connected_since_timestamp._value.get() == 0.0
+
+    def test_input_byte_counter_delta(self) -> None:
+        mc = MetricsCollector()
+        src1 = _mock_input_source(bytes_read=100, messages_read=5)
+        mc.update_all([], input_source=src1)
+        src2 = _mock_input_source(bytes_read=350, messages_read=20)
+        mc.update_all([], input_source=src2)
+        assert mc.input_bytes_received._value.get() == 250.0
+        assert mc.input_messages_received._value.get() == 15.0
+
+    def test_input_reconnect_counters_delta(self) -> None:
+        mc = MetricsCollector()
+        src1 = _mock_input_source(connection_attempts=1, successful_connections=1)
+        mc.update_all([], input_source=src1)
+        src2 = _mock_input_source(connection_attempts=5, successful_connections=3)
+        mc.update_all([], input_source=src2)
+        assert mc.input_reconnect_attempts._value.get() == 4.0
+        assert mc.input_reconnect_successes._value.get() == 2.0
+
+
+class TestHubV21Metrics:
+    """Hub counters (bytes/chunks/frames/warnings) introduced in v2.1."""
+
+    def test_hub_byte_and_chunk_deltas(self) -> None:
+        mc = MetricsCollector()
+        hub1 = _mock_hub(
+            bytes_received=1000,
+            chunks_received=10,
+            chunks_distributed=30,
+            frames_parsed=5,
+        )
+        mc.update_all([], hub=hub1)
+        hub2 = _mock_hub(
+            bytes_received=3000,
+            chunks_received=25,
+            chunks_distributed=75,
+            frames_parsed=8,
+        )
+        mc.update_all([], hub=hub2)
+        assert mc.hub_bytes_received._value.get() == 2000.0
+        assert mc.hub_chunks_received._value.get() == 15.0
+        assert mc.hub_chunks_distributed._value.get() == 45.0
+        assert mc.hub_frames_parsed._value.get() == 3.0
+
+    def test_hub_no_data_warnings_counter(self) -> None:
+        mc = MetricsCollector()
+        hub1 = _mock_hub(no_data_warnings=0)
+        mc.update_all([], hub=hub1)
+        hub2 = _mock_hub(no_data_warnings=2)
+        mc.update_all([], hub=hub2)
+        assert mc.hub_no_data_warnings._value.get() == 2.0
+
+    def test_hub_registered_destinations_count(self) -> None:
+        mc = MetricsCollector()
+        dests = [_mock_destination(name="a"), _mock_destination(name="b")]
+        mc.update_all(dests, hub=_mock_hub())
+        assert mc.hub_registered_destinations._value.get() == 2
+
+
+class TestEventBusMetrics:
+    """Event-bus telemetry via update_all()."""
+
+    def test_subscriber_count_and_ring_depth(self) -> None:
+        mc = MetricsCollector()
+        bus = _mock_event_bus(subscriber_count=3, recent_count=42)
+        mc.update_all([], event_bus=bus)
+        assert mc.event_subscribers_count._value.get() == 3
+        assert mc.event_ring_buffer_depth._value.get() == 42
+
+    def test_events_dropped_delta(self) -> None:
+        mc = MetricsCollector()
+        bus1 = _mock_event_bus(total_events_dropped=0)
+        mc.update_all([], event_bus=bus1)
+        bus2 = _mock_event_bus(total_events_dropped=7)
+        mc.update_all([], event_bus=bus2)
+        assert mc.events_dropped._value.get() == 7.0
+
+    def test_no_event_bus_is_safe(self) -> None:
+        mc = MetricsCollector()
+        mc.update_all([], event_bus=None)  # should not raise
+        assert mc.event_subscribers_count._value.get() == 0
+
+
+class TestEngineRunningMetric:
+    """engine_running_status gauge via update_all(engine_running=...)."""
+
+    def test_engine_running_true(self) -> None:
+        mc = MetricsCollector()
+        mc.update_all([], engine_running=True)
+        assert mc.engine_running_status._value.get() == 1
+
+    def test_engine_running_false(self) -> None:
+        mc = MetricsCollector()
+        mc.update_all([], engine_running=True)
+        mc.update_all([], engine_running=False)
+        assert mc.engine_running_status._value.get() == 0
+
+    def test_engine_running_none_keeps_previous(self) -> None:
+        mc = MetricsCollector()
+        mc.update_all([], engine_running=True)
+        mc.update_all([], engine_running=None)
+        assert mc.engine_running_status._value.get() == 1
+
+
+class TestDestInfoAndLifecycleGauges:
+    """dest_info + dest_enabled + dest_running + connected_since/last_send."""
+
+    def test_dest_info_published_once(self) -> None:
+        mc = MetricsCollector()
+        d = _mock_destination(
+            name="surepath",
+            destination_type="surepath",
+            filter_mode="rtcm3_whitelist",
+        )
+        mc.update_all([d])
+        mc.update_all([d])
+        val = mc.dest_info.labels(
+            destination="surepath",
+            type="surepath",
+            filter_mode="rtcm3_whitelist",
+        )._value.get()
+        assert val == 1
+
+    def test_dest_enabled_and_running_gauges(self) -> None:
+        mc = MetricsCollector()
+        d = _mock_destination(name="d", enabled=False, running=False)
+        mc.update_all([d])
+        assert mc.dest_enabled.labels(destination="d")._value.get() == 0
+        assert mc.dest_running.labels(destination="d")._value.get() == 0
+
+    def test_dest_timestamps(self) -> None:
+        mc = MetricsCollector()
+        d = _mock_destination(
+            name="d",
+            connected_since=1_700_000_000.0,
+            last_send_time=1_700_000_042.0,
+        )
+        mc.update_all([d])
+        assert (
+            mc.dest_connected_since_timestamp.labels(destination="d")._value.get()
+            == 1_700_000_000.0
+        )
+        assert (
+            mc.dest_last_send_timestamp.labels(destination="d")._value.get()
+            == 1_700_000_042.0
+        )
+
+    def test_tcp_server_client_count_published(self) -> None:
+        mc = MetricsCollector()
+        d = _mock_destination(name="tcp", destination_type="tcp_server")
+        # Give the mock a client_count attribute
+        d.client_count = 4
+        mc.update_all([d])
+        assert (
+            mc.tcp_server_connected_clients.labels(destination="tcp")._value.get() == 4
+        )

@@ -1,8 +1,12 @@
-# Prometheus Metrics Guide — SP-Base-Relay v2.0
+# Prometheus Metrics Guide — SP-Base-Relay v2.1
 
 ## Overview
 
-SP-Base-Relay v2.0 exports **per-destination** Prometheus metrics using `{destination="..."}` labels, plus global metrics for input health and service status. This is a **breaking change** from v1.x — all metric names have changed.
+SP-Base-Relay v2.1 exports **per-destination** Prometheus metrics using `{destination="..."}` labels, plus global metrics for input source, broadcast hub, event bus, and service lifecycle. v2.1 adds ~20 new metrics over v2.0 without removing any; all v2.0 dashboards continue to work.
+
+> **Upgrading from v1.x?** All metric names changed in v2.0 — see the [v1→v2 migration notes](#v1-to-v2-migration) at the bottom.
+>
+> **Upgrading from v2.0?** All new v2.1 metrics are additive. Import `templates/grafana_dashboard.json` (the v2.1 dashboard) to see them.
 
 ## Configuration
 
@@ -45,6 +49,57 @@ All per-destination metrics carry a `{destination="<name>"}` label matching the 
 | `sp_rtk_base_relay_service_uptime_seconds` | Gauge | Service uptime in seconds |
 | `sp_rtk_base_relay_active_destinations_count` | Gauge | Number of currently connected destinations |
 | `sp_rtk_base_relay_hub_running_status` | Gauge | Broadcast hub running (1=running, 0=stopped) |
+| `sp_rtk_base_relay_engine_running_status` | Gauge | **[v2.1]** RelayEngine running (1=running, 0=stopped) |
+
+### Destination Metadata (v2.1)
+
+Stable descriptor gauges (always value `1`) whose **labels** identify each destination. Use them in Grafana `label_values(...)` variables or to add `type` / `filter_mode` columns to tables.
+
+| Metric | Labels | Description |
+|--------|--------|-------------|
+| `sp_rtk_base_relay_dest_info` | `destination, type, filter_mode` | Per-destination static descriptor |
+| `sp_rtk_base_relay_dest_enabled` | `destination` | 1 if destination is enabled in config |
+| `sp_rtk_base_relay_dest_running` | `destination` | 1 if destination worker thread is running |
+| `sp_rtk_base_relay_dest_connected_since_timestamp` | `destination` | Unix ts of current connection start (0 = not connected) |
+| `sp_rtk_base_relay_dest_last_send_timestamp` | `destination` | Unix ts of last successful send |
+| `sp_rtk_base_relay_dest_connection_failures_total` | `destination` | Connect attempts that **failed** (counter) |
+
+### Input-Source Metrics (v2.1)
+
+Driven directly by the active `InputSource` (replaces relying on the broadcast hub for input stats).
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `sp_rtk_base_relay_input_info` | Gauge | Descriptor carrying `source_type` label (tcp, serial, bluetooth, …) |
+| `sp_rtk_base_relay_input_connected_since_timestamp` | Gauge | Unix ts when the current input connection was established (0 = disconnected) |
+| `sp_rtk_base_relay_input_bytes_received_total` | Counter | Total bytes read from the input source |
+| `sp_rtk_base_relay_input_messages_received_total` | Counter | Total RTCM messages parsed from the input source |
+| `sp_rtk_base_relay_input_reconnect_attempts_total` | Counter | Reconnect attempts against the input source |
+| `sp_rtk_base_relay_input_reconnect_successes_total` | Counter | Successful reconnects |
+
+### Broadcast-Hub Metrics (v2.1)
+
+Internal throughput of the fan-out stage, separate from per-destination counters.
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `sp_rtk_base_relay_hub_bytes_received_total` | Counter | Bytes the hub has ingested from the input source |
+| `sp_rtk_base_relay_hub_chunks_received_total` | Counter | Raw byte-chunks received from the input source |
+| `sp_rtk_base_relay_hub_chunks_distributed_total` | Counter | Chunk × destination fan-out events (roughly `chunks_received × registered_destinations`) |
+| `sp_rtk_base_relay_hub_frames_parsed_total` | Counter | Fully-framed RTCM3 messages reassembled |
+| `sp_rtk_base_relay_hub_no_data_warnings_total` | Counter | DR-7 watchdog warnings logged |
+| `sp_rtk_base_relay_hub_registered_destinations_count` | Gauge | Number of destinations currently registered with the hub |
+
+### Event-Bus Metrics (v2.1)
+
+Observability for the internal pub/sub `EventBus` used by the RelayEngine.
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `sp_rtk_base_relay_events_emitted_total` | Counter | Events published, label `event_type` (e.g. `engine.started`, `destination.connected`) |
+| `sp_rtk_base_relay_events_dropped_total` | Counter | Events dropped because a subscriber queue was full |
+| `sp_rtk_base_relay_event_subscribers_count` | Gauge | Current active subscriber count |
+| `sp_rtk_base_relay_event_ring_buffer_depth` | Gauge | Current depth of the "recent events" ring buffer |
 
 ---
 
@@ -70,23 +125,34 @@ scrape_configs:
 
 ## Grafana Dashboard
 
-A pre-built v2 dashboard is available at `templates/grafana_dashboard.json`.
+A pre-built **v2.1 dashboard** is shipped at `templates/grafana_dashboard.json`
+(schemaVersion 41 — Grafana 11.x). The previous v2.0 dashboard is archived at
+`templates/archive/grafana_dashboard_v1.json` for reference.
 
-### Features
-- **`$destination` template variable** — filter all panels by destination
-- **Per-destination throughput** — bytes/sec and messages/sec per destination
-- **Queue depth** — per-destination queue utilization
-- **Connection status** — per-destination connection state over time
-- **Drops & errors** — per-destination drop and error rates
-- **Input watchdog** — seconds since last data from GPS source (DR-7)
-- **Active destinations** — count of connected destinations
-- **Service uptime** — total service uptime
+### Layout (8 rows, 27 panels)
+
+1. **Service Overview** — 6 stat tiles (Engine, Hub, Input, Destinations, Input Watchdog, Uptime)
+2. **Hub Throughput** — ingress bytes/sec + chunks/frames/sec
+3. **Per-Destination Health** — joined status table (connected / enabled / running / queue / type / filter)
+4. **Per-Destination Throughput** — bytes/sec + messages/sec, filtered by `$destination`
+5. **Drops, Filters & Queues** — queue-overflow drops, filter rejections, live queue depth
+6. **Connection Reliability** — destination connect attempts/failures + input reconnect stats + hub no-data warnings
+7. **TCP-Server Destinations** — connected-clients time series per tcp_server destination
+8. **Event Bus (v2.1)** — events/sec by type, subscriber count, ring-buffer depth, dropped events
+
+### Template variables
+
+| Name | Purpose |
+|------|---------|
+| `DS_PROMETHEUS` | Prometheus datasource selector |
+| `destination` | Multi-select list populated from `label_values(sp_rtk_base_relay_dest_info, destination)` |
+| `dest_type` | Multi-select populated from `label_values(sp_rtk_base_relay_dest_info, type)` |
 
 ### Importing
-1. Open Grafana → **+** → **Import**
+1. Open Grafana → **Dashboards** → **New** → **Import**
 2. Upload `templates/grafana_dashboard.json`
-3. Select your Prometheus data source
-4. Click **Import**
+3. Pick your Prometheus datasource (the `DS_PROMETHEUS` variable is auto-bound)
+4. Click **Import** — dashboard UID is `sp-rtk-base-relay-v2-1`
 
 ---
 

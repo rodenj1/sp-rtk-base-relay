@@ -489,5 +489,96 @@ class TestRelayEngineEvents:
         sub.close()
 
 
+# ============================================================================
+# Tests — MetricsCollector integration (v2.1)
+# ============================================================================
+
+
+class TestRelayEngineMetricsIntegration:
+    """The engine forwards the optional MetricsCollector into the EventBus
+    and refreshes Prometheus metrics via ``update_metrics``."""
+
+    def test_metrics_collector_none_by_default(self) -> None:
+        engine = RelayEngine(_make_input_config())
+        assert engine.metrics_collector is None
+
+    def test_metrics_collector_exposed_when_provided(self) -> None:
+        from prometheus_client import REGISTRY
+
+        from sp_rtk_base_relay.metrics import MetricsCollector
+
+        # Cleanup global registry between tests
+        for collector in list(REGISTRY._collector_to_names.keys()):
+            try:
+                REGISTRY.unregister(collector)
+            except Exception:
+                pass
+
+        mc = MetricsCollector(namespace="test_engine_mc")
+        engine = RelayEngine(_make_input_config(), metrics_collector=mc)
+        assert engine.metrics_collector is mc
+
+    def test_update_metrics_is_noop_without_collector(self) -> None:
+        engine = RelayEngine(_make_input_config())
+        engine.update_metrics()  # should not raise
+
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
+    def test_update_metrics_runs_with_collector(self, mock_isf: MagicMock) -> None:
+        """update_metrics() updates engine_running_status via the collector."""
+        from prometheus_client import REGISTRY
+
+        from sp_rtk_base_relay.metrics import MetricsCollector
+
+        for collector in list(REGISTRY._collector_to_names.keys()):
+            try:
+                REGISTRY.unregister(collector)
+            except Exception:
+                pass
+
+        mc = MetricsCollector(namespace="engine_update_metrics_mc")
+        mock_isf.create_input_source.return_value = FakeInputSource()
+
+        engine = RelayEngine(_make_input_config(), metrics_collector=mc)
+        engine.update_metrics()  # engine stopped → 0
+        assert mc.engine_running_status._value.get() == 0
+
+        engine.start()
+        try:
+            engine.update_metrics()
+            assert mc.engine_running_status._value.get() == 1
+        finally:
+            engine.stop()
+
+        engine.update_metrics()
+        assert mc.engine_running_status._value.get() == 0
+
+    @patch("sp_rtk_base_relay.engine.InputSourceFactory")
+    def test_event_bus_forwards_events_to_collector(self, mock_isf: MagicMock) -> None:
+        """Lifecycle events bump events_emitted_total{event_type=...}."""
+        from prometheus_client import REGISTRY
+
+        from sp_rtk_base_relay.metrics import MetricsCollector
+
+        for collector in list(REGISTRY._collector_to_names.keys()):
+            try:
+                REGISTRY.unregister(collector)
+            except Exception:
+                pass
+
+        mc = MetricsCollector(namespace="engine_event_forward_mc")
+        mock_isf.create_input_source.return_value = FakeInputSource()
+
+        engine = RelayEngine(_make_input_config(), metrics_collector=mc)
+        engine.start()
+        engine.stop()
+
+        # Both engine.started and engine.stopped should have been emitted
+        # once each via the event bus.
+        started_val = mc.events_emitted.labels(event_type=ENGINE_STARTED)._value.get()
+        stopped_val = mc.events_emitted.labels(event_type=ENGINE_STOPPED)._value.get()
+        assert started_val == 1
+        assert stopped_val == 1
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

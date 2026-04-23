@@ -296,6 +296,8 @@ class SPBaseRelayService:
                 destinations=self.destinations,
                 hub=self.hub,
                 input_connected=input_connected,
+                input_source=self.input_source,
+                engine_running=self._running,
             )
 
         except Exception as e:

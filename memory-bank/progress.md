@@ -1,14 +1,15 @@
 # Progress
 
-## Current Status — v2.1 Complete + Project Renamed + CI Added (April 21, 2026)
+## Current Status — v2.1 + Metrics-v2.1 Expansion + New Grafana Dashboard (April 22, 2026)
 
 **v1.x**: All phases complete (production-running)
 **v2.0**: All phases complete (956 tests, 88.46% coverage, commit 8f4f79a)
 **v2.1**: Phases 0–5 COMPLETE. Merged to `main` via PR #5 → PR #6. Ready for cleanup; sp-base consuming RelayEngine API.
+**Metrics v2.1**: Observability surface widened by ~23 metrics (engine, input-source, hub, event-bus, destination metadata families). New Grafana 11.x dashboard (schemaVersion 41, UID `sp-rtk-base-relay-v2-1`, 27 panels / 8 rows) shipped at `templates/grafana_dashboard.json`; old dashboard archived.
 **Rename**: Project renamed `sp-base-relay` → `sp-rtk-base-relay` on `main` (commit `f9c2a35`, April 21, 2026) in preparation for public release.
 **CI**: GitHub Actions workflow added (April 21, 2026) — lint + matrix tests on Python 3.10/3.11/3.12/3.13 + build.
 **Version**: 2.1.0
-**Tests**: 1,117 unit tests passing, 89.35% coverage (post-CI verification)
+**Tests**: **1,143 unit tests passing, 89.65 % coverage**; `metrics.py` 100 %, `engine.py` 99 %, `events.py` 98 %. ruff + mypy + pyright all clean.
 **Branch**: `main` (v2.1 merged; working directly on main)
 **GitHub**: `https://github.com/rodenj1/sp-rtk-base-relay` (renamed via `gh repo rename`; GitHub auto-redirects old URL)
 

@@ -90,6 +90,20 @@ Final configuration:
 **Previous**: v2.1 merged to `main` via PR #5 → PR #6 (`origin/main` at `313f951`). Prior v2.0 work at commit 8f4f79a.
 **Branch**: `main` (all v2.1 work merged; working directly on main going forward)
 
+### Final Rename Closeout (May 14, 2026)
+
+Closed out the last cosmetic loose ends from the April 21 rename:
+
+- **Local working directory** renamed: `/opt/development/sp-base-relay` → `/opt/development/sp-rtk-base-relay` (`mv` from `/tmp`, no in-tree path references existed so nothing else to update).
+- **`.venv` rebuilt** with `uv sync --all-extras` so absolute paths in `pyvenv.cfg` + console-script shebangs point at the new directory. Resolves the project as `sp-rtk-base-relay==2.1.0` from the new path.
+- **Console script verified**: `uv run sp-rtk-base-relay --help` works from new dir; default config path now reads `/etc/sp-rtk-base-relay/config.yaml` (already correct since April).
+- **Full test sweep** from new path: `uv run pytest tests/unit -q` → **1,143 passed, 89.69% coverage**.
+- **Prometheus consumers**: confirmed no external scrapers; namespace `sp_rtk_base_relay_*` was already in place in `metrics.py` (line 121, default `namespace=` kwarg) and both `templates/grafana_dashboard.json` (current) and `templates/archive/grafana_dashboard_v1.json` (archived).
+- **Host systemd**: `systemctl list-unit-files` shows no installed `sp-base-relay.service` or `sp-rtk-base-relay.service` — nothing to update on the host.
+- **Stale VS Code/Cline workspace entry** (`{"/opt/development/sp-base-relay": …}` in Cline globalStorage) is purely cosmetic; reopening VS Code at the new path registers the new workspace automatically.
+
+**The rename is now 100% complete** — code, package, console script, systemd unit name, GitHub repo, Prometheus namespace, Grafana dashboards, working directory, and venv all aligned on `sp-rtk-base-relay`.
+
 ### Rename Summary (April 21, 2026)
 
 The project was renamed from `sp-base-relay` → `sp-rtk-base-relay` to more accurately reflect its purpose (providing RTCM corrections for RTK base stations) in preparation for public release. Commit `f9c2a35` on `main`.

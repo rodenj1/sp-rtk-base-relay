@@ -55,6 +55,21 @@
 
 ---
 
+## Final Rename Closeout — COMPLETE ✅ (May 14, 2026)
+
+Closed out the last cosmetic loose ends from the April 21 rename:
+
+- **Working directory** renamed: `/opt/development/sp-base-relay` → `/opt/development/sp-rtk-base-relay`.
+- **`.venv` rebuilt** via `uv sync --all-extras` (absolute paths in `pyvenv.cfg` + script shebangs now point at the new dir; project resolves as `sp-rtk-base-relay==2.1.0` from the new location).
+- **Tests verified** from new path: `uv run pytest tests/unit -q` → **1,143 passed, 89.69 % coverage**.
+- **Console script verified**: `uv run sp-rtk-base-relay --help` works.
+- **Prometheus metric namespace**: confirmed already on `sp_rtk_base_relay_*` everywhere (`metrics.py` default `namespace=` kwarg, current `templates/grafana_dashboard.json`, and archived `templates/archive/grafana_dashboard_v1.json`). No external consumers.
+- **Host systemd**: no installed service unit referencing either name — nothing to update on the host.
+
+**The rename is now 100% complete across every layer**: code, Python package, console script, systemd unit, GitHub repo + remote, Prometheus namespace, Grafana dashboards, working directory, and virtualenv.
+
+---
+
 ## Project Rename — COMPLETE ✅ (April 21, 2026, commit `f9c2a35`)
 
 **Motivation**: Preparing the project to go public. The new name `sp-rtk-base-relay` more accurately reflects the project's purpose: providing RTCM corrections for RTK base stations.

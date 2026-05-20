@@ -293,6 +293,14 @@ jobs:
         uses: sigstore/gh-action-sigstore-python@f7ad0af51a5648d09a20d00370f0a91c3bdf8f84 # v3.0.0
         with:
           inputs: ./dist/*.tar.gz ./dist/*.whl
+          # The default (true) makes sigstore also try to download
+          # https://github.com/<owner>/<repo>/archive/refs/tags/<tag>.zip
+          # which 404s on private repositories (unauthenticated download).
+          # We only need to sign the actual sdist + wheel we built; the
+          # GitHub-generated source archive is a redundant copy of the
+          # already-signed source. Disable to keep the step working on
+          # both private and public repos.
+          release-signing-artifacts: false
 
       - name: List signed artifacts
         run: ls -la dist/

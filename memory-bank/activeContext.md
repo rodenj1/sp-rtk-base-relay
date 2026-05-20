@@ -2,7 +2,17 @@
 
 ## Current Work Focus
 
-**Primary Objective**: SP-RTK-Base-Relay v2.1 COMPLETE + project renamed + CI added + v2.1 observability expansion + new Grafana dashboard + PyPI release pipeline + **history scrub for public release (May 20, 2026)** → Next: flip repo to public, draft GitHub Release `v2.1.0` to trigger first PyPI publish, sp-base integration
+**Primary Objective**: SP-RTK-Base-Relay v2.1 COMPLETE + project renamed + CI added + v2.1 observability expansion + new Grafana dashboard + PyPI release pipeline + history scrub + **v2.1.1 patch release shipping the scrubbed code (May 20, 2026)** → Next: flip repo to public, sp-base integration
+
+### v2.1.1 Patch Release (May 20, 2026)
+
+`2.1.0` was published to PyPI from the pre-scrub tree earlier today (no real secrets in the sdist, but Bluetooth MAC + device-name docstring examples remained). PyPI does not allow re-uploading the same version number, so we bump to `2.1.1` and ship the scrubbed code as a new release. `pyproject.toml` and `src/sp_rtk_base_relay/__init__.py` `__version__` both bumped; `uv.lock` updated.
+
+Workflow fix bundled in the same commit: `release-signing-artifacts: false` added to the sigstore step. The default (`true`) made sigstore try to download `https://github.com/<owner>/<repo>/archive/refs/tags/<tag>.zip` which 404s on private repos and was the only step that failed on the v2.1.0 run.
+
+Local validation before push: `uv build` produces clean `2.1.1` sdist + wheel; `twine check --strict` passes; direct grep on the sdist confirms all six scrub tokens are absent; full `pytest tests/unit` sweep — 1,143 passed at 89.78 % coverage.
+
+
 
 ### History Scrub for Public Release (May 20, 2026)
 

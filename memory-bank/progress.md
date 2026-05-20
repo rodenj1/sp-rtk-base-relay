@@ -1,5 +1,21 @@
 # Progress
 
+## Current Status — v2.1.1 Release (May 20, 2026)
+
+**Bumped version `2.1.0` → `2.1.1`** to ship the scrubbed source tree to PyPI as a new release (PyPI does not allow re-uploading the same version). `2.1.0` is the original publish from the dirty tree (no real secrets in the sdist, but Bluetooth MAC + device-name docstring examples remained). `2.1.1` ships fully scrubbed sdist + wheel.
+
+**Workflow fix** — `release-signing-artifacts: false` added to the sigstore step in `.github/workflows/release.yml`. The default (`true`) made sigstore try to download `https://github.com/<owner>/<repo>/archive/refs/tags/<tag>.zip` which 404s on private repos and caused the v2.1.0 Release workflow to fail at the final "Sign & attach" step (PyPI publish itself succeeded). We only need to sign the actual sdist + wheel we built — GitHub's auto-generated source archive is a redundant copy. Now works on both private and public repos.
+
+**Validation**:
+- `uv build` → `sp_rtk_base_relay-2.1.1.tar.gz` + `sp_rtk_base_relay-2.1.1-py3-none-any.whl`.
+- `twine check --strict` PASSED.
+- Direct scan of sdist for all six tokens → **all clean**.
+- `pytest tests/unit -q` → 1,143 passed, 89.78 % coverage.
+
+**Next**: commit + push, tag `v2.1.1`, create GitHub Release → triggers the workflow → PyPI 2.1.1 + signed GitHub Release assets.
+
+---
+
 ## Current Status — History Scrub for Public Release (May 20, 2026)
 
 **History scrubbed** for public release. Six tokens (`dae5`, `RODEN01`, `91.186.9.136`, `98:D3:51:FE:FE:E4`, `98_D3_51_FE_FE_E4`, `RTK_BASE_ROD`) replaced everywhere in the working tree (commit `4cc62da`) and across all 86 commits of git history (`git filter-repo --replace-text`). `main` rewritten `87f94e1` → `5bd8a89`, `v2.1.0` tag rewritten to `3c1c3c7`, force-pushed to origin. The previously tracked `config.bluetooth-gps.yaml` is now `config.bluetooth-gps.example.yaml`; the live filename is in `.gitignore`. `uv.lock` was protected from a hex-collision (`8ca8dae51…` inside a pytest_asyncio SHA-256) by using `\bdae5\b` word-boundary regex. All 1,143 tests pass, ruff + mypy strict + pyright strict still clean. Caster password was rotated on the caster *before* the rewrite, so the leaked `dae5` value is invalidated. **Residual exposure (accepted)**: GitHub's `refs/pull/1…6/head` server-managed PR refs still resolve to the pre-scrub commits and cannot be deleted via `git push`. See `activeContext.md` for the full sequence + replacement table.

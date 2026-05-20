@@ -19,11 +19,52 @@ permissions:
 
 jobs:
   # ------------------------------------------------------------------
+  # pre-commit — runs the full pre-commit hook suite on every file in
+  # the repo.  Catches contributors who bypassed local hooks with
+  # `git commit --no-verify`.  Hooks themselves (ruff, gitleaks,
+  # whitespace etc.) are pinned in .pre-commit-config.yaml.
+  # ------------------------------------------------------------------
+  pre-commit:
+    name: pre-commit (all files)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install uv and Python 3.12
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked --all-extras
+
+      - name: Cache pre-commit hook environments
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-
+
+      - name: Run pre-commit on all files
+        # SKIP the pre-push hooks (mypy/pyright/pytest) — they're
+        # heavy and already covered by the `lint` + `test` jobs below.
+        env:
+          SKIP: mypy,pyright,pytest-unit
+        run: uv run pre-commit run --all-files --show-diff-on-failure --color=always
+
+  # ------------------------------------------------------------------
   # Lint / format / type-check (single Python version, fast-fail gate)
   # ------------------------------------------------------------------
   lint:
     name: Lint & Type Check
     runs-on: ubuntu-latest
+    needs: pre-commit
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

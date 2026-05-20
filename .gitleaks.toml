@@ -1,0 +1,113 @@
+# Gitleaks configuration for sp-rtk-base-relay.
+#
+# Extends the default ruleset (~100+ built-in detectors for AWS, GitHub,
+# PyPI, Stripe, Slack, SSH keys, generic high-entropy strings, etc.) with
+# project-specific rules.
+#
+# Custom rules below explicitly forbid the six identifier strings we had
+# to scrub from git history on May 20, 2026.  They must never re-enter the
+# repo, even as docstring examples.
+#
+# Docs: https://github.com/gitleaks/gitleaks#configuration
+
+[extend]
+# Inherit gitleaks' default rules (recommended starting point).
+useDefault = true
+
+# ============================================================================
+# Custom rules — historical scrub tokens
+# ============================================================================
+#
+# These six strings appeared in the working tree and were replaced both at
+# HEAD (commit 4cc62da) and across 86 commits of git history via
+# `git filter-repo --replace-text` on May 20, 2026.  See activeContext.md
+# for the full sequence.
+#
+# We use word-boundary regexes (`\b`) where appropriate so we don't trip
+# on coincidental hex substrings (lesson learned: `8ca8dae51…` inside
+# uv.lock's pytest_asyncio SHA-256 collided with the unbounded `dae5`
+# pattern during the original scrub).
+
+[[rules]]
+id = "scrub-rtcm-caster-password"
+description = "Real RTCM caster password from the original Sure-Path leak."
+regex = '''\bdae5\b'''
+tags = ["scrub", "credential"]
+
+[[rules]]
+id = "scrub-ntrip-mountpoint-username"
+description = "Real NTRIP mountpoint/username from the original Sure-Path leak."
+regex = '''RODEN01'''
+tags = ["scrub", "credential"]
+
+[[rules]]
+id = "scrub-rtcm-caster-ip"
+description = "Real RTCM caster IP address."
+regex = '''91\.186\.9\.136'''
+tags = ["scrub", "infrastructure"]
+
+[[rules]]
+id = "scrub-bt-mac-colon"
+description = "Real Bluetooth GPS device MAC address (colon form)."
+regex = '''98:D3:51:FE:FE:E4'''
+tags = ["scrub", "device-id"]
+
+[[rules]]
+id = "scrub-bt-mac-underscore"
+description = "Real Bluetooth GPS device MAC address (BlueZ DBus underscore form)."
+# No leading \b — `_` is a regex word character, so the preceding `_` in
+# `dev_98_D3_...` would suppress the match.  Same gotcha we hit during
+# the original filter-repo pass.
+regex = '''98_D3_51_FE_FE_E4'''
+tags = ["scrub", "device-id"]
+
+[[rules]]
+id = "scrub-bt-device-name"
+description = "Real Bluetooth GPS device advertised name."
+regex = '''RTK_BASE_ROD'''
+tags = ["scrub", "device-id"]
+
+# ============================================================================
+# Allowlist — files that legitimately contain hex/IP/secret-like patterns
+# ============================================================================
+#
+# Without these, gitleaks' generic high-entropy and "IP-address-near-port"
+# rules would flag uv.lock (full of SHA-256 hashes), example configs (full
+# of placeholder credentials), and test fixtures (full of synthetic data).
+[allowlist]
+description = "Paths and patterns that legitimately contain secret-shaped strings."
+
+paths = [
+    # Lockfile is full of SHA-256 hashes that look like high-entropy secrets.
+    '''^uv\.lock$''',
+    # Example configurations contain placeholder credentials.
+    '''.*\.example\.ya?ml$''',
+    '''^config\..*\.example\.ya?ml$''',
+    # Test fixtures and mocks intentionally use synthetic credentials.
+    '''^tests/fixtures/''',
+    # Documentation references credential patterns in prose without
+    # actual values; commit content is reviewed at PR time anyway.
+    '''^docs/.*\.md$''',
+    # Memory bank documents the scrub itself and intentionally lists the
+    # six tokens we're forbidding — but only inside the historical record,
+    # not as live values.  Reviewed at PR time.
+    '''^memory-bank/.*\.md$''',
+    # This file itself contains the forbidden patterns by definition.
+    '''^\.gitleaks\.toml$''',
+    # Pre-commit config mentions the scrub for context.
+    '''^\.pre-commit-config\.yaml$''',
+]
+
+regexes = [
+    # Placeholder/example values from our docs and config samples.
+    '''your[_-]password''',
+    '''your[_-]mountpoint''',
+    '''your[_-]username''',
+    '''rtcm\.example\.com''',
+    '''example\.com''',
+    # Standard "fake MAC" used in IETF / Wireshark example traffic.
+    '''00:11:22:33:44:55''',
+    '''00_11_22_33_44_55''',
+    # Generic example/dummy device name we adopted post-scrub.
+    '''RTK_GPS_BASE''',
+]

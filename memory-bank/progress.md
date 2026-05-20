@@ -1,5 +1,62 @@
 # Progress
 
+## Current Status — Pre-commit + CI Hardening (May 20, 2026)
+
+**Local + CI hook pipeline added** so contributors can never accidentally
+re-leak the six historical identifiers, never push lint/format breakage,
+and always land Conventional-Commits-shaped commit messages.
+
+New files:
+- `.pre-commit-config.yaml` — three stages: fast pre-commit
+  (whitespace/EOF, YAML/TOML check, large-file guard, ruff lint/format,
+  **gitleaks** secret diff scan), commit-msg (commitizen against custom
+  schema), pre-push (mypy strict + pyright strict + pytest unit suite).
+- `.gitleaks.toml` — custom rules forbidding the six scrubbed tokens
+  plus the standard secret patterns; allowlists every memory-bank,
+  changelog, and docstring location where the strings legitimately
+  appear as historical record.
+- `CONTRIBUTING.md` — onboarding doc with quickstart, hook overview,
+  Conventional Commits 1.0.0 type/scope table, breaking-change syntax,
+  and how to bypass hooks in emergencies (CI still re-runs them).
+- `tools/install-dev.sh` — idempotent dev bootstrap (`uv sync
+  --all-extras` + `pre-commit install` for all three hook types).
+  Disambiguated from the existing `tools/install.sh`, which is the
+  **production systemd installer** and intentionally stays untouched.
+
+Modified files:
+- `pyproject.toml` — added `commitizen>=4.0.0` to both `[project.optional-dependencies].dev`
+  and `[dependency-groups].dev`, plus `[tool.commitizen]` + `[tool.commitizen.customize]`
+  blocks.  We use `cz_customize` (not `cz_conventional_commits`) so the
+  Angular type list can be extended with `release` and `security`, both
+  of which we use in practice.  Schema pattern, bump map, and SemVer
+  policy all encoded so `uv run cz bump` can drive future version bumps
+  if we want it.
+- `.github/workflows/ci.yml` — new `pre-commit` job runs `pre-commit run
+  --all-files` with `SKIP=mypy,pyright,pytest-unit` (those are already
+  covered by the matrix `lint` + `test` jobs).  Acts as the safety net
+  for contributors who used `git commit --no-verify`.  `lint` job now
+  `needs: pre-commit`.  Caches `~/.cache/pre-commit` keyed on the
+  config hash via `actions/cache@v5.0.5` (SHA pinned).
+- `README.md` — Development section now points at `./tools/install-dev.sh`
+  and adds a Contributing subsection linking to CONTRIBUTING.md.
+
+Validation:
+- `uv run pre-commit run --all-files` → **all 11 hooks pass clean** on
+  the entire tree (after a one-time auto-fix of pre-existing trailing
+  whitespace / EOF newline drift in 20 files).
+- `uv run cz check --message ...` smoke-tested against 14 sample
+  messages — all 12 valid Conventional-Commits messages (including
+  `release:`, `security:`, scoped, `!`-breaking, Merge/Revert) pass; the
+  two malformed messages (`bad message without prefix`, `WIP`) correctly
+  fail.
+- gitleaks scan of the working tree → 0 findings (the six scrubbed
+  tokens are no longer present anywhere in tracked files).
+
+This unblocks confident community contributions ahead of the v2.1.2+
+PyPI releases.
+
+---
+
 ## Current Status — v2.1.1 Release (May 20, 2026)
 
 **Bumped version `2.1.0` → `2.1.1`** to ship the scrubbed source tree to PyPI as a new release (PyPI does not allow re-uploading the same version). `2.1.0` is the original publish from the dirty tree (no real secrets in the sdist, but Bluetooth MAC + device-name docstring examples remained). `2.1.1` ships fully scrubbed sdist + wheel.

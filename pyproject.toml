@@ -39,6 +39,7 @@ dev = [
     "ruff>=0.6.0",
     "pylint>=2.17.0",
     "pre-commit>=3.0.0",
+    "commitizen>=4.0.0",
 ]
 
 [project.scripts]
@@ -199,4 +200,69 @@ dev = [
     "ruff>=0.6.0",
     "mypy>=1.5.0",
     "pylint>=2.17.0",
+    "pre-commit>=3.0.0",
+    "commitizen>=4.0.0",
 ]
+
+# Commitizen — enforces Conventional Commits 1.0.0 on commit messages
+# via the pre-commit hook configured in .pre-commit-config.yaml.
+# Also drives `uv run cz bump` for SemVer-aware version + changelog
+# automation (optional; the release workflow doesn't depend on it).
+#
+# Conventional Commits spec: https://www.conventionalcommits.org/en/v1.0.0/
+#
+# We use `cz_customize` (not `cz_conventional_commits`) so we can extend
+# the default Angular type list with `release` and `security`, both of
+# which we use in practice.  The Conventional Commits spec explicitly
+# permits projects to define their own type vocabulary.
+[tool.commitizen]
+name = "cz_customize"
+version = "2.1.1"
+version_provider = "pep621"
+version_files = [
+    "src/sp_rtk_base_relay/__init__.py:__version__",
+]
+tag_format = "v$version"
+update_changelog_on_bump = true
+major_version_zero = false
+# Lines that bypass the schema check (merge commits, manual reverts,
+# fixup/squash markers used during rebase).
+allowed_prefixes = [
+    "Merge",
+    "Revert",
+    "Pull request",
+    "fixup!",
+    "squash!",
+]
+bump_message = "release: bump $current_version -> $new_version"
+
+[tool.commitizen.customize]
+# Conventional Commits 1.0.0 header pattern:
+#   <type>(<scope>)?!?: <subject>
+#
+# Allowed types: feat, fix, docs, style, refactor, perf, test, build,
+#                ci, chore, revert, release, security.
+# Scope: optional, lowercase identifier (a-z0-9_-, dots, slashes,
+#        commas for multi-scope).
+# Optional `!` after type/scope marks a breaking change.
+# Subject: at least one character.
+#
+# Verified at commit-msg time by the `commitizen` pre-commit hook.
+message_template = "{{change_type}}{% if scope %}({{scope}}){% endif %}: {{subject}}"
+schema = "<type>(<scope>): <subject>"
+schema_pattern = "^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|release|security)(\\([a-z0-9_\\-.,/]+\\))?!?: .+"
+bump_pattern = "^(feat|fix|perf|refactor|release)"
+# SemVer bump policy when `cz bump` is used:
+#   BREAKING CHANGE / `!` -> MAJOR
+#   feat                  -> MINOR
+#   everything else above -> PATCH
+bump_map = {"BREAKING CHANGE" = "MAJOR", "feat" = "MINOR", "fix" = "PATCH", "perf" = "PATCH", "refactor" = "PATCH", "release" = "PATCH"}
+change_type_order = ["BREAKING CHANGE", "feat", "fix", "security", "perf", "refactor", "release", "docs", "test", "build", "ci", "chore"]
+info = """
+Allowed commit types: feat, fix, docs, style, refactor, perf, test,
+build, ci, chore, revert, release, security.
+
+Format: <type>(<optional-scope>): <short subject in imperative mood>
+
+See CONTRIBUTING.md and https://www.conventionalcommits.org/en/v1.0.0/
+"""

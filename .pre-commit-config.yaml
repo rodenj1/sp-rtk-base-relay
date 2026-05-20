@@ -1,0 +1,128 @@
+# Pre-commit hooks for sp-rtk-base-relay.
+#
+# Three hook stages, fastest-first:
+#
+#   pre-commit  — runs on every `git commit`, must be fast (<5 s):
+#                 whitespace + YAML/TOML basics, ruff lint + format, gitleaks.
+#   commit-msg  — runs on every `git commit` against the message:
+#                 commitizen enforces Conventional Commits 1.0.0.
+#   pre-push    — runs once before `git push`, slow OK:
+#                 mypy strict, pyright strict, full pytest unit suite.
+#
+# Install (run once after clone):
+#   uv run pre-commit install \
+#       --install-hooks --hook-type pre-commit \
+#       --hook-type commit-msg --hook-type pre-push
+#
+# tools/install.sh runs this automatically when a .git directory is present,
+# so contributors who bootstrap via that script get the hooks for free.
+#
+# Bypass (use only in emergencies — CI will still enforce):
+#   git commit --no-verify
+#   git push   --no-verify
+#
+# See CONTRIBUTING.md for the full contributor workflow.
+
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+  - pre-push
+
+# Fail fast: stop at the first failing hook.  Easier to fix one thing at a
+# time than to wade through a wall of unrelated complaints.
+fail_fast: false
+
+repos:
+  # ------------------------------------------------------------------
+  # Stock hygiene checks — whitespace, EOF, YAML/TOML validity, large
+  # files, merge conflicts.  Pinned to the most recent stable tag.
+  # ------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-yaml
+        # uv.lock / pyproject.toml aren't YAML; the CI workflow files
+        # contain GitHub-Actions-specific extensions that this hook
+        # doesn't understand (e.g. !!str on workflow_dispatch inputs).
+        # Explicitly limit to repo YAML we control.
+        files: '\.(yaml|yml)$'
+        exclude: '^(\.github/|.*\.lock)$'
+      - id: check-toml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-case-conflict
+
+  # ------------------------------------------------------------------
+  # Ruff — lint with auto-fix, then format.  Matches the version we
+  # pin in pyproject.toml so local runs and CI runs always agree.
+  # ------------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.11
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # ------------------------------------------------------------------
+  # Gitleaks — secret detection on the staged diff.  Custom rules in
+  # .gitleaks.toml extend the default ruleset with the six tokens we
+  # had to scrub from history on May 20, 2026, so they can never
+  # re-enter.
+  # ------------------------------------------------------------------
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  # ------------------------------------------------------------------
+  # Commitizen — enforce Conventional Commits 1.0.0 on commit messages.
+  # https://www.conventionalcommits.org/en/v1.0.0/
+  #
+  # Allowed types are configured under [tool.commitizen] in
+  # pyproject.toml (we add `release` and `security` to the default set).
+  # ------------------------------------------------------------------
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.0.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+  # ------------------------------------------------------------------
+  # Heavy local hooks — only run on `git push`, not on every commit.
+  # These call into the project's uv-managed venv so versions match
+  # CI exactly.
+  # ------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (strict, src/)
+        entry: uv run mypy src
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        types: [python]
+
+      - id: pyright
+        name: pyright (strict, src/)
+        entry: uv run pyright src
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        types: [python]
+
+      - id: pytest-unit
+        name: pytest (unit suite, no coverage gate)
+        # --no-cov disables coverage so the 70% fail-under gate from
+        # pyproject.toml doesn't apply at push time; CI still enforces it.
+        # -x stops at the first failure.
+        entry: uv run pytest tests/unit -q -x --no-cov
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        types: [python]

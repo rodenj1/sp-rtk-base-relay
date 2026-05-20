@@ -229,24 +229,37 @@ sp-rtk-base-relay/
 ## Development
 
 ```bash
-# Clone and install
+# Clone and install dev environment + pre-commit hooks (one shot)
 git clone https://github.com/rodenj1/sp-rtk-base-relay.git
 cd sp-rtk-base-relay
-uv sync --all-extras
-source .venv/bin/activate
+./tools/install-dev.sh
 
 # Run tests
 uv run pytest
 
 # Run with coverage
 uv run pytest --cov=src/sp_rtk_base_relay --cov-report=html
+
+# Run every pre-commit hook against every file
+uv run pre-commit run --all-files
 ```
+
+The `tools/install-dev.sh` script syncs the uv-managed venv with
+`--all-extras` and installs the project's pre-commit hooks
+(`pre-commit`, `commit-msg`, and `pre-push` stages).
 
 ### Code Quality Standards
 - Python 3.10+ with modern type hints (`dict`, `list`, `X | None`)
 - PEP8 code style, pyright strict mode
-- >88% test coverage (942 tests)
+- >88% test coverage (1,143 tests)
 - UV package management
+- Pre-commit hooks block secrets (gitleaks), enforce lint/format (ruff),
+  validate commit messages ([Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
+  via commitizen), and run mypy + pyright + pytest on push.
+
+### Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow — pre-commit
+pipeline, commit-message format, allowed types/scopes, and release process.
 
 ## CLI Usage
 

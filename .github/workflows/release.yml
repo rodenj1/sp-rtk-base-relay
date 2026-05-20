@@ -139,8 +139,12 @@ jobs:
         run: uv run pyright src
 
       - name: pylint (advisory)
+        # --exit-zero: pylint exits 0 even when it finds messages.  Without
+        # this, pylint's bitmask exit code (e.g. 28 = warning+refactor+
+        # convention) bubbles up as a red "::error" annotation in GitHub's
+        # UI even though `continue-on-error: true` keeps the job green.
         continue-on-error: true
-        run: uv run pylint src
+        run: uv run pylint --exit-zero src
 
   # ------------------------------------------------------------------
   # Unit tests — matrix across Python 3.10, 3.11, 3.12, 3.13

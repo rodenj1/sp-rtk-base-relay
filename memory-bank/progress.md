@@ -1,5 +1,11 @@
 # Progress
 
+## Current Status — History Scrub for Public Release (May 20, 2026)
+
+**History scrubbed** for public release. Six tokens (`dae5`, `RODEN01`, `91.186.9.136`, `98:D3:51:FE:FE:E4`, `98_D3_51_FE_FE_E4`, `RTK_BASE_ROD`) replaced everywhere in the working tree (commit `4cc62da`) and across all 86 commits of git history (`git filter-repo --replace-text`). `main` rewritten `87f94e1` → `5bd8a89`, `v2.1.0` tag rewritten to `3c1c3c7`, force-pushed to origin. The previously tracked `config.bluetooth-gps.yaml` is now `config.bluetooth-gps.example.yaml`; the live filename is in `.gitignore`. `uv.lock` was protected from a hex-collision (`8ca8dae51…` inside a pytest_asyncio SHA-256) by using `\bdae5\b` word-boundary regex. All 1,143 tests pass, ruff + mypy strict + pyright strict still clean. Caster password was rotated on the caster *before* the rewrite, so the leaked `dae5` value is invalidated. **Residual exposure (accepted)**: GitHub's `refs/pull/1…6/head` server-managed PR refs still resolve to the pre-scrub commits and cannot be deleted via `git push`. See `activeContext.md` for the full sequence + replacement table.
+
+**Next**: flip the repo to public, then proceed with the first PyPI release (steps below).
+
 ## Current Status — PyPI Release Workflow Added (May 20, 2026)
 
 **PyPI release pipeline**: `.github/workflows/release.yml` added — triggered by `release: published`, verifies tag ↔ `pyproject.toml` version match, re-runs full lint + matrix tests (3.10/3.11/3.12/3.13), builds sdist+wheel, validates with `twine check --strict`, publishes to PyPI via **Trusted Publishing (OIDC)** using the `pypi` GitHub environment (no API token secrets), then sigstore-signs the artifacts and attaches them (plus `.sigstore` bundles) to the GitHub Release. `pyproject.toml` Development Status classifier bumped `3 - Alpha` → `4 - Beta`. Release runbook at `docs/release-process.md`. README updated with PyPI / Release badges and a "Releasing" section.
@@ -7,7 +13,8 @@
 **Manual one-time setup remaining (user action)**:
 1. Register a *pending publisher* on pypi.org for `sp-rtk-base-relay` (owner: `rodenj1`, repo: `sp-rtk-base-relay`, workflow: `release.yml`, environment: `pypi`).
 2. Create the `pypi` environment in GitHub repo settings.
-3. Draft + publish the first GitHub Release (tag `v2.1.0`) to trigger the workflow.
+3. Flip the GitHub repo to public.
+4. Draft + publish the first GitHub Release (tag `v2.1.0`) to trigger the workflow.
 
 ---
 

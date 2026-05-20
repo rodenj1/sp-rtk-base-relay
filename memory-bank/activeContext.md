@@ -2,7 +2,35 @@
 
 ## Current Work Focus
 
-**Primary Objective**: SP-RTK-Base-Relay v2.1 COMPLETE + project renamed + CI added + v2.1 observability expansion + new Grafana dashboard + **PyPI release pipeline (May 20, 2026)** → Next: first PyPI publish + sp-base integration
+**Primary Objective**: SP-RTK-Base-Relay v2.1 COMPLETE + project renamed + CI added + v2.1 observability expansion + new Grafana dashboard + PyPI release pipeline + **history scrub for public release (May 20, 2026)** → Next: flip repo to public, draft GitHub Release `v2.1.0` to trigger first PyPI publish, sp-base integration
+
+### History Scrub for Public Release (May 20, 2026)
+
+Before going public the codebase + history were swept for live secrets/identifiers. Six tokens were replaced everywhere they appeared:
+
+| Original | Replacement | Notes |
+|---|---|---|
+| `dae5` | `your_password` | RTCM caster password (rotated on the caster before the rewrite). Replaced with `\bdae5\b` regex so the coincidental `8ca8dae51…` hex inside `uv.lock`'s pytest_asyncio wheel SHA-256 is left intact. |
+| `RODEN01` | `your_mountpoint` | RTCM mountpoint / username. |
+| `91.186.9.136` | `rtcm.example.com` | RTCM caster IP. |
+| `98:D3:51:FE:FE:E4` | `00:11:22:33:44:55` | Bluetooth GPS MAC (colon form). |
+| `98_D3_51_FE_FE_E4` | `00_11_22_33_44_55` | Same MAC as it appears inside BlueZ DBus paths like `/org/bluez/hci0/dev_98_D3_51_FE_FE_E4` — the leading `\b` was dropped from this pattern because `_` is a regex word char, so the preceding `_` in `dev_98` would have suppressed the match. |
+| `RTK_BASE_ROD` | `RTK_GPS_BASE` | Bluetooth device name. |
+
+Sequence (all on `main`, May 20, 2026):
+
+1. **Pre-flight backups** — local mirror clone at `/opt/development/sp-rtk-base-relay-backup.git`, annotated tag `v2.1.0-pre-scrub`, branch `pre-history-scrub-backup` pushed to origin, live config saved to `/opt/development/sp-rtk-base-relay.local-config.bak.yaml`.
+2. **Current-tree scrub** (commit `4cc62da`):
+   - `git mv config.bluetooth-gps.yaml config.bluetooth-gps.example.yaml`, then redacted.
+   - `config.bluetooth-gps.yaml` added to `.gitignore` so the live file stays untracked.
+   - Bulk `sed -i` across 25 files (config templates, docs, 3 source modules, 9 test files, 4 Bluetooth tool scripts, the systemd unit).
+   - `uv.lock` was reverted from `HEAD` because the bulk sed had clobbered the pytest_asyncio hex hash (hex-collision).
+   - Full gate green: `1143 tests pass`, ruff lint + format + mypy strict + pyright strict all clean.
+3. **History rewrite** — `git filter-repo --replace-text /tmp/secrets-scrub.txt --force` rewrote 86 commits across all refs in ~1.5 s. A second filter-repo pass was needed for the `98_D3_51_FE_FE_E4` BlueZ form (the leading `\b` issue above). All five real-secret tokens now scrub-clean across every reachable ref locally.
+4. **Force-push** — `main` `87f94e1` → `5bd8a89`, `v2.1.0` tag `87f94e1` → `3c1c3c7`. Deleted the `v2.1.0-pre-scrub` tag and `pre-history-scrub-backup` branch from origin.
+5. **Live config restored** — `config.bluetooth-gps.yaml` copied back from the backup; the file holds the *pre-rotation* password and must be hand-edited to the new credential before restarting the service.
+
+**Known residual exposure (accepted)**: GitHub's `refs/pull/1/head … refs/pull/6/head` PR refs still point at the original pre-scrub commits and therefore continue to serve the real credentials to anyone who fetches those refs directly. PR refs are server-managed; `git push --delete` cannot remove them. Mitigations in place: caster password rotated (the `dae5` value is invalidated), MAC + Bluetooth device name are low-value identifiers, PR refs are an obscure access path. We're accepting this residual exposure and proceeding to public.
 
 ### PyPI Release Pipeline (May 20, 2026)
 

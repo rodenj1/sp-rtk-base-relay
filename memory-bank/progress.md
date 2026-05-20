@@ -12,7 +12,13 @@
 - Direct scan of sdist for all six tokens → **all clean**.
 - `pytest tests/unit -q` → 1,143 passed, 89.78 % coverage.
 
-**Next**: commit + push, tag `v2.1.1`, create GitHub Release → triggers the workflow → PyPI 2.1.1 + signed GitHub Release assets.
+**Released** — tag `v2.1.1` pushed, GitHub Release published, Release workflow ran end-to-end **all green** (run `26187581838`):
+- Verify-version, lint, full 3.10/3.11/3.12/3.13 matrix tests, build, **publish-pypi**, **sign & attach to GitHub Release** — every job ✅.
+- PyPI `sp_rtk_base_relay-2.1.1.tar.gz` + `.whl` live at https://pypi.org/project/sp-rtk-base-relay/2.1.1/ (simple index lists both 2.1.0 and 2.1.1).
+- GitHub Release `v2.1.1` has signed assets: `sp_rtk_base_relay-2.1.1-py3-none-any.whl`, `sp_rtk_base_relay-2.1.1.tar.gz`, plus matching `.sigstore.json` bundles for each.
+- The sigstore fix worked — the step that failed on 2.1.0 completed in 19 s on 2.1.1.
+
+**`pip install sp-rtk-base-relay==2.1.1` is the recommended install.** 2.1.0 remains available but with the docstring example-value leftovers; no need to yank since no real secrets were ever in the sdist.
 
 ---
 

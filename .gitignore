@@ -210,3 +210,6 @@ __marimo__/
 tests/integration/hardware_config.yaml
 tests/manual/production_config.yaml
 config.yaml
+# Live Bluetooth GPS config (copy from config.bluetooth-gps.example.yaml and
+# fill in your own caster credentials + device MAC/name).
+config.bluetooth-gps.yaml

@@ -77,7 +77,10 @@ def mock_rtcm_config() -> dict[str, Any]:
         "port": MOCK_RTCM_PORT,
         "bind_address": MOCK_RTCM_HOST,
         "heartbeat_interval": 1.0,
-        "valid_credentials": {"your_mountpoint": "your_password", "testuser": "testpass"},
+        "valid_credentials": {
+            "your_mountpoint": "your_password",
+            "testuser": "testpass",
+        },
     }
 
 

@@ -8,7 +8,7 @@ input:
   config:
     port: /dev/rfcomm0        # Bluetooth serial port created by bluetooth-gps.service
     baudrate: 115200          # PySerial standard field name
-    bytesize: 8               # PySerial standard field name  
+    bytesize: 8               # PySerial standard field name
     stopbits: 1               # PySerial standard field name
     parity: "N"               # PySerial standard: N (None), E (Even), O (Odd), M (Mark), S (Space)
     timeout: 1.0              # Read timeout in seconds

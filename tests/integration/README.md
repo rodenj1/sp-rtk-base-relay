@@ -309,27 +309,27 @@ AssertionError: Failed to connect to mock RTCM server
 @pytest.mark.manual
 class TestNewFeature:
     """Test description."""
-    
+
     def test_new_functionality(
         self,
         connected_tcp_input: TCPInputSource,
         skip_if_no_hardware: None
     ) -> None:
         """Test description.
-        
+
         Verifies:
         - Point 1
         - Point 2
         """
         logger.info("Testing new functionality")
-        
+
         try:
             # Test implementation
             result = connected_tcp_input.read_data(timeout=2.0)
             assert result is not None, "Should receive data"
-            
+
             logger.info("Test successful")
-            
+
         finally:
             # Cleanup if needed
             pass

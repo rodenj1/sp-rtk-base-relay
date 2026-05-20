@@ -93,11 +93,11 @@ if timeout "$TEST_DURATION" cat "$RFCOMM_DEVICE" > /tmp/gps_test_output 2>&1; th
     if [ -s /tmp/gps_test_output ]; then
         BYTES=$(wc -c < /tmp/gps_test_output)
         echo -e "${GREEN}✓ Data is flowing: $BYTES bytes received in ${TEST_DURATION}s${NC}"
-        
+
         # Show first few bytes (hex dump)
         echo "First 64 bytes (hex):"
         head -c 64 /tmp/gps_test_output | xxd -l 64
-        
+
         # Try to detect RTCM data (starts with 0xD3)
         if head -c 1000 /tmp/gps_test_output | xxd -p | grep -q 'd3'; then
             echo -e "${GREEN}✓ RTCM data detected (0xD3 preamble found)${NC}"

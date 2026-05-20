@@ -40,22 +40,22 @@ def signal_handler(signum: int, frame: Any) -> None:
 def main() -> None:
     """Main service loop with metrics integration."""
     global running
-    
+
     # Set up signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-    
+
     # Load configuration
     config_path = Path("config.yaml")
     config = ConfigManager.load_config(str(config_path))
-    
+
     # Set up logging
     setup_logging(config.logging)
     logger.info("SP-Base-Relay service starting with metrics enabled")
-    
+
     # Initialize metrics collector
     metrics = MetricsCollector(namespace="sp_rtk_base_relay")
-    
+
     # Start metrics HTTP server if enabled
     if config.metrics.enabled:
         try:
@@ -67,10 +67,10 @@ def main() -> None:
         except Exception as e:
             logger.error(f"Failed to start metrics server: {e}")
             logger.warning("Continuing without metrics")
-    
+
     # Initialize RTCM client
     rtcm_client = RTCMClient(config.server)
-    
+
     # Create input source
     if config.input.source == "tcp":
         input_config = {
@@ -90,16 +90,16 @@ def main() -> None:
         }
     else:
         raise ValueError(f"Unsupported input source: {config.input.source}")
-    
+
     source_type = "serial" if config.input.source in ("serial", "usb_serial") else config.input.source
     input_source = InputSourceFactory.create_input_source(source_type, input_config)
-    
+
     # Create data pipeline coordinator
     coordinator = DataPipelineCoordinator(input_source, rtcm_client)
-    
+
     # Track previous stats for delta calculations
     prev_stats = (None, None, None)
-    
+
     try:
         # Start the relay in a separate thread (non-blocking for metrics updates)
         import threading
@@ -109,9 +109,9 @@ def main() -> None:
             daemon=False
         )
         relay_thread.start()
-        
+
         logger.info("Data pipeline relay started")
-        
+
         # Main metrics collection loop
         while running and relay_thread.is_alive():
             # Collect and update all metrics
@@ -121,7 +121,7 @@ def main() -> None:
                 input_source,
                 *prev_stats
             )
-            
+
             # Log current status periodically
             if config.metrics.enabled:
                 logger.debug(
@@ -129,14 +129,14 @@ def main() -> None:
                     f"Input={'connected' if input_source.is_connected else 'disconnected'}, "
                     f"Pipeline={'running' if coordinator.is_running else 'stopped'}"
                 )
-            
+
             # Sleep before next update (5 second interval)
             time.sleep(5)
-        
+
         # If loop exited due to relay thread stopping
         if not relay_thread.is_alive():
             logger.warning("Relay thread stopped unexpectedly")
-        
+
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received")
     except Exception as e:
@@ -144,10 +144,10 @@ def main() -> None:
     finally:
         # Graceful shutdown
         logger.info("Shutting down service")
-        
+
         # Stop relay
         coordinator.stop_relay()
-        
+
         # Final metrics update
         if config.metrics.enabled:
             metrics.collect_all_metrics(
@@ -156,11 +156,11 @@ def main() -> None:
                 input_source,
                 *prev_stats
             )
-        
+
         # Stop metrics server
         if config.metrics.enabled:
             metrics.stop_metrics_server()
-        
+
         logger.info("Service shutdown complete")
 
 

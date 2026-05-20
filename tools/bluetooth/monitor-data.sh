@@ -53,16 +53,16 @@ format_bytes() {
 while true; do
     # Read data for UPDATE_INTERVAL seconds
     BYTES_READ=$(timeout $UPDATE_INTERVAL cat "$RFCOMM_DEVICE" | wc -c)
-    
+
     if [ $BYTES_READ -gt 0 ]; then
         TOTAL_BYTES=$((TOTAL_BYTES + BYTES_READ))
         CURRENT_TIME=$(date +%s)
         ELAPSED=$((CURRENT_TIME - START_TIME))
-        
+
         # Calculate rates
         RATE_BPS=$((BYTES_READ / UPDATE_INTERVAL))
         AVG_RATE=$((TOTAL_BYTES / ELAPSED))
-        
+
         # Display statistics
         clear
         echo -e "${BLUE}=== Bluetooth GPS Data Monitor ===${NC}"

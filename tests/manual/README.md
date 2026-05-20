@@ -101,12 +101,12 @@ input:
 12:01:02 [INFO] __main__: Messages Sent: 60
 12:01:02 [INFO] __main__: Average Throughput: 1.09 KB/s
 12:01:02 [INFO] __main__: Heartbeats Received: 60
-12:01:02 [INFO] __main__: 
+12:01:02 [INFO] __main__:
 12:01:02 [INFO] __main__: Input Source Statistics:
 12:01:02 [INFO] __main__:   Read Attempts: 65
 12:01:02 [INFO] __main__:   Read Successes: 60
 12:01:02 [INFO] __main__:   Read Errors: 0
-12:01:02 [INFO] __main__: 
+12:01:02 [INFO] __main__:
 12:01:02 [INFO] __main__: RTCM Server Statistics:
 12:01:02 [INFO] __main__:   Send Attempts: 60
 12:01:02 [INFO] __main__:   Send Successes: 60
@@ -339,7 +339,7 @@ server:
   port: 50010
   username: "TEST_USER"
   password: "test_pass"
-  
+
 input:
   source: "tcp"
   config:

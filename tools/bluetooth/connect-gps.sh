@@ -64,10 +64,10 @@ sudo rfcomm bind "${RFCOMM_DEVICE}" "$GPS_MAC" "${RFCOMM_CHANNEL}"
 if [ -e "/dev/rfcomm${RFCOMM_DEVICE}" ]; then
     echo -e "${GREEN}Success! Serial port created: /dev/rfcomm${RFCOMM_DEVICE}${NC}"
     ls -l "/dev/rfcomm${RFCOMM_DEVICE}"
-    
+
     # Set proper permissions
     sudo chmod 666 "/dev/rfcomm${RFCOMM_DEVICE}"
-    
+
     echo ""
     echo -e "${GREEN}You can now use /dev/rfcomm${RFCOMM_DEVICE} with sp-rtk-base-relay${NC}"
 else

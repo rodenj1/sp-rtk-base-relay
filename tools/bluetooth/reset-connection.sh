@@ -62,7 +62,7 @@ sleep 1
 if [ -e "/dev/rfcomm${RFCOMM_DEVICE}" ]; then
     log "Step 7: Setting permissions..."
     chmod 666 "/dev/rfcomm${RFCOMM_DEVICE}"
-    
+
     # Verify device is actually readable
     if timeout 2 head -c 1 /dev/rfcomm${RFCOMM_DEVICE} >/dev/null 2>&1; then
         log "=== Bluetooth GPS Recovery SUCCESSFUL ==="

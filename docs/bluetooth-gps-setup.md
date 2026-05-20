@@ -441,10 +441,10 @@ For time-critical RTCM corrections, optimize your configuration:
 input:
   config:
     buffer_size: 2048  # Smaller buffer for lower latency
-    
+
 logging:
   level: WARNING  # Reduce logging overhead
-  
+
 metrics:
   enabled: false  # Disable if not needed
 ```

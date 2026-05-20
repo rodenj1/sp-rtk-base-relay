@@ -37,18 +37,18 @@ SP-Base-Relay now supports **native Python Bluetooth** via the BlueZ D-Bus API. 
 ```yaml
 input:
   type: bluetooth
-  
+
   # Auto-discover by name
   device_name: "RTK_GPS_BASE"
-  
+
   # Or use MAC address
   # mac_address: "00:11:22:33:44:55"
-  
+
   # Auto-pairing
   auto_pair: true
   auto_trust: true
   pin: "0000"
-  
+
   # Adapter & timeouts
   adapter_name: "hci0"
   scan_timeout: 10

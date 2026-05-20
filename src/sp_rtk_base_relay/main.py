@@ -334,13 +334,13 @@ def create_parser() -> argparse.ArgumentParser:
 Examples:
   # Start service with configuration file
   sp-rtk-base-relay --config /etc/sp-rtk-base-relay/config.yaml
-  
+
   # Validate configuration
   sp-rtk-base-relay --config config.yaml --validate
-  
+
   # Generate example configuration
   sp-rtk-base-relay --generate-config > config.yaml
-  
+
   # Run in foreground with debug logging
   sp-rtk-base-relay --config config.yaml --foreground --log-level DEBUG
         """,

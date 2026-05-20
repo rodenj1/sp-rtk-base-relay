@@ -332,10 +332,10 @@ def main():
 Examples:
   # Run with default 60 second duration
   python tests/manual/test_production_rtcm.py
-  
+
   # Run for 5 minutes
   python tests/manual/test_production_rtcm.py --duration 300
-  
+
   # Use custom config file
   python tests/manual/test_production_rtcm.py --config my-config.yaml
         """,

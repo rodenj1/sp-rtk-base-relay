@@ -2,7 +2,27 @@
 
 ## Current Work Focus
 
-**Primary Objective**: SP-RTK-Base-Relay v2.1 COMPLETE + project renamed + CI added + **v2.1 observability expansion + new Grafana dashboard** → Next: sp-base integration (April 2026)
+**Primary Objective**: SP-RTK-Base-Relay v2.1 COMPLETE + project renamed + CI added + v2.1 observability expansion + new Grafana dashboard + **PyPI release pipeline (May 20, 2026)** → Next: first PyPI publish + sp-base integration
+
+### PyPI Release Pipeline (May 20, 2026)
+
+`.github/workflows/release.yml` added — fires on `release: published`, gated on tag↔`pyproject.toml` version match, re-runs full lint + matrix tests (3.10/3.11/3.12/3.13), builds sdist+wheel, `twine check --strict`, publishes via **Trusted Publishing (OIDC)** to the `pypi` GitHub environment (no token secrets), sigstore-signs the artifacts, and attaches `.tar.gz` / `.whl` / `.sigstore` bundles back to the GitHub Release.
+
+Companion changes:
+- `pyproject.toml`: Development Status `3 - Alpha` → `4 - Beta`.
+- `docs/release-process.md`: full runbook covering the one-time PyPI pending-publisher registration, `pypi` environment creation, per-release checklist, and troubleshooting (tag mismatch, pre-release rejection, transient PyPI errors, re-run via `workflow_dispatch`).
+- `README.md`: added Release workflow badge + PyPI version / Python-versions / monthly-downloads badges + "Releasing" section pointing at the runbook.
+- Memory bank updated.
+
+User must complete two manual one-time steps before the first release runs:
+1. PyPI → Your account → Publishing → **Add a pending publisher** for `sp-rtk-base-relay` with workflow `release.yml` and environment `pypi`.
+2. GitHub repo Settings → Environments → create environment named `pypi` (no required reviewers needed unless desired).
+
+Then drafting + publishing a GitHub Release for tag `v2.1.0` triggers the pipeline end-to-end (~5–8 min).
+
+---
+
+
 
 **Status**: v2.1 Phases 0–5 COMPLETE. Project renamed `sp-base-relay` → `sp-rtk-base-relay` on `main` (April 21, 2026, commit `f9c2a35`). GitHub Actions CI workflow added and **GREEN** on `main` (April 21, 2026, run 24759164665) — lint + matrix unit tests on Python 3.10/3.11/3.12/3.13 + build all passing. Phase 6 (cleanup) pending. sp-base integration next.
 
@@ -143,9 +163,15 @@ API spec: `docs/relay-engine-api-spec.md`
 **Total unit tests**: 1,106 passing
 
 ### Next Steps
-1. **(Optional) Rotate `CODECOV_TOKEN`** via Codecov → Settings → Coverage — the UUID was exposed in chat history during setup. Not urgent (private repo, Codecov only), but good hygiene.
-2. **Phase 6**: sp-rtk-base-relay cleanup (remove probe_gps.py, revert pyubx2, README, integration tests)
-3. **Lint baseline cleanup**: address items in `[tool.ruff.lint.ignore]` legacy baseline in follow-up PRs, then remove the ignores one-by-one
+1. **First PyPI release**:
+   - Register pending publisher on pypi.org (project `sp-rtk-base-relay`, owner `rodenj1`, repo `sp-rtk-base-relay`, workflow `release.yml`, environment `pypi`).
+   - Create the `pypi` environment in the GitHub repo settings.
+   - Commit + push the release pipeline branch, draft GitHub Release `v2.1.0`, publish to trigger `release.yml`.
+   - Verify `pip install sp-rtk-base-relay==2.1.0` works post-publish.
+   - See `docs/release-process.md` for the full runbook.
+2. **(Optional) Rotate `CODECOV_TOKEN`** via Codecov → Settings → Coverage — the UUID was exposed in chat history during setup. Not urgent (private repo, Codecov only), but good hygiene.
+3. **Phase 6**: sp-rtk-base-relay cleanup (remove probe_gps.py, revert pyubx2, README, integration tests)
+4. **Lint baseline cleanup**: address items in `[tool.ruff.lint.ignore]` legacy baseline in follow-up PRs, then remove the ignores one-by-one
 
 ---
 

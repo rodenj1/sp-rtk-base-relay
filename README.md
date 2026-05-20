@@ -3,8 +3,11 @@
 A Python service that relays RTCM correction data from RTK GPS base stations to **multiple destinations** simultaneously — Sure-Path servers, NTRIP casters, and local TCP clients.
 
 [![CI](https://github.com/rodenj1/sp-rtk-base-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/rodenj1/sp-rtk-base-relay/actions/workflows/ci.yml)
+[![Release](https://github.com/rodenj1/sp-rtk-base-relay/actions/workflows/release.yml/badge.svg)](https://github.com/rodenj1/sp-rtk-base-relay/actions/workflows/release.yml)
 [![codecov](https://codecov.io/gh/rodenj1/sp-rtk-base-relay/branch/main/graph/badge.svg?token=T5XTVO92KQ)](https://codecov.io/gh/rodenj1/sp-rtk-base-relay)
-[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/downloads/)
+[![PyPI version](https://img.shields.io/pypi/v/sp-rtk-base-relay.svg)](https://pypi.org/project/sp-rtk-base-relay/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/sp-rtk-base-relay.svg)](https://pypi.org/project/sp-rtk-base-relay/)
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/sp-rtk-base-relay.svg)](https://pypi.org/project/sp-rtk-base-relay/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
@@ -326,8 +329,18 @@ v2.0 is a **breaking change**. Key differences:
 
 See `config.example.yaml` for the new format. Old `server:` configs are detected with a clear migration error message.
 
+## Releasing
+
+Releases to PyPI are fully automated via `.github/workflows/release.yml`.
+Bump the version in `pyproject.toml`, push a `vX.Y.Z` tag, then publish a
+GitHub Release — the workflow re-runs the full test matrix, builds, and
+publishes to PyPI via Trusted Publishing (OIDC, no API tokens).  See
+**[docs/release-process.md](docs/release-process.md)** for the per-release
+checklist and the one-time PyPI / GitHub-environment setup.
+
 ## Documentation
 
+- **[Release Process](docs/release-process.md)**: PyPI release workflow + runbook
 - **[Relay Engine API Spec](docs/relay-engine-api-spec.md)**: Full v2.1 programmatic API reference
 - **[v2.1 Architecture Plan](docs/v2.1-architecture-plan.md)**: Embeddable relay engine design
 - **[v2.0 Architecture Plan](docs/v2-architecture-plan.md)**: Multi-destination design with 7 DRs

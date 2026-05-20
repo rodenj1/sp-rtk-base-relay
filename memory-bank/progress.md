@@ -1,5 +1,16 @@
 # Progress
 
+## Current Status — PyPI Release Workflow Added (May 20, 2026)
+
+**PyPI release pipeline**: `.github/workflows/release.yml` added — triggered by `release: published`, verifies tag ↔ `pyproject.toml` version match, re-runs full lint + matrix tests (3.10/3.11/3.12/3.13), builds sdist+wheel, validates with `twine check --strict`, publishes to PyPI via **Trusted Publishing (OIDC)** using the `pypi` GitHub environment (no API token secrets), then sigstore-signs the artifacts and attaches them (plus `.sigstore` bundles) to the GitHub Release. `pyproject.toml` Development Status classifier bumped `3 - Alpha` → `4 - Beta`. Release runbook at `docs/release-process.md`. README updated with PyPI / Release badges and a "Releasing" section.
+
+**Manual one-time setup remaining (user action)**:
+1. Register a *pending publisher* on pypi.org for `sp-rtk-base-relay` (owner: `rodenj1`, repo: `sp-rtk-base-relay`, workflow: `release.yml`, environment: `pypi`).
+2. Create the `pypi` environment in GitHub repo settings.
+3. Draft + publish the first GitHub Release (tag `v2.1.0`) to trigger the workflow.
+
+---
+
 ## Current Status — v2.1 + Metrics-v2.1 Expansion + New Grafana Dashboard (April 22, 2026)
 
 **v1.x**: All phases complete (production-running)
@@ -243,7 +254,6 @@ All v1.x phases complete. See previous progress entries.
 ## Known Issues / Risks
 
 - ⚠️ v2.0 is a breaking change from v1.x (config format, metrics names)
-- ⚠️ Phase 10 (PyPI packaging) still not started from v1.x
 - ⚠️ main.py not yet refactored to use RelayEngine internally (deferred)
 - ⚠️ BaseDestination not yet wired with event_bus param (deferred — lower priority)
 - ✅ v1.x Sure-Path connection is production-stable

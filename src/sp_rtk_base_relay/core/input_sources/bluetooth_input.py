@@ -196,13 +196,43 @@ class BluetoothInputSource(InputSource):
     def disconnect(self) -> None:
         """Disconnect from Bluetooth device and cleanup resources.
 
-        Closes the RFCOMM socket, disconnects the D-Bus device, and shuts
-        down the BluetoothManager's background event loop so that the next
-        connect() creates a fresh manager with an empty introspection cache.
+        Teardown ordering matters here.  We ask BlueZ to disconnect the
+        device **first** (via ``org.bluez.Device1.Disconnect``) and only
+        then close our local RFCOMM socket.  This way BlueZ owns the
+        teardown of the underlying ACL/RFCOMM channel state — if the
+        process is ``SIGKILL``-ed midway through ``disconnect()``, the
+        kernel will still tear down our local socket descriptor, but
+        BlueZ's view of the device will already be ``Connected=false``
+        and the next connect attempt won't have to fight a stale
+        half-paired state.
+
+        The previous order — close socket, then ask BlueZ to disconnect
+        — could leave BlueZ believing the device was still connected
+        after an unclean exit, which manifested as the next startup
+        either failing to bind the RFCOMM channel or having to scan +
+        re-pair to recover.
+
+        Finally we shut down the ``BluetoothManager``'s background event
+        loop so the next ``connect()`` gets a fresh manager with an empty
+        introspection cache.
+
+        All three steps are independently wrapped in ``try/except`` so
+        no single failure can short-circuit the rest of the cleanup.
         """
         logger.info("Disconnecting from Bluetooth device")
 
-        # Close socket first
+        # Step 1 — ask BlueZ to disconnect the device FIRST so the
+        # canonical "Connected" state is updated before we tear down
+        # our local handle.
+        if self.bt_manager and self.connected_mac:
+            try:
+                self.bt_manager.disconnect_device(self.connected_mac)
+            except Exception as e:
+                logger.warning(f"Error disconnecting Bluetooth D-Bus: {e}")
+
+        # Step 2 — close our local RFCOMM socket.  By this point BlueZ
+        # has (best-effort) already torn down the underlying channel,
+        # so this is effectively releasing our local fd.
         if self.bt_socket:
             try:
                 self.bt_socket.close()
@@ -211,16 +241,10 @@ class BluetoothInputSource(InputSource):
             finally:
                 self.bt_socket = None
 
-        # Disconnect D-Bus connection
-        if self.bt_manager and self.connected_mac:
-            try:
-                self.bt_manager.disconnect_device(self.connected_mac)
-            except Exception as e:
-                logger.warning(f"Error disconnecting Bluetooth D-Bus: {e}")
-
-        # Clean up the BluetoothManager's background event loop and D-Bus
-        # connection.  The next connect() will create a fresh manager with
-        # an empty introspection cache, avoiding stale cache issues.
+        # Step 3 — release the BluetoothManager's background event loop
+        # and D-Bus connection.  The next connect() will create a fresh
+        # manager with an empty introspection cache, avoiding stale
+        # cache issues.
         if self.bt_manager is not None:
             try:
                 self.bt_manager.close()

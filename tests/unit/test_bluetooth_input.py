@@ -313,6 +313,86 @@ class TestBluetoothInputSourceConnection:
         mock_manager.close.assert_called_once()
         mock_manager.disconnect_device.assert_not_called()
 
+    def test_disconnect_calls_bluez_before_closing_socket(self):
+        """Regression: BlueZ Disconnect must run BEFORE the local socket close.
+
+        Bug A — the prior ordering (socket.close → BlueZ Disconnect)
+        could leave BlueZ believing the device was still ``Connected``
+        if the process was ``SIGKILL``-ed midway through ``disconnect()``.
+        We now ask BlueZ to disconnect first so the canonical
+        ``Connected`` state is updated before our local fd goes away.
+
+        This test asserts the *interleaving* via a shared event log
+        captured from both the socket mock and the manager mock.
+        """
+        config = BluetoothConfig(device_name="RTK_GPS_BASE")
+        source = BluetoothInputSource(config)
+
+        event_log: list[str] = []
+
+        mock_manager = MagicMock(spec=BluetoothManager)
+        mock_manager.ensure_device_ready.return_value = ("00:11:22:33:44:55", 1)
+        mock_manager.disconnect_device.side_effect = lambda *_: event_log.append(
+            "bluez_disconnect"
+        )
+        mock_manager.close.side_effect = lambda: event_log.append("manager_close")
+        source.bt_manager = mock_manager
+
+        mock_socket = Mock()
+        mock_socket.close.side_effect = lambda: event_log.append("socket_close")
+
+        with patch(
+            "src.sp_rtk_base_relay.core.input_sources.bluetooth_input.socket.socket",
+            return_value=mock_socket,
+        ):
+            source.connect()
+            source.disconnect()
+
+        # The whole point of this test: the BlueZ disconnect call must
+        # land first, then the local socket close, then the manager
+        # close.  Anything else risks leaving BlueZ with a stale
+        # "Connected=true" view on unclean exits.
+        assert event_log == [
+            "bluez_disconnect",
+            "socket_close",
+            "manager_close",
+        ], (
+            "disconnect() must call BlueZ.Disconnect first, then socket.close, "
+            f"then BluetoothManager.close — got {event_log!r}"
+        )
+
+    def test_disconnect_proceeds_even_if_bluez_disconnect_raises(self):
+        """A BlueZ disconnect failure must NOT skip the local-socket close.
+
+        Defence-in-depth for Bug A: even if the BlueZ Disconnect call
+        raises (e.g. the device is already gone), we must still close
+        the local socket and the BluetoothManager so we don't leak
+        the fd or the background event loop.
+        """
+        config = BluetoothConfig(device_name="RTK_GPS_BASE")
+        source = BluetoothInputSource(config)
+
+        mock_manager = MagicMock(spec=BluetoothManager)
+        mock_manager.ensure_device_ready.return_value = ("00:11:22:33:44:55", 1)
+        mock_manager.disconnect_device.side_effect = Exception("BlueZ went away")
+        source.bt_manager = mock_manager
+
+        mock_socket = Mock()
+
+        with patch(
+            "src.sp_rtk_base_relay.core.input_sources.bluetooth_input.socket.socket",
+            return_value=mock_socket,
+        ):
+            source.connect()
+            source.disconnect()  # must NOT raise
+
+        mock_socket.close.assert_called_once()
+        mock_manager.close.assert_called_once()
+        assert source.bt_socket is None
+        assert source.bt_manager is None
+        assert source.is_connected is False
+
+
 
 class TestBluetoothInputSourceDataReading:
     """Test data reading operations."""

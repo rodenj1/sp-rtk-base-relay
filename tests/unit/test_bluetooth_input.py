@@ -393,7 +393,6 @@ class TestBluetoothInputSourceConnection:
         assert source.is_connected is False
 
 
-
 class TestBluetoothInputSourceDataReading:
     """Test data reading operations."""
 

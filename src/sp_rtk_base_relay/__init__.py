@@ -1,6 +1,6 @@
 """SP-Base-Relay: RTCM relay service for custom GPS correction servers."""
 
-__version__ = "2.1.1"
+__version__ = "2.1.2"
 
 # v2.1 public API — RelayEngine facade
 # v2.1 public API — Event system

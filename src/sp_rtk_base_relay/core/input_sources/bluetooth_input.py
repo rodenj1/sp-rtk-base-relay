@@ -259,7 +259,6 @@ class BluetoothInputSource(InputSource):
         self.stats.connected_since = None
         logger.info("Bluetooth device disconnected")
 
-
     def get_connection_info(self) -> dict[str, Any]:
         """Get Bluetooth connection information.
 

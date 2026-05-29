@@ -635,11 +635,14 @@ class TestBluetoothManagerCacheInvalidation:
 class TestBluetoothManagerRecovery:
     """Test recovery scan and ensure_device_ready retry logic."""
 
-    def test_ensure_device_ready_retries_after_failure(self):
-        """Test that ensure_device_ready retries with recovery scan on failure."""
+    def test_ensure_device_ready_waits_for_interface_then_succeeds(self):
+        """v2.1.3: when the device path appears mid-poll (BlueZ's two-phase
+        rediscovery), ensure_device_ready waits through the poll and
+        succeeds on the next iteration once Device1 is present."""
         bus_type, _, dbus_error = create_mock_dbus_fast()
         mock_bus = create_mock_message_bus()
-        # Device NOT added initially — first pair attempt will fail
+        # Device NOT added initially — first introspect raises DoesNotExist,
+        # forcing the poll loop to keep retrying.
 
         with (
             patch("src.sp_rtk_base_relay.core.bluetooth_manager.BusType", bus_type),
@@ -656,32 +659,35 @@ class TestBluetoothManagerRecovery:
         ):
             manager = BluetoothManager()
 
-            call_count = 0
-            original_pair = manager._pair_and_trust
+            # Patch _async_wait_for_device_interface so the loop body
+            # registers the device on its first failure, then re-polls
+            # and finds Device1 present.  Without this, the real poll
+            # would call mock_bus.introspect forever (mock has no
+            # discovery side-effects).
+            original_wait = manager._async_wait_for_device_interface
 
-            def _pair_and_trust_with_side_effect(mac: str) -> None:
-                nonlocal call_count
-                call_count += 1
-                if call_count == 1:
-                    # First call fails (simulating stale state)
-                    raise BluetoothError("Pairing failed: interface not found")
-                # Second call: add the device so it succeeds
-                mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
-                original_pair(mac)
+            async def _patched_wait(mac: str, scan_timeout: int) -> None:
+                if "00:11:22:33:44:55" not in [
+                    d.split("_")[-1] for d in mock_bus._devices
+                ]:
+                    mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
+                await original_wait(mac, scan_timeout)
 
-            manager._pair_and_trust = _pair_and_trust_with_side_effect  # type: ignore[assignment]
+            manager._async_wait_for_device_interface = _patched_wait  # type: ignore[assignment]
 
             mac, channel = manager.ensure_device_ready(mac_address="00:11:22:33:44:55")
 
             assert mac == "00:11:22:33:44:55"
             assert channel == 1
-            assert call_count == 2  # First attempt failed, second succeeded
 
-    def test_ensure_device_ready_fails_after_retry(self):
-        """Test that ensure_device_ready raises after both attempts fail."""
+    def test_ensure_device_ready_fails_when_interface_never_appears(self):
+        """v2.1.3: when the Device1 interface never populates within
+        scan_timeout, ensure_device_ready raises a BluetoothError that
+        clearly explains the situation (so the operator can extend the
+        timeout or check the device is advertising)."""
         bus_type, _, dbus_error = create_mock_dbus_fast()
         mock_bus = create_mock_message_bus()
-        # Device never added — both attempts will fail
+        # Device never added — introspect always raises DoesNotExist
 
         with (
             patch("src.sp_rtk_base_relay.core.bluetooth_manager.BusType", bus_type),
@@ -699,9 +705,14 @@ class TestBluetoothManagerRecovery:
             manager = BluetoothManager()
 
             with pytest.raises(BluetoothError) as exc_info:
-                manager.ensure_device_ready(mac_address="00:11:22:33:44:55")
+                manager.ensure_device_ready(
+                    mac_address="00:11:22:33:44:55", scan_timeout=2
+                )
 
-            assert "Device setup failed after recovery scan" in str(exc_info.value)
+            msg = str(exc_info.value)
+            assert "did not become available" in msg
+            assert "00:11:22:33:44:55" in msg
+            assert "Device1 interface never appeared" in msg
 
     def test_recovery_scan_is_non_fatal_on_failure(self):
         """Test that recovery_scan swallows errors gracefully."""

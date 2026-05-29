@@ -35,7 +35,15 @@ class BluetoothConfig:
     auto_trust: bool = True  # Automatically trust device
     pin: str = "0000"  # PIN code for pairing
     adapter_name: str = "hci0"  # Bluetooth adapter to use
-    scan_timeout: int = 10  # Device discovery timeout (seconds)
+    # Device discovery + Device1 interface-population timeout (seconds).
+    # Bumped from 10 -> 30 in v2.1.3: BlueZ strips org.bluez.Device1 from
+    # the device path ~30 s after RFCOMM close, and its two-phase
+    # rediscovery sometimes needs 20+ seconds of active scanning to
+    # repopulate the interface.  The poll loop in
+    # ``BluetoothManager._async_wait_for_device_interface`` returns
+    # early as soon as the interface appears, so the 30 s ceiling is
+    # zero-overhead when the device is already known to BlueZ.
+    scan_timeout: int = 30
     read_timeout: float = 1.0  # Socket read timeout
     connect_timeout: float = 10.0  # Connection timeout
 
@@ -99,11 +107,17 @@ class BluetoothInputSource(InputSource):
                 except BluetoothError as e:
                     raise InputSourceError(f"Failed to initialize Bluetooth: {e}")
 
-            # Ensure device is ready (discover, pair, trust, connect via D-Bus)
+            # Ensure device is ready (discover, pair, trust, connect via D-Bus).
+            # ``scan_timeout`` bounds how long we'll wait for BlueZ to
+            # populate ``org.bluez.Device1`` on the device path — the
+            # interface gets stripped ~30 s after RFCOMM close on
+            # ZED-F9P and a fixed 5 s scan in v2.1.2 was not enough
+            # for BlueZ's two-phase rediscovery to restore it.
             try:
                 mac, channel = self.bt_manager.ensure_device_ready(
                     device_name=self.config.device_name,
                     mac_address=self.config.mac_address,
+                    scan_timeout=self.config.scan_timeout,
                 )
                 self.connected_mac = mac
                 self.rfcomm_channel = channel

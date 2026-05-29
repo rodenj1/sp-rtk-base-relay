@@ -29,7 +29,13 @@ class TestBluetoothConfig:
         assert config.auto_trust is True
         assert config.pin == "0000"
         assert config.adapter_name == "hci0"
-        assert config.scan_timeout == 10
+        # v2.1.3: default bumped 10 -> 30 to give BlueZ's two-phase
+        # rediscovery enough time to repopulate org.bluez.Device1
+        # on a stale device path.  The poll loop in
+        # BluetoothManager._async_wait_for_device_interface returns
+        # early when the interface is already present, so the
+        # higher ceiling is zero-overhead in the warm-cache case.
+        assert config.scan_timeout == 30
         assert config.read_timeout == 1.0
         assert config.connect_timeout == 10.0
 
@@ -142,8 +148,10 @@ class TestBluetoothInputSourceConnection:
         assert source.stats.connection_attempts == 1
         assert source.stats.successful_connections == 1
         mock_socket.connect.assert_called_once_with(("00:11:22:33:44:55", 1))
+        # v2.1.3: scan_timeout is now propagated from BluetoothConfig
+        # so callers can tune the discovery window per-deployment.
         mock_manager.ensure_device_ready.assert_called_once_with(
-            device_name="RTK_GPS_BASE", mac_address=None
+            device_name="RTK_GPS_BASE", mac_address=None, scan_timeout=30
         )
 
     def test_connect_success_with_mac_address(self):
@@ -167,7 +175,7 @@ class TestBluetoothInputSourceConnection:
         assert result is True
         assert source.is_connected is True
         mock_manager.ensure_device_ready.assert_called_once_with(
-            device_name=None, mac_address="00:11:22:33:44:55"
+            device_name=None, mac_address="00:11:22:33:44:55", scan_timeout=30
         )
 
     def test_connect_already_connected(self):

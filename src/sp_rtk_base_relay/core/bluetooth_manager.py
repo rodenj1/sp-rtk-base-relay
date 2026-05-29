@@ -11,6 +11,7 @@ with sync wrappers dispatching coroutines via run_coroutine_threadsafe().
 import asyncio
 import logging
 import threading
+import time
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
@@ -606,6 +607,113 @@ class BluetoothManager:
         logger.info(f"Using RFCOMM channel 1 for SPP on {mac_address}")
         return 1
 
+    async def _async_wait_for_device_interface(
+        self, mac_address: str, scan_timeout: int
+    ) -> None:
+        """Wait for ``org.bluez.Device1`` to be populated on the device path.
+
+        BlueZ has a two-phase rediscovery pattern that bit us with the
+        v2.1.2 fixed 5 s recovery scan:
+
+        - **Phase 1** (after a short scan): the D-Bus object at
+          ``/org/bluez/hci0/dev_<MAC>`` exists with stub metadata,
+          but the ``org.bluez.Device1`` interface is NOT yet attached.
+          ``pair_device`` raises "interface not found on this object:
+          org.bluez.Device1" against this stub.
+        - **Phase 2** (after ~20-30 s of active discovery, OR a second
+          scan, OR a successful RFCOMM connection): the
+          ``Device1`` interface is fully attached with all properties
+          and the device is pairable.
+
+        Empirically on a ZED-F9P over RTK_BASE Bluetooth:
+        connecting within ~5 s of disconnect skips this dance (the
+        interface is still cached).  Beyond ~30 s, the interface is
+        stripped and only an active scan repopulates it.
+
+        This method polls at 2 s intervals: re-introspect the device
+        path → check for ``Device1`` → if missing, ensure discovery
+        is running → wait → retry.  Returns as soon as ``Device1``
+        appears; raises after ``scan_timeout`` seconds without it.
+
+        Args:
+            mac_address: Device MAC (used to derive the D-Bus path).
+            scan_timeout: Total seconds to wait for the interface.
+                Returns immediately as soon as ``Device1`` appears.
+
+        Raises:
+            BluetoothError: If the interface doesn't appear within
+                ``scan_timeout`` seconds.
+        """
+        device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
+        deadline = time.monotonic() + scan_timeout
+        discovery_started = False
+        last_error: str = "(no introspection attempt yet)"
+
+        while time.monotonic() < deadline:
+            try:
+                # Always re-introspect — the cached node may predate
+                # BlueZ's interface eviction and we'd loop forever
+                # checking a stale Node.
+                self._invalidate_device_cache(device_path)
+                if self._bus is None:
+                    raise BluetoothError("Bus not initialized")
+                intro: Node = await self._bus.introspect(  # type: ignore[assignment]
+                    "org.bluez", device_path
+                )
+                self._introspection_cache[device_path] = intro
+                if any(i.name == "org.bluez.Device1" for i in intro.interfaces):
+                    if discovery_started:
+                        try:
+                            await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
+                        except Exception:
+                            pass
+                    logger.info(
+                        "Device %s is ready (org.bluez.Device1 interface "
+                        "populated) — proceeding to pair/trust",
+                        mac_address,
+                    )
+                    return
+                last_error = "Device1 interface missing on path"
+            except DBusError as exc:
+                last_error = f"D-Bus introspect failed: {exc}"
+            except BluetoothError as exc:
+                last_error = f"BluetoothError: {exc}"
+            except Exception as exc:
+                last_error = f"unexpected error: {exc}"
+
+            # Interface not yet present — kick off discovery (idempotent)
+            # so BlueZ has a chance to populate it during our next sleep.
+            if not discovery_started:
+                try:
+                    await self._adapter.call_start_discovery()  # type: ignore[attr-defined]
+                    discovery_started = True
+                    logger.info(
+                        "Started BlueZ discovery to populate Device1 interface for %s",
+                        mac_address,
+                    )
+                except DBusError as exc:
+                    err_str = str(exc)
+                    if "InProgress" in err_str:
+                        discovery_started = True
+                    else:
+                        logger.debug("call_start_discovery error (continuing): %s", exc)
+
+            await asyncio.sleep(2.0)
+
+        # Timed out — make sure discovery is stopped before we raise.
+        if discovery_started:
+            try:
+                await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
+            except Exception:
+                pass
+        raise BluetoothError(
+            f"Device {mac_address} did not become available after "
+            f"{scan_timeout}s of BlueZ discovery (org.bluez.Device1 "
+            f"interface never appeared on path {device_path}).  Last "
+            f"check: {last_error}.  Try a longer scan_timeout, or "
+            "verify the device is powered on and advertising."
+        )
+
     def _recovery_scan(self, mac_address: str, scan_seconds: int = 5) -> None:
         """Run a short HCI scan to re-register a device with BlueZ.
 
@@ -646,56 +754,59 @@ class BluetoothManager:
             pass
 
     def ensure_device_ready(
-        self, device_name: str | None = None, mac_address: str | None = None
+        self,
+        device_name: str | None = None,
+        mac_address: str | None = None,
+        scan_timeout: int = 30,
     ) -> tuple[str, int]:
         """Ensure device is discovered, paired, trusted, and return connection info.
 
         This is a convenience method that orchestrates the full device setup
-        workflow.  If the initial pair attempt fails (e.g. because BlueZ
-        dropped the device D-Bus object after a previous disconnect), a
-        short recovery scan is performed and the pair/trust sequence is
-        retried once.
+        workflow.  It guarantees BlueZ has the ``org.bluez.Device1``
+        interface populated on the device path before attempting
+        pair/trust — the v2.1.2 fixed 5 s recovery scan was empirically
+        too short to wait through BlueZ's two-phase rediscovery on a
+        stale device path.
 
         Args:
             device_name: Name to search for (e.g., "RTK_GPS_BASE")
             mac_address: Or provide MAC directly if already known
+            scan_timeout: Maximum seconds to wait for BlueZ to populate
+                the ``org.bluez.Device1`` interface.  Returns early
+                as soon as the interface is present (zero overhead
+                when the device is already known to BlueZ).  Defaults
+                to 30 s, which empirically covers BlueZ's worst-case
+                two-phase rediscovery window on a ZED-F9P.
 
         Returns:
             Tuple of (mac_address, rfcomm_channel)
 
         Raises:
-            BluetoothError: If any step fails after retry
+            BluetoothError: If any step fails.
         """
         # Discover device if only name provided
         if mac_address is None and device_name:
-            mac_address = self.find_device_by_name(device_name)
+            mac_address = self.find_device_by_name(device_name, scan_timeout)
             if not mac_address:
                 raise BluetoothError(f"Device {device_name} not found")
 
         if not mac_address:
             raise BluetoothError("Must provide either device_name or mac_address")
 
-        # Attempt pair + trust with one retry on failure
-        try:
-            self._pair_and_trust(mac_address)
-        except BluetoothError as first_error:
-            logger.warning(
-                "Initial pair/trust failed for %s: %s — attempting recovery scan",
-                mac_address,
-                first_error,
-            )
-            # Recovery: run a short scan to re-register the device with BlueZ,
-            # invalidate the device cache, then retry once
-            self._recovery_scan(mac_address)
-            device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
-            self._invalidate_device_cache(device_path)
+        # Wait for org.bluez.Device1 interface to be populated.  This
+        # replaces the v2.1.2 "try once, do a 5 s recovery scan, try
+        # again" pattern that empirically failed on a ZED-F9P when
+        # BlueZ had stripped the Device1 interface (>~30 s since last
+        # connect).  The poll-until-present approach handles both the
+        # already-known fast path (zero overhead) and the cold/stale
+        # path (active discovery up to ``scan_timeout``).
+        self._run_async(
+            self._async_wait_for_device_interface(mac_address, scan_timeout),
+            timeout=max(float(scan_timeout) + 15.0, _DEFAULT_ASYNC_TIMEOUT),
+        )
 
-            try:
-                self._pair_and_trust(mac_address)
-            except BluetoothError as retry_error:
-                raise BluetoothError(
-                    f"Device setup failed after recovery scan: {retry_error}"
-                ) from first_error
+        # Interface guaranteed present — pair + trust now.
+        self._pair_and_trust(mac_address)
 
         # NOTE: We do NOT call connect_device() for SPP (Serial Port Profile) devices!
         # SPP devices (like GPS receivers) reject D-Bus Connect() calls with NotAvailable error.

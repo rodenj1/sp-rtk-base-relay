@@ -6,10 +6,11 @@ A Python service that relays RTCM correction data from RTK GPS base stations to 
 [![Release](https://github.com/rodenj1/sp-rtk-base-relay/actions/workflows/release.yml/badge.svg)](https://github.com/rodenj1/sp-rtk-base-relay/actions/workflows/release.yml)
 [![codecov](https://codecov.io/gh/rodenj1/sp-rtk-base-relay/branch/main/graph/badge.svg?token=T5XTVO92KQ)](https://codecov.io/gh/rodenj1/sp-rtk-base-relay)
 [![PyPI version](https://img.shields.io/pypi/v/sp-rtk-base-relay.svg)](https://pypi.org/project/sp-rtk-base-relay/)
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/sp-rtk-base-relay.svg)](https://pypi.org/project/sp-rtk-base-relay/)
-[![PyPI - Downloads](https://img.shields.io/pypi/dm/sp-rtk-base-relay.svg)](https://pypi.org/project/sp-rtk-base-relay/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python versions](https://img.shields.io/pypi/pyversions/sp-rtk-base-relay.svg)](https://pypi.org/project/sp-rtk-base-relay/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/sp-rtk-base-relay.svg)](https://pypi.org/project/sp-rtk-base-relay/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg)](https://www.conventionalcommits.org/en/v1.0.0/)
 
 ## Overview
 
@@ -27,7 +28,7 @@ SP-Base-Relay v2.1 is a production-ready multi-destination RTCM relay and **embe
 - 🔄 **Automatic Recovery**: Exponential backoff reconnection per destination — independent fault isolation
 - 🔧 **Self-Healing Bluetooth**: Automatic Bluetooth GPS recovery without manual intervention
 - 🛡️ **Production Ready**: Systemd integration, structured logging, comprehensive error handling
-- 🧪 **Well Tested**: 88% code coverage with 1,106 passing tests
+- 🧪 **Well Tested**: 88% code coverage with 1,145 passing tests
 - 🧩 **Embeddable Library** (v2.1): `RelayEngine` API for programmatic control by external applications
 - 📢 **Real-Time Events** (v2.1): EventBus with typed events for state change notifications
 - 🔌 **Hot Plug Destinations** (v2.1): Add/remove/start/stop destinations while running
@@ -47,7 +48,19 @@ Each destination runs in its own thread with an independent queue, so a failure 
 
 ## Quick Start
 
-### Installation
+### Install as a library
+
+For embedding the `RelayEngine` API in another Python application (e.g., a GPS configuration UI):
+
+```bash
+uv add sp-rtk-base-relay        # or: pip install sp-rtk-base-relay
+```
+
+See [Embedded Usage](#embedded-usage-v21) below for the programmatic API.
+
+### Install as a service
+
+For running the standalone systemd-managed relay on a Linux host:
 
 ```bash
 git clone https://github.com/rodenj1/sp-rtk-base-relay.git
@@ -189,6 +202,7 @@ Import `templates/grafana_dashboard.json` for a pre-built v2 dashboard with per-
 sp-rtk-base-relay/
 ├── src/sp_rtk_base_relay/
 │   ├── main.py                      # Service orchestration (v2)
+│   ├── engine.py                    # RelayEngine — v2.1 embeddable facade
 │   ├── config.py                    # YAML config with destinations: list
 │   ├── metrics.py                   # Per-destination Prometheus metrics
 │   ├── exceptions.py                # DestinationError, NtripError, etc.
@@ -200,6 +214,8 @@ sp-rtk-base-relay/
 │       ├── rtcm_client.py           # Sure-Path protocol client
 │       ├── connection_states.py     # Connection state machine
 │       ├── bluetooth_manager.py     # Bluetooth GPS recovery
+│       ├── events.py                # EventBus + EventSubscription (v2.1)
+│       ├── status.py                # Typed status snapshots (v2.1)
 │       ├── destinations/
 │       │   ├── base_destination.py       # ABC + queue + stats
 │       │   ├── destination_factory.py    # Registry-based factory
@@ -211,8 +227,8 @@ sp-rtk-base-relay/
 │           ├── tcp_input.py         # TCP input
 │           ├── serial_input.py      # Serial input
 │           └── bluetooth_input.py   # Bluetooth input
-├── tests/                           # 942 tests, 88% coverage
-│   ├── unit/                        # Unit tests (26 test files)
+├── tests/                           # 1,145 tests, 88% coverage
+│   ├── unit/                        # Unit tests (30 test files)
 │   ├── integration/                 # Hardware integration tests
 │   ├── manual/                      # Manual production tests
 │   └── fixtures/                    # Mock servers and generators
@@ -251,7 +267,7 @@ The `tools/install-dev.sh` script syncs the uv-managed venv with
 ### Code Quality Standards
 - Python 3.10+ with modern type hints (`dict`, `list`, `X | None`)
 - PEP8 code style, pyright strict mode
-- >88% test coverage (1,143 tests)
+- >88% test coverage (1,145 tests)
 - UV package management
 - Pre-commit hooks block secrets (gitleaks), enforce lint/format (ruff),
   validate commit messages ([Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
@@ -368,12 +384,12 @@ MIT License — see [LICENSE](LICENSE).
 
 ## Project Status
 
-**Current Version**: 2.1.0
+**Current Version**: 2.1.3
 - ✅ Multi-destination broadcast (Sure-Path, NTRIP v1.0/v2.0, TCP server)
 - ✅ Per-destination message filtering and Prometheus metrics
 - ✅ BroadcastHub fan-out architecture with independent fault isolation
 - ✅ Embeddable RelayEngine API with EventBus and typed status (v2.1)
-- ✅ 1,106 tests, 88% coverage, production-stable
+- ✅ 1,145 tests, 88% coverage, production-stable
 
 ---
 

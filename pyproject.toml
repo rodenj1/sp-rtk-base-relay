@@ -1,6 +1,6 @@
 [project]
 name = "sp-rtk-base-relay"
-version = "2.1.3"
+version = "2.1.4"
 description = "RTCM relay service for custom GPS correction servers"
 readme = "README.md"
 requires-python = ">=3.10"

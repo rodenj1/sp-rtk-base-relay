@@ -4,6 +4,7 @@ This module provides mock implementations of dbus-fast and D-Bus objects
 for testing Bluetooth functionality without requiring actual hardware.
 """
 
+import inspect
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -73,6 +74,45 @@ class MockProxyInterface:
         """Configure a method to fail for testing."""
         self._should_fail[method] = should_fail
 
+    async def call_register_agent(self, agent_path: str, capability: str) -> None:
+        """Mock AgentManager1.RegisterAgent -- records the call for assertion."""
+        self._record_agent_manager_call("RegisterAgent", (agent_path, capability))
+
+    async def call_request_default_agent(self, agent_path: str) -> None:
+        """Mock AgentManager1.RequestDefaultAgent -- records the call for assertion."""
+        self._record_agent_manager_call("RequestDefaultAgent", (agent_path,))
+
+    async def call_unregister_agent(self, agent_path: str) -> None:
+        """Mock AgentManager1.UnregisterAgent -- records the call for assertion."""
+        self._record_agent_manager_call("UnregisterAgent", (agent_path,))
+
+    def _record_agent_manager_call(self, name: str, args: tuple[Any, ...]) -> None:
+        calls = self._device_data.get("_agent_manager_calls")
+        if calls is None:
+            raise Exception(
+                f"{name} called on an interface that is not org.bluez.AgentManager1"
+            )
+        calls.append((name, args))
+
+    async def call_remove_device(self, device_path: str) -> None:
+        """Mock Adapter1.RemoveDevice.
+
+        Actually removes the device from the fixture's internal device
+        store (shared with ``MockMessageBus``), so a subsequent lookup of
+        ``device_path`` fails exactly as it does after
+        ``MockMessageBus.remove_device()`` runs.
+        """
+        devices_store = self._device_data.get("_devices_store")
+        if devices_store is None:
+            raise Exception(
+                "RemoveDevice called on an interface that is not org.bluez.Adapter1"
+            )
+        if device_path not in devices_store:
+            raise Exception(
+                f"org.bluez.Error.DoesNotExist: {device_path} does not exist"
+            )
+        del devices_store[device_path]
+
 
 class MockInterface:
     """Mock introspection Interface object."""
@@ -108,6 +148,10 @@ class MockProxyObject:
         elif path == "/":
             interface_list = [
                 MockInterface("org.freedesktop.DBus.ObjectManager"),
+            ]
+        elif path == "/org/bluez":
+            interface_list = [
+                MockInterface("org.bluez.AgentManager1"),
             ]
         else:
             # Adapter path
@@ -156,6 +200,8 @@ class MockMessageBus:
         self._devices: dict[str, dict[str, Any]] = {}
         self._introspection_cache: dict[str, MockNode] = {}
         self._should_fail_paths: set[str] = set()
+        self._exported_objects: dict[str, Any] = {}
+        self._agent_manager_calls: list[tuple[str, tuple[Any, ...]]] = []
 
     async def connect(self) -> "MockMessageBus":
         """Mock connect method."""
@@ -186,6 +232,11 @@ class MockMessageBus:
                 path,
                 interfaces=[MockInterface("org.freedesktop.DBus.ObjectManager")],
             )
+        elif path == "/org/bluez":
+            return MockNode(
+                path,
+                interfaces=[MockInterface("org.bluez.AgentManager1")],
+            )
         else:
             return MockNode(
                 path,
@@ -204,16 +255,27 @@ class MockMessageBus:
 
         # For ObjectManager (root path), include managed objects
         if path == "/":
-            device_data = {"_managed_objects": self._get_managed_objects()}
-            return MockProxyObject(bus_name, path, device_data)
+            root_device_data: dict[str, Any] = {
+                "_managed_objects": self._get_managed_objects()
+            }
+            return MockProxyObject(bus_name, path, root_device_data)
 
         # For device paths
         if "/dev_" in path:
             device_data = self._devices.get(path, {})
             return MockProxyObject(bus_name, path, device_data)
 
-        # For adapter or other paths
-        return MockProxyObject(bus_name, path)
+        # For the BlueZ root object (AgentManager1 lives here)
+        if path == "/org/bluez":
+            agent_manager_device_data: dict[str, Any] = {
+                "_agent_manager_calls": self._agent_manager_calls
+            }
+            return MockProxyObject(bus_name, path, agent_manager_device_data)
+
+        # For adapter paths, give Adapter1 access to the device store so
+        # RemoveDevice can actually remove entries from it.
+        adapter_device_data: dict[str, Any] = {"_devices_store": self._devices}
+        return MockProxyObject(bus_name, path, adapter_device_data)
 
     def _get_managed_objects(self) -> dict[str, dict[str, Any]]:
         """Get all managed objects for ObjectManager."""
@@ -274,6 +336,50 @@ class MockMessageBus:
     def clear_all_devices(self) -> None:
         """Remove all mock devices."""
         self._devices.clear()
+
+    def export(self, path: str, interface: Any) -> None:
+        """Mock dbus-fast MessageBus.export -- register a local object at a
+        path (e.g. a pairing agent), so tests can later simulate BlueZ
+        dispatching a method call to it via ``invoke_exported_method``.
+        """
+        self._exported_objects[path] = interface
+
+    def unexport(self, path: str, interface: Any | None = None) -> None:
+        """Mock dbus-fast MessageBus.unexport -- remove whatever is
+        exported at ``path``.
+        """
+        self._exported_objects.pop(path, None)
+
+    async def invoke_exported_method(
+        self, path: str, method_name: str, *args: Any
+    ) -> Any:
+        """Simulate BlueZ invoking ``method_name`` on whatever object is
+        currently exported at ``path`` (e.g. a registered pairing agent).
+
+        Supports both sync and async methods, mirroring how a real
+        ``dbus_fast.service.ServiceInterface`` method may be defined.
+        """
+        if path not in self._exported_objects:
+            raise Exception(
+                f"org.freedesktop.DBus.Error.UnknownObject: {path} is not exported"
+            )
+        obj = self._exported_objects[path]
+        method = getattr(obj, method_name, None)
+        if method is None:
+            raise Exception(
+                f"org.freedesktop.DBus.Error.UnknownMethod: {method_name} not found "
+                f"on object exported at {path}"
+            )
+        result = method(*args)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
+
+    def get_agent_manager_calls(self) -> list[tuple[str, tuple[Any, ...]]]:
+        """Inspect AgentManager1 registration-related calls (RegisterAgent,
+        RequestDefaultAgent, UnregisterAgent) in the order they occurred.
+        """
+        return list(self._agent_manager_calls)
 
 
 def create_mock_dbus_fast() -> tuple[MagicMock, type[MockMessageBus], Any]:

@@ -1014,6 +1014,128 @@ class BluetoothManager:
         if not self.trust_device(mac_address):
             raise BluetoothError(f"Failed to trust {mac_address}")
 
+    def force_repair(self, mac_address: str, pin: str, scan_timeout: int = 30) -> bool:
+        """Discard an existing bond and re-pair using a newly supplied PIN.
+
+        For the case where a device's configured PIN changed after it was
+        already bonded: ``pair_device``'s "already paired" fast path would
+        otherwise make the new PIN permanently irrelevant, since it never
+        re-attempts pairing against an existing bond. This is one atomic
+        operation -- remove the bond, wait for BlueZ to repopulate the
+        device's D-Bus interface (removal can transiently strip it, the
+        same condition ``ensure_device_ready`` already handles by polling
+        for it), re-pair with ``pin``, then trust -- rather than exposing
+        removal and pairing as separate calls a caller could invoke out of
+        order or leave half-done.
+
+        Proceeds unconditionally regardless of the device's current bonded
+        state: a "not found" outcome from the removal step is a harmless
+        no-op, since the caller may not know the device was already
+        unbonded. There is no rollback or retry -- if removal succeeds but
+        the subsequent pairing or trust step then fails, the device is
+        left in whatever state that step left it, and this method raises
+        identifying which stage failed, rather than attempting to restore
+        the prior (believed-wrong) bond.
+
+        Args:
+            mac_address: Device MAC address.
+            pin: PIN to pair with. Required, with no default -- unlike
+                ``pair_device``, defaulting the one argument this
+                operation exists to change would be a footgun.
+            scan_timeout: Maximum seconds to wait for BlueZ to repopulate
+                the ``org.bluez.Device1`` interface after removal.
+
+        Returns:
+            True if the device was successfully removed, re-paired, and
+            trusted.
+
+        Raises:
+            BluetoothError: Identifies which stage failed (remove, pair,
+                or trust). A caller can use this to tell "still bonded,
+                retry is free" apart from "now unbonded, retry needs
+                attention."
+        """
+
+        def _remove_stage() -> None:
+            self._remove_bond(mac_address)
+
+        def _pair_stage() -> None:
+            # A timeout waiting for BlueZ to repopulate org.bluez.Device1
+            # is attributed to this stage too: the pairing call itself
+            # can't even be attempted until the interface reappears.
+            self._run_async(
+                self._async_wait_for_device_interface(mac_address, scan_timeout),
+                timeout=max(float(scan_timeout) + 15.0, _DEFAULT_ASYNC_TIMEOUT),
+            )
+            if not self.pair_device(mac_address, pin):
+                raise BluetoothError(f"Failed to pair with {mac_address}")
+
+        def _trust_stage() -> None:
+            if not self.trust_device(mac_address):
+                raise BluetoothError(f"Failed to trust {mac_address}")
+
+        for stage_name, stage in (
+            ("remove", _remove_stage),
+            ("pair", _pair_stage),
+            ("trust", _trust_stage),
+        ):
+            try:
+                stage()
+            except BluetoothError as e:
+                raise BluetoothError(f"force_repair: {stage_name} stage failed: {e}")
+
+        logger.info(f"force_repair succeeded for {mac_address}")
+        return True
+
+    def _remove_bond(self, mac_address: str) -> None:
+        """Remove an existing bond for ``mac_address``, if any.
+
+        Args:
+            mac_address: Device MAC address.
+
+        Raises:
+            BluetoothError: If removal fails for a reason other than the
+                device not currently being known to BlueZ.
+        """
+        self._run_async(self._async_remove_bond(mac_address))
+
+    async def _async_remove_bond(self, mac_address: str) -> None:
+        """Async implementation of _remove_bond."""
+        device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
+
+        try:
+            if self._bus is None:
+                raise BluetoothError("Bus not initialized")
+            if self._adapter is None:
+                raise BluetoothError("Adapter not initialized")
+
+            await self._adapter.call_remove_device(device_path)  # type: ignore[attr-defined]
+            self._invalidate_device_cache(device_path)
+            logger.info(f"Removed existing bond for {mac_address}")
+
+        except BluetoothError:
+            raise
+        except Exception as e:
+            if self._is_not_found_error(e):
+                logger.info(f"Device {mac_address} was not bonded; nothing to remove")
+                return
+            if isinstance(e, DBusError):
+                raise BluetoothError(f"D-Bus error removing device: {e}")
+            raise BluetoothError(f"Failed to remove device: {e}")
+
+    @staticmethod
+    def _is_not_found_error(exc: Exception) -> bool:
+        """Whether ``exc`` represents BlueZ's "device does not exist" error.
+
+        Checks both the exception's message and, for a real ``DBusError``,
+        its D-Bus error type name -- ``DBusError.__str__`` only returns
+        the error's text, not its type, so a check against ``str(exc)``
+        alone would miss ``org.bluez.Error.DoesNotExist`` replies whose
+        text doesn't happen to repeat the type name.
+        """
+        haystack = f"{exc} {getattr(exc, 'type', '')}".lower()
+        return "doesnotexist" in haystack or "does not exist" in haystack
+
     def close(self) -> None:
         """Clean up the background event loop and D-Bus connection.
 

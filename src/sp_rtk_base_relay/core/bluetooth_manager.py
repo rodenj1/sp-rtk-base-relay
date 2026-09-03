@@ -88,6 +88,20 @@ try:
         def RequestPinCode(self, device: _DBusObjectPath) -> _DBusStr:  # noqa: N802
             pin = self._pending_pins.get(device)
             if pin is None:
+                if not self._pending_pins:
+                    # No local Pair() is in flight at all, so BlueZ reached
+                    # us as its *default* agent for a pairing nothing here
+                    # initiated (device-initiated, or raised by Connect()
+                    # on an unbonded device). Distinct wording: in the
+                    # field this is otherwise indistinguishable from the
+                    # device simply being given a wrong PIN.
+                    raise DBusError(
+                        "org.bluez.Error.Rejected",
+                        f"Rejecting caller-less pairing on {device}: no local "
+                        "pairing attempt is in flight, so this request reached "
+                        "us as BlueZ's default agent for a pairing this process "
+                        "did not initiate. This is not a wrong-PIN failure.",
+                    )
                 raise DBusError(
                     "org.bluez.Error.Rejected",
                     f"No PIN recorded for pending pairing attempt on {device}",
@@ -167,7 +181,7 @@ class BluetoothManager:
         _thread: Background daemon thread running the event loop
     """
 
-    def __init__(self, adapter_name: str = "hci0"):
+    def __init__(self, adapter_name: str = "hci0", claim_default_agent: bool = False):
         """Initialize Bluetooth manager.
 
         Creates a persistent background event loop thread, connects to the
@@ -175,6 +189,11 @@ class BluetoothManager:
 
         Args:
             adapter_name: Name of Bluetooth adapter (default: "hci0")
+            claim_default_agent: PROTOTYPE (#25/#27). Whether to call
+                RequestDefaultAgent. On BlueZ >= 5.51 RegisterAgent alone
+                already takes the default when nobody holds it, so this
+                call can only ever *displace* another agent -- including
+                another BluetoothManager in the same process.
 
         Raises:
             BluetoothError: If dbus-fast is not available or adapter not found
@@ -185,6 +204,7 @@ class BluetoothManager:
             )
 
         self.adapter_path = f"/org/bluez/{adapter_name}"
+        self._claim_default_agent = claim_default_agent
         self._bus: AioMessageBus | None = None
         self._adapter: Any = None
         self._agent: Any = None
@@ -299,9 +319,10 @@ class BluetoothManager:
 
         agent_manager = await self._async_get_agent_manager()
         await agent_manager.call_register_agent(_AGENT_OBJECT_PATH, _AGENT_CAPABILITY)
-        await agent_manager.call_request_default_agent(_AGENT_OBJECT_PATH)
+        if self._claim_default_agent:
+            await agent_manager.call_request_default_agent(_AGENT_OBJECT_PATH)
 
-        logger.info("Registered default pairing agent at %s", _AGENT_OBJECT_PATH)
+        logger.info("Registered pairing agent at %s", _AGENT_OBJECT_PATH)
 
     async def _async_unregister_agent(self) -> None:
         """Unregister the pairing agent from BlueZ's agent manager.

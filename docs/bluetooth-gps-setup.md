@@ -64,12 +64,20 @@ bluetoothctl --version
 > **Usually unnecessary.** The relay pairs and trusts the device for you on first
 > start, using the PIN from your configuration — `ensure_device_ready()` handles
 > discovery, pairing and trusting. Do this step manually only if automatic pairing
-> fails, or if you are running a version at or below v3.1.0, where automatic pairing
-> was broken (see [issue #39](https://github.com/rodenj1/sp-rtk-base-relay/issues/39)).
+> fails.
 >
-> If a device's PIN changed *after* it was already bonded, use
-> `BluetoothManager.force_repair()` rather than pairing again — an existing bond makes
-> the new PIN irrelevant otherwise.
+> **On v3.1.0 and earlier, do it manually — automatic pairing does not work at all**
+> ([issue #39](https://github.com/rodenj1/sp-rtk-base-relay/issues/39)). On those
+> versions `force_repair()` does not work either: it reports success without
+> re-pairing, so do **not** reach for it to recover. If the PIN changed after the
+> device was already bonded, run `bluetoothctl remove <mac>` and then pair manually
+> as below. Manual pairing works with the relay still running — `bluetoothctl`
+> registers its own agent, and BlueZ routes the PIN request to whichever agent
+> initiated the pairing.
+>
+> **From the next release onwards**, a PIN that changed after bonding is handled by
+> `BluetoothManager.force_repair()`, which discards the stale bond and re-pairs with
+> the new PIN — an existing bond makes the new PIN irrelevant otherwise.
 
 **Option A: Using the interactive pairing script**
 

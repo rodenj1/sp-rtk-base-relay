@@ -464,10 +464,10 @@ class BluetoothManager:
             return value.value
         return value
 
-    async def _async_get_property(
+    async def _async_get_bool_property(
         self, props: Any, interface: str, property_name: str
-    ) -> Any:
-        """Read a D-Bus property and return its *unwrapped* value.
+    ) -> bool:
+        """Read a boolean D-Bus property, unwrapped and type-checked.
 
         ``org.freedesktop.DBus.Properties.Get`` answers with a
         ``Variant``. ``Variant`` defines no ``__bool__``, so every
@@ -476,19 +476,45 @@ class BluetoothManager:
         is what made pairing silently no-op in v3.0.0 and v3.1.0 (issue
         #39), where ``Device1.Pair()`` was never reached at all.
 
-        Every property read goes through here so that class of defect
-        cannot be reintroduced by the next read someone adds.
+        Every boolean property read goes through here, and the declared
+        ``bool`` return is what makes that worth doing: it gives callers
+        a *checked* type rather than an ``Any`` they must annotate on
+        trust. An ``Any``-returning reader would leave ``paired: bool =
+        await ...`` exactly as unverified as the annotation this bug hid
+        behind. A read of a non-boolean property should get its own
+        sibling reader rather than this one.
 
-        The ``type: ignore`` below is load-bearing and deliberately
-        lives here, exactly once: ``dbus-fast`` attaches its ``call_*``
-        methods dynamically via ``__getattr__``, so ``ProxyInterface``
-        genuinely has no static ``call_get``. Confining the suppression
-        to this one line keeps every call site fully type-checked --
-        deleting it outright fails ``pyright`` strict.
+        The ``type: ignore`` is load-bearing and deliberately lives
+        here, exactly once: ``dbus-fast`` attaches its ``call_*`` methods
+        dynamically via ``__getattr__``, so ``ProxyInterface`` genuinely
+        has no static ``call_get``. Confining the suppression to this
+        one line keeps every call site fully type-checked -- deleting it
+        outright fails ``pyright`` strict.
+
+        Args:
+            props: The device's ``org.freedesktop.DBus.Properties``
+                proxy interface.
+            interface: Interface owning the property, e.g.
+                ``org.bluez.Device1``.
+            property_name: Property to read, e.g. ``Paired``.
+
+        Returns:
+            The property's unwrapped boolean value.
+
+        Raises:
+            BluetoothError: If the unwrapped value is not a ``bool`` --
+                a programming error (wrong reader for the property),
+                since ``Variant`` enforces its own signature.
         """
-        return self._unwrap_variant(
+        value = self._unwrap_variant(
             await props.call_get(interface, property_name)  # type: ignore[attr-defined]
         )
+        if not isinstance(value, bool):
+            raise BluetoothError(
+                f"{interface}.{property_name} read as {type(value).__name__}, "
+                "expected bool -- use a reader matching the property's type"
+            )
+        return value
 
     async def _async_find_device_in_known(self, device_name: str) -> str | None:
         """Search BlueZ's known/paired devices for a device by name.
@@ -652,7 +678,7 @@ class BluetoothManager:
             device_props = device_proxy.get_interface("org.freedesktop.DBus.Properties")
 
             # Check if already paired
-            paired: bool = await self._async_get_property(
+            paired: bool = await self._async_get_bool_property(
                 device_props, "org.bluez.Device1", "Paired"
             )
             if paired:
@@ -688,7 +714,7 @@ class BluetoothManager:
             # raised AuthenticationFailed above. Logged distinctly so a
             # future field report arrives correctly attributed (issue #39
             # cost two steps of misattribution).
-            paired_after_pairing: bool = await self._async_get_property(
+            paired_after_pairing: bool = await self._async_get_bool_property(
                 device_props, "org.bluez.Device1", "Paired"
             )
             if not paired_after_pairing:
@@ -832,7 +858,7 @@ class BluetoothManager:
             # ``call_*`` methods to ProxyInterface; cast to Any to satisfy
             # static type-checkers.
             device_props_any: Any = device_props
-            connected: bool = await self._async_get_property(
+            connected: bool = await self._async_get_bool_property(
                 device_props_any, "org.bluez.Device1", "Connected"
             )
             if connected:

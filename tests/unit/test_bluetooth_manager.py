@@ -994,3 +994,133 @@ class TestBluetoothManagerPinThreading:
 
         with pytest.raises(BluetoothError):
             manager.ensure_device_ready(pin="0000", mac_address="AA:BB:CC:DD:EE:FF")
+
+
+class TestBluetoothManagerForceRepair:
+    """Test force_repair() for the same-MAC, PIN-changed case (issue #17)."""
+
+    MAC = "AA:BB:CC:DD:EE:FF"
+
+    def _patch_wait_to_rediscover(
+        self, manager: BluetoothManager, mock_bus: Any, requires_pin: str | None
+    ) -> None:
+        """Simulate BlueZ repopulating org.bluez.Device1 after removal.
+
+        Removing a bond can transiently strip the device's D-Bus
+        interface -- the same condition ensure_device_ready already
+        polls for. The mock fixture has no automatic rediscovery, so
+        this re-adds the device (as force_repair's own polling would
+        observe BlueZ doing) right before the real wait loop runs its
+        first check.
+        """
+        original_wait = manager._async_wait_for_device_interface
+
+        async def _patched_wait(mac: str, scan_timeout: int) -> None:
+            if mac not in [d.get("Address") for d in mock_bus._devices.values()]:
+                mock_bus.add_device(mac, requires_pin=requires_pin)
+            await original_wait(mac, scan_timeout)
+
+        manager._async_wait_for_device_interface = _patched_wait  # type: ignore[assignment]
+
+    def test_force_repair_succeeds_end_to_end_with_new_pin(self):
+        """A device that starts bonded is re-paired successfully using a
+        PIN different from whatever it was previously bonded with.
+        """
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device(self.MAC, paired=True, trusted=True)
+        manager = _build_manager(mock_bus)
+        self._patch_wait_to_rediscover(manager, mock_bus, requires_pin="9999")
+
+        result = manager.force_repair(self.MAC, pin="9999")
+
+        assert result is True
+        device_data = mock_bus.get_device_data(self.MAC)
+        assert device_data["Paired"] is True
+        assert device_data["Trusted"] is True
+
+    def test_force_repair_completes_without_error_when_not_bonded(self):
+        """A "not found" outcome from removal is a harmless no-op."""
+        mock_bus = create_mock_message_bus()
+        # Device not added at all -- nothing to remove.
+        manager = _build_manager(mock_bus)
+        self._patch_wait_to_rediscover(manager, mock_bus, requires_pin=None)
+
+        result = manager.force_repair(self.MAC, pin="1234")
+
+        assert result is True
+        device_data = mock_bus.get_device_data(self.MAC)
+        assert device_data["Paired"] is True
+        assert device_data["Trusted"] is True
+
+    def test_force_repair_identifies_remove_stage_on_removal_failure(self):
+        """A genuine (non-"not found") removal failure identifies removal
+        as the failed stage.
+        """
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device(self.MAC, paired=True, trusted=True)
+        manager = _build_manager(mock_bus)
+
+        with patch.object(
+            MockProxyInterface,
+            "call_remove_device",
+            side_effect=Exception("adapter busy"),
+        ):
+            with pytest.raises(BluetoothError) as exc_info:
+                manager.force_repair(self.MAC, pin="1234")
+
+        assert "remove stage failed" in str(exc_info.value)
+        # Still bonded -- the caller can tell a retry is free.
+        device_data = mock_bus.get_device_data(self.MAC)
+        assert device_data["Paired"] is True
+
+    def test_force_repair_identifies_pair_stage_on_pairing_failure(self):
+        """Removal succeeds, but pairing then fails -- the raised error
+        identifies pairing as the failed stage, and the device is left
+        unbonded rather than restored to its prior bond.
+        """
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device(self.MAC, paired=True, trusted=True)
+        manager = _build_manager(mock_bus)
+        self._patch_wait_to_rediscover(manager, mock_bus, requires_pin=None)
+
+        with patch.object(
+            MockProxyInterface, "call_pair", side_effect=Exception("pairing exploded")
+        ):
+            with pytest.raises(BluetoothError) as exc_info:
+                manager.force_repair(self.MAC, pin="1234")
+
+        assert "pair stage failed" in str(exc_info.value)
+        # No rollback: the old bond was already removed and was not
+        # restored.
+        device_data = mock_bus.get_device_data(self.MAC)
+        assert device_data is not None
+        assert device_data["Paired"] is False
+
+    def test_force_repair_identifies_trust_stage_on_trust_failure(self):
+        """Removal and pairing succeed, but trust then fails -- the raised
+        error identifies trust as the failed stage.
+        """
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device(self.MAC, paired=True, trusted=True)
+        manager = _build_manager(mock_bus)
+        self._patch_wait_to_rediscover(manager, mock_bus, requires_pin=None)
+
+        with patch.object(
+            MockProxyInterface, "call_set", side_effect=Exception("trust exploded")
+        ):
+            with pytest.raises(BluetoothError) as exc_info:
+                manager.force_repair(self.MAC, pin="1234")
+
+        assert "trust stage failed" in str(exc_info.value)
+        device_data = mock_bus.get_device_data(self.MAC)
+        assert device_data["Paired"] is True
+        assert device_data["Trusted"] is False
+
+    def test_force_repair_requires_pin_argument(self):
+        """Omitting pin is a call-site error, not a fallback to a default."""
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device(self.MAC, paired=True)
+        manager = _build_manager(mock_bus)
+
+        with pytest.raises(TypeError):
+            manager.force_repair(self.MAC)  # type: ignore[call-arg]

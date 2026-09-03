@@ -488,3 +488,129 @@ it is a one-line check (`bus.unique_name`) rather than a hardware test.
    sender-attributed and starts depending on the default-agent stack — which would introduce
    the very bug #22 thought it had found. **Whatever object owns the agent must own the same
    `MessageBus` that issues `Pair()`.**
+
+---
+
+## 6. Follow-up (2026-09-03): which pairings are actually *caller-less*?
+
+Added while resolving [issue #25](https://github.com/rodenj1/sp-rtk-base-relay/issues/25). §3 established
+that any pairing with `device->bonding == NULL` goes to the default agent, but left open *which
+concrete operations* produce that state. Two were outstanding: `Device1.Connect()` on an unbonded
+device, and an inbound RFCOMM connection.
+
+**Method:** same as above — BlueZ C source only, no hardware. Read at commit
+`ed3d4c3f91b2a1a73ff8b8ffc6a1e83d34488dfd` (master HEAD, 2026-08-27, post-5.85), the same tree §1-§5
+used.
+
+### 6.1 `Device1.Connect()` on an unbonded device — **yes, and it reaches the default agent**
+
+`dev_connect()` (`src/device.c:2824`) settles it in its own opening guard:
+
+```c
+	if (dev->bonding)
+		return btd_error_in_progress(msg);
+```
+
+`Connect()` *refuses to run while bonding*, which proves it never creates a bonding request of its
+own. So `device->bonding` is NULL for the whole call, and `new_auth()` takes the `agent_get(NULL)`
+branch quoted in §1 hop 3.
+
+The chain that gets there:
+
+`dev_connect` → `device_connect_profiles` (`src/device.c:2763`) → `connect_next`
+(`src/device.c:2329`) → `btd_service_connect` (`src/service.c:341`) → `profile->connect(service)`
+(`src/service.c:374`). For SPP the profile is an *external* one registered through
+`ProfileManager1.RegisterProfile` — there is no `profiles/serial/` in modern BlueZ — so it lands in
+`connect_io()` (`src/profile.c:1629`):
+
+```c
+		conn->proto = BTPROTO_RFCOMM;
+		io = bt_io_connect(ext_connect, conn, NULL, &gerr,
+					BT_IO_OPT_SOURCE_BDADDR, src,
+					BT_IO_OPT_DEST_BDADDR, dst,
+					BT_IO_OPT_SEC_LEVEL, ext->sec_level,   /* :1651 */
+					BT_IO_OPT_CHANNEL, conn->chan,
+```
+
+`ext->sec_level` defaults to **MEDIUM** (`ext_set_defaults`, `src/profile.c:2224`), and the SPP entry
+in `defaults[]` (`src/profile.c:2094`) sets no `sec_level`, so SPP keeps MEDIUM. Only
+`RequireAuthentication=false` lowers it to `BT_IO_SEC_LOW` (`src/profile.c:2317`). `set_sec_level()`
+(`btio/btio.c:476`) turns that into a `BT_SECURITY` sockopt, and with no link key the kernel starts
+authentication and emits `MGMT_EV_PIN_CODE_REQUEST`.
+
+`pin_code_request_callback()` (`src/adapter.c:8522`) then has **no bonding check and no trusted
+check** — with `device->bonding == NULL`, `device_bonding_iter()` returns NULL so the autopair
+plugin's PIN callback is skipped, and it falls straight through to `device_request_pincode()`
+(`:8582`) → `new_auth()` → **default agent**.
+
+A corroborating smoking gun in `device_confirm_passkey()` (`src/device.c:7705`), which handles the
+SSP form of the same case explicitly:
+
+```c
+	if (confirm_hint) {
+		if (device->bonding != NULL) {
+			/* We know the client has indicated the intent to pair ... auto-accept */
+			btd_adapter_confirm_reply(..., TRUE);
+			return 0;
+		}
+		err = agent_request_authorization(auth->agent, device, confirm_cb, auth, NULL);
+```
+
+BlueZ auto-accepts only when a bonding request exists; with none, it prompts the default agent via
+`RequestAuthorization`.
+
+The same holds for a device whose bond was removed externally — nothing on this path consults bonded
+state.
+
+### 6.2 Inbound RFCOMM — **yes, and it fires two independent gates**
+
+`ext_start_servers()` (`src/profile.c:1391`) opens the listeners with the same `ext->sec_level`
+(`:1465` for RFCOMM, `:1425` for L2CAP), so an inbound connect from an unbonded peer authenticates
+*before* the socket is handed up — the identical `pin_code_request_callback` → `new_auth` chain, and
+again `device->bonding` is NULL, so again the **default agent**.
+
+Separately, `ext_confirm()` (`src/profile.c:1272`) calls `btd_request_authorization()`
+(`src/profile.c:1309`), reaching `process_auth_queue()` (`src/adapter.c:7944`):
+
+```c
+		if (btd_device_is_trusted(device) == TRUE) {     /* :7967 */
+			auth->cb(NULL, auth->user_data);         /* skip agent entirely */
+			goto next;
+		}
+		...
+		auth->agent = agent_get(NULL);                   /* :7976  → DEFAULT agent */
+```
+
+Note this path never consults `device->bonding` at all — it is hardcoded `agent_get(NULL)`.
+
+### 6.3 Consequences
+
+- **`Trusted` is not protection against a PIN request.** It short-circuits only `AuthorizeService`
+  (`src/adapter.c:7967`). `pin_code_request_callback` contains no trusted check, so
+  `RequestPinCode` / `RequestConfirmation` fire regardless.
+- **`RequireAuthentication=false`** (→ `BT_IO_SEC_LOW`) is the only thing in this source that removes
+  the link-level PIN prompt; `RequireAuthorization=false` (`src/profile.c:2326`) removes the
+  `AuthorizeService` prompt. Both are properties of the *registered profile*, which this project does
+  not register — it opens a raw socket instead (see below).
+- **IO capability for a caller-less pairing** comes from the default agent globally
+  (`src/agent.c:136` → `adapter_set_io_capability` → `MGMT_OP_SET_IO_CAPABILITY`,
+  `src/adapter.c:9401`), not from a per-request bonding capability.
+- **Naming correction to §3:** there is no `device_request_auth()` in current BlueZ. The link-level
+  entry points are `device_request_pincode` / `device_request_passkey` / `device_confirm_passkey`
+  (all via `new_auth`); the service-level one is `btd_request_authorization` / `adapter_authorize`.
+
+### 6.4 Reachability against this project
+
+Both paths are real in BlueZ, and neither is reached by the relay as it stands:
+
+| Path | Reached here? |
+|---|---|
+| Device initiates pairing | No — the receiver never initiates (confirmed with the maintainer, #25). |
+| Relay's own data path | No — `ensure_device_ready` deliberately skips `Connect()` for SPP, pairs with a caller present, then opens a raw `AF_BLUETOOTH` socket (`bluetooth_input.py:135-142`) that sets **no `BT_SECURITY` sockopt`**, so the kernel default of LOW applies and no authentication is demanded — and a bond exists by then regardless. |
+| `connect_device()` | In principle yes; in practice no caller. Neither this repo nor `sp-rtk-base` invokes it (`sp-rtk-base`'s `api/device.py:70 connect_device` is its own REST endpoint, not this method). |
+
+### 6.5 Not settleable from BlueZ source
+
+Whether the *kernel* actually starts HCI authentication for a given `BT_SECURITY_MEDIUM` socket on an
+already-encrypted-or-not ACL is Linux `net/bluetooth/` behaviour, not bluez userspace — BlueZ only
+sets the sockopt. Everything downstream of `MGMT_EV_PIN_CODE_REQUEST` is fully settled above.

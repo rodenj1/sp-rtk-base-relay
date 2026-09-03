@@ -9,13 +9,168 @@ from typing import Any
 from unittest.mock import MagicMock
 
 
+class MockBlueZ:
+    """PROTOTYPE (issue #27): the fake's stand-in for the **bluetoothd daemon**.
+
+    BlueZ's agent registry is system-global -- one daemon, one registry,
+    shared by every D-Bus connection. The old fake kept it per
+    ``MockMessageBus``, so two mock managers each quietly became their own
+    default and never contended, which is why the suite could not express
+    issue #22 at all.
+
+    Rather than a process-global singleton (which would leak between
+    tests), the daemon is an **explicit object**. Buses are minted from it
+    with :meth:`new_bus`, so a test that wants two contending managers
+    shares one ``MockBlueZ``, and a test that wants isolation just makes
+    its own. ``MockMessageBus()`` with no arguments still gets a private
+    daemon, so every existing test is unaffected and nothing needs
+    resetting in a fixture.
+
+    Models three things the real daemon does (#24 §1, §2):
+
+    * agents are keyed by **sender** (the connection's unique bus name),
+      one agent per connection;
+    * ``default_agents`` is a **head-first queue**: registering pushes the
+      tail (or the head if the queue is empty, BlueZ >= 5.51),
+      ``RequestDefaultAgent`` moves you to the head, and unregistering or
+      disconnecting **promotes** whoever is next;
+    * dispatch is **sender-first**: ``Pair()``'s caller gets its own agent,
+      and the default agent answers only for a caller-less pairing.
+    """
+
+    def __init__(self) -> None:
+        # dbus-fast hands out one stable unique name per bus connection
+        # (":1.7535", ":1.7536", ... -- verified against the installed
+        # library in #24). A monotonic counter mirrors that faithfully.
+        self._next_unique_id = 7535
+        self._buses: dict[str, MockMessageBus] = {}
+        # sender -> agent object path. BlueZ allows exactly one agent per
+        # D-Bus connection: a second RegisterAgent from the same sender is
+        # org.bluez.Error.AlreadyExists.
+        self._agents: dict[str, str] = {}
+        # Head-first stack of senders. Head == the current default agent.
+        self._default_queue: list[str] = []
+
+    def new_bus(self, bus_type: Any = None) -> "MockMessageBus":
+        """Mint another connection to this same daemon."""
+        return MockMessageBus(bus_type, bluez=self)
+
+    def attach(self, bus: "MockMessageBus") -> str:
+        """Register ``bus`` as a connection and return its unique name."""
+        unique_name = f":1.{self._next_unique_id}"
+        self._next_unique_id += 1
+        self._buses[unique_name] = bus
+        return unique_name
+
+    # -- AgentManager1 -----------------------------------------------------
+
+    def register_agent(self, sender: str, agent_path: str, capability: str) -> None:
+        if sender in self._agents:
+            raise Exception(
+                f"org.bluez.Error.AlreadyExists: Agent already registered for {sender}"
+            )
+        self._agents[sender] = agent_path
+        # agent_create(): empty queue -> you become the default; otherwise
+        # you go on the tail. Either way you enter the queue.
+        self._default_queue.append(sender)
+
+    def request_default_agent(self, sender: str, agent_path: str) -> None:
+        if self._agents.get(sender) != agent_path:
+            raise Exception(
+                f"org.bluez.Error.DoesNotExist: Agent not registered for {sender}"
+            )
+        if self._default_queue[:1] == [sender]:
+            return  # add_default_agent(): already head, no-op
+        if sender in self._default_queue:
+            self._default_queue.remove(sender)
+        self._default_queue.insert(0, sender)
+
+    def unregister_agent(self, sender: str, agent_path: str) -> None:
+        if self._agents.get(sender) != agent_path:
+            return  # BlueZ ignores an UnregisterAgent for an unknown agent
+        del self._agents[sender]
+        # remove_default_agent(): dropping the head promotes the next entry.
+        if sender in self._default_queue:
+            self._default_queue.remove(sender)
+
+    def disconnect(self, sender: str) -> None:
+        """A bus connection dropping -- same teardown as UnregisterAgent."""
+        self._agents.pop(sender, None)
+        if sender in self._default_queue:
+            self._default_queue.remove(sender)
+        self._buses.pop(sender, None)
+
+    # -- dispatch ----------------------------------------------------------
+
+    def default_agent(self) -> tuple[str, str] | None:
+        """``(sender, agent_path)`` at the head of the default queue."""
+        for sender in self._default_queue:
+            path = self._agents.get(sender)
+            if path is not None:
+                return (sender, path)
+        return None
+
+    def resolve_agent(self, sender: str) -> tuple[str, str] | None:
+        """BlueZ's dispatch rule: the sender's own agent wins; the default
+        agent is only a fallback for a sender that registered none (#24 §1).
+        """
+        own = self._agents.get(sender)
+        if own is not None:
+            return (sender, own)
+        return self.default_agent()
+
+    def default_agent_queue(self) -> list[tuple[str, str]]:
+        """The whole queue, head first, for assertions."""
+        return [(s, self._agents[s]) for s in self._default_queue if s in self._agents]
+
+    async def invoke_agent(
+        self, target: tuple[str, str], method_name: str, *args: Any
+    ) -> Any:
+        """Call ``method_name`` on the agent object ``target`` names, on the
+        bus that exported it.
+        """
+        sender, agent_path = target
+        bus = self._buses.get(sender)
+        if bus is None:
+            raise Exception(f"org.freedesktop.DBus.Error.NoReply: {sender} is gone")
+        return await bus.invoke_exported_method(agent_path, method_name, *args)
+
+    async def simulate_caller_less_pairing(
+        self, device_path: str, method_name: str = "RequestPinCode", *args: Any
+    ) -> Any:
+        """Simulate a pairing with **no local ``Pair()`` caller** -- the
+        device initiating, or pairing raised as a side effect of
+        ``Connect()`` on an unbonded device (#24 §6.1).
+
+        ``device->bonding`` is NULL on these paths, so BlueZ takes
+        ``agent_get(NULL)`` and the **default agent** answers. This is the
+        path the surviving half of #22 lives on, and the old fake had no
+        way to express it.
+        """
+        target = self.default_agent()
+        if target is None:
+            raise Exception(
+                "org.bluez.Error.AuthenticationFailed: no default agent registered"
+            )
+        return await self.invoke_agent(target, method_name, device_path, *args)
+
+
 class MockProxyInterface:
     """Mock dbus-fast ProxyInterface with call_* methods."""
 
-    def __init__(self, interface_name: str, device_data: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        interface_name: str,
+        device_data: dict[str, Any] | None = None,
+        calling_bus: "MockMessageBus | None" = None,
+    ):
         self.interface_name = interface_name
         self._device_data = device_data or {}
         self._should_fail: dict[str, bool] = {}
+        # The connection this proxy was obtained from -- i.e. the D-Bus
+        # *sender* of any call made through it. BlueZ resolves the pairing
+        # agent from exactly this.
+        self._calling_bus = calling_bus
 
     async def call_start_discovery(self) -> None:
         """Mock StartDiscovery method."""
@@ -42,15 +197,23 @@ class MockProxyInterface:
 
         required_pin = self._device_data.get("_requires_pin")
         if required_pin is not None:
-            bus = self._device_data.get("_bus")
+            # PROTOTYPE (#27): sender-first dispatch. The agent is resolved
+            # from the sender of this Pair() call, falling back to the
+            # default agent only if that sender registered none -- the rule
+            # #24 established. The old fake resolved via the *default*
+            # agent unconditionally, which is the caller-less rule applied
+            # to a call that always has a caller.
+            bus = self._calling_bus or self._device_data.get("_bus")
             device_path = self._device_data.get("_device_path")
-            agent_path = bus.get_default_agent() if bus is not None else None
-            if bus is None or agent_path is None:
+            target = (
+                bus.bluez.resolve_agent(bus.unique_name) if bus is not None else None
+            )
+            if bus is None or target is None:
                 raise Exception(
                     "org.bluez.Error.AuthenticationFailed: no pairing agent registered"
                 )
-            supplied_pin = await bus.invoke_exported_method(
-                agent_path, "RequestPinCode", device_path
+            supplied_pin = await bus.bluez.invoke_agent(
+                target, "RequestPinCode", device_path
             )
             if supplied_pin != required_pin:
                 raise Exception("org.bluez.Error.AuthenticationFailed: incorrect PIN")
@@ -102,6 +265,9 @@ class MockProxyInterface:
     async def call_register_agent(self, agent_path: str, capability: str) -> None:
         """Mock AgentManager1.RegisterAgent -- records the call for assertion."""
         self._record_agent_manager_call("RegisterAgent", (agent_path, capability))
+        bus = self._device_data.get("_bus")
+        if bus is not None:
+            bus.bluez.register_agent(bus.unique_name, agent_path, capability)
 
     async def call_request_default_agent(self, agent_path: str) -> None:
         """Mock AgentManager1.RequestDefaultAgent -- records the call for
@@ -111,7 +277,7 @@ class MockProxyInterface:
         self._record_agent_manager_call("RequestDefaultAgent", (agent_path,))
         bus = self._device_data.get("_bus")
         if bus is not None:
-            bus.set_default_agent(agent_path)
+            bus.bluez.request_default_agent(bus.unique_name, agent_path)
 
     async def call_unregister_agent(self, agent_path: str) -> None:
         """Mock AgentManager1.UnregisterAgent -- records the call for
@@ -120,7 +286,7 @@ class MockProxyInterface:
         self._record_agent_manager_call("UnregisterAgent", (agent_path,))
         bus = self._device_data.get("_bus")
         if bus is not None:
-            bus.clear_default_agent(agent_path)
+            bus.bluez.unregister_agent(bus.unique_name, agent_path)
 
     def _record_agent_manager_call(self, name: str, args: tuple[Any, ...]) -> None:
         calls = self._device_data.get("_agent_manager_calls")
@@ -168,11 +334,16 @@ class MockProxyObject:
     """Mock dbus-fast ProxyObject."""
 
     def __init__(
-        self, bus_name: str, path: str, device_data: dict[str, Any] | None = None
+        self,
+        bus_name: str,
+        path: str,
+        device_data: dict[str, Any] | None = None,
+        calling_bus: "MockMessageBus | None" = None,
     ):
         self.bus_name = bus_name
         self.path = path
         self._device_data = device_data or {}
+        self._calling_bus = calling_bus
         self._interfaces: dict[str, MockProxyInterface] = {}
 
         # Create introspection based on path
@@ -202,7 +373,7 @@ class MockProxyObject:
         """Get a mock interface."""
         if interface_name not in self._interfaces:
             self._interfaces[interface_name] = MockProxyInterface(
-                interface_name, self._device_data
+                interface_name, self._device_data, calling_bus=self._calling_bus
             )
         return self._interfaces[interface_name]
 
@@ -231,37 +402,38 @@ class MockNode:
 class MockMessageBus:
     """Mock dbus-fast async MessageBus."""
 
-    def __init__(self, bus_type: Any = None):
+    def __init__(self, bus_type: Any = None, bluez: "MockBlueZ | None" = None):
         self.bus_type = bus_type
         self._devices: dict[str, dict[str, Any]] = {}
         self._introspection_cache: dict[str, MockNode] = {}
         self._should_fail_paths: set[str] = set()
         self._exported_objects: dict[str, Any] = {}
         self._agent_manager_calls: list[tuple[str, tuple[Any, ...]]] = []
-        # Set via set_default_agent / cleared via clear_default_agent --
-        # lets call_pair simulate BlueZ dispatching to the registered
-        # default agent.
-        self._default_agent_path: str | None = None
+        # PROTOTYPE (#27): the agent registry is daemon state, not bus
+        # state. A bus with no daemon supplied gets a private one, so a
+        # lone MockMessageBus behaves exactly as before; two buses minted
+        # from one MockBlueZ contend the way two real managers do.
+        self.bluez = bluez if bluez is not None else MockBlueZ()
+        self.unique_name = self.bluez.attach(self)
 
     async def connect(self) -> "MockMessageBus":
         """Mock connect method."""
         return self
 
-    def set_default_agent(self, agent_path: str) -> None:
-        """Record ``agent_path`` as BlueZ's current default pairing agent."""
-        self._default_agent_path = agent_path
+    def disconnect(self) -> None:
+        """Mock dbus-fast MessageBus.disconnect -- drops this connection.
 
-    def clear_default_agent(self, agent_path: str) -> None:
-        """Clear the tracked default agent if it currently matches
-        ``agent_path`` (a no-op otherwise -- mirrors BlueZ ignoring an
-        UnregisterAgent for an agent that isn't the default).
+        BlueZ watches each agent's bus connection and runs the same
+        teardown as UnregisterAgent when it drops, **promoting** the next
+        entry in the default queue (#24 §2). ``BluetoothManager.close()``
+        calls this, so the fake needs it to model the handoff.
         """
-        if self._default_agent_path == agent_path:
-            self._default_agent_path = None
+        self.bluez.disconnect(self.unique_name)
 
     def get_default_agent(self) -> str | None:
-        """The currently-registered default pairing agent's path, if any."""
-        return self._default_agent_path
+        """The current default pairing agent's path, if any (daemon-wide)."""
+        target = self.bluez.default_agent()
+        return target[1] if target is not None else None
 
     async def introspect(self, bus_name: str, path: str) -> "MockNode":
         """Mock introspect — returns a MockNode with the interfaces a
@@ -314,12 +486,12 @@ class MockMessageBus:
             root_device_data: dict[str, Any] = {
                 "_managed_objects": self._get_managed_objects()
             }
-            return MockProxyObject(bus_name, path, root_device_data)
+            return MockProxyObject(bus_name, path, root_device_data, calling_bus=self)
 
         # For device paths
         if "/dev_" in path:
             device_data = self._devices.get(path, {})
-            return MockProxyObject(bus_name, path, device_data)
+            return MockProxyObject(bus_name, path, device_data, calling_bus=self)
 
         # For the BlueZ root object (AgentManager1 lives here)
         if path == "/org/bluez":
@@ -327,12 +499,14 @@ class MockMessageBus:
                 "_agent_manager_calls": self._agent_manager_calls,
                 "_bus": self,
             }
-            return MockProxyObject(bus_name, path, agent_manager_device_data)
+            return MockProxyObject(
+                bus_name, path, agent_manager_device_data, calling_bus=self
+            )
 
         # For adapter paths, give Adapter1 access to the device store so
         # RemoveDevice can actually remove entries from it.
         adapter_device_data: dict[str, Any] = {"_devices_store": self._devices}
-        return MockProxyObject(bus_name, path, adapter_device_data)
+        return MockProxyObject(bus_name, path, adapter_device_data, calling_bus=self)
 
     def _get_managed_objects(self) -> dict[str, dict[str, Any]]:
         """Get all managed objects for ObjectManager."""

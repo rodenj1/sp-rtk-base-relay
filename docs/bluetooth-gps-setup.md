@@ -61,6 +61,16 @@ bluetoothctl --version
 
 ### Step 2: Pair and Trust the GPS Device
 
+> **Usually unnecessary.** The relay pairs and trusts the device for you on first
+> start, using the PIN from your configuration — `ensure_device_ready()` handles
+> discovery, pairing and trusting. Do this step manually only if automatic pairing
+> fails, or if you are running a version at or below v3.1.0, where automatic pairing
+> was broken (see [issue #39](https://github.com/rodenj1/sp-rtk-base-relay/issues/39)).
+>
+> If a device's PIN changed *after* it was already bonded, use
+> `BluetoothManager.force_repair()` rather than pairing again — an existing bond makes
+> the new PIN irrelevant otherwise.
+
 **Option A: Using the interactive pairing script**
 
 ```bash

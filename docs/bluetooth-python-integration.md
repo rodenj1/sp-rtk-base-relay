@@ -88,6 +88,14 @@ uv run pytest tests/unit/test_input_factory.py -v
 - Configurable PIN code
 - Automatic device trusting
 
+> **Version note.** Automatic pairing did not actually work in **any release up to and
+> including v3.1.0**, despite being listed here and in v3.0.0's changelog. A property
+> read was compared as a boolean when D-Bus returns a always-truthy `Variant`, so the
+> "already paired" fast path was taken unconditionally and `Device1.Pair()` was never
+> called. Any deployment on those versions that appears to work is running on a bond
+> created manually or by a pre-3.0.0 path. See
+> [issue #39](https://github.com/rodenj1/sp-rtk-base-relay/issues/39).
+
 ### Socket Management
 - Native AF_BLUETOOTH RFCOMM sockets
 - Proper timeout handling

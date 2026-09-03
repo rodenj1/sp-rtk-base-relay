@@ -10,9 +10,12 @@ connection to it (its own device store, its own exported objects, its own
 unique bus name).
 """
 
+import asyncio
 import inspect
 from typing import Any, NamedTuple
 from unittest.mock import MagicMock
+
+from dbus_fast.signature import Variant
 
 
 class AgentRef(NamedTuple):
@@ -259,6 +262,13 @@ class MockProxyInterface:
             if supplied_pin != required_pin:
                 raise Exception("org.bluez.Error.AuthenticationFailed: incorrect PIN")
 
+        hanging = self._device_data.get("_hanging_pairings") or set()
+        if self._device_data.get("_device_path") in hanging:
+            await asyncio.sleep(3600)
+        ineffective_pairings = self._device_data.get("_ineffective_pairings") or set()
+        if self._device_data.get("_device_path") in ineffective_pairings:
+            # Report success without bonding -- see set_pairing_ineffective().
+            return
         self._device_data["Paired"] = True
 
     async def call_connect(self) -> None:
@@ -273,10 +283,61 @@ class MockProxyInterface:
             raise Exception("Disconnection failed")
         self._device_data["Connected"] = False
 
+    # D-Bus signatures for org.bluez.Device1 properties, taken from
+    # `busctl introspect` against BlueZ 5.82. The real Properties.Get
+    # returns every value wrapped in a Variant carrying one of these.
+    # Returning raw values here made issue #39 invisible to this suite:
+    # Variant has no __bool__, so every Variant is truthy -- including
+    # Variant("b", False) -- and production branched on one directly.
+    _DEVICE1_SIGNATURES = {
+        "Address": "s",
+        "AddressType": "s",
+        "Alias": "s",
+        "Icon": "s",
+        "Modalias": "s",
+        "Name": "s",
+        "Adapter": "o",
+        "Blocked": "b",
+        "Bonded": "b",
+        "Connected": "b",
+        "LegacyPairing": "b",
+        "Paired": "b",
+        "ServicesResolved": "b",
+        "Trusted": "b",
+        "Class": "u",
+        "Appearance": "q",
+        "RSSI": "n",
+        "TxPower": "n",
+        "UUIDs": "as",
+    }
+
+    @classmethod
+    def _signature_for(cls, property_name: str, value: Any) -> str:
+        """D-Bus signature for a Device1 property.
+
+        Falls back to inferring from the Python type for property names
+        the table does not cover.
+        """
+        known = cls._DEVICE1_SIGNATURES.get(property_name)
+        if known is not None:
+            return known
+        if isinstance(value, bool):
+            return "b"
+        if isinstance(value, int):
+            return "u"
+        if isinstance(value, list):
+            return "as"
+        return "s"
+
     async def call_get(self, interface: str, property_name: str) -> Any:
-        """Mock Properties Get method."""
+        """Mock Properties Get method.
+
+        Returns a ``Variant``, as the real ``org.freedesktop.DBus.Properties``
+        does -- never the raw value.
+        """
         if interface == "org.bluez.Device1":
-            return self._device_data.get(property_name, False)
+            value = self._device_data.get(property_name, False)
+            return Variant(self._signature_for(property_name, value), value)
         return None
 
     async def call_set(self, interface: str, property_name: str, value: Any) -> None:
@@ -355,6 +416,12 @@ class MockProxyInterface:
             raise Exception(
                 f"org.bluez.Error.DoesNotExist: {device_path} does not exist"
             )
+        ineffective = self._device_data.get("_ineffective_removals") or set()
+        if device_path in ineffective:
+            # BlueZ reported success but the bond survived. Pathological,
+            # but it is the exact condition force_repair's pair stage
+            # exists to catch -- see set_removal_ineffective().
+            return
         del devices_store[device_path]
 
 
@@ -454,6 +521,15 @@ class MockMessageBus:
     def __init__(self, bus_type: Any = None, bluez: "MockBlueZ | None" = None):
         self.bus_type = bus_type
         self._devices: dict[str, dict[str, Any]] = {}
+        # Device paths whose RemoveDevice call reports success but leaves
+        # the bond in place -- see set_removal_ineffective().
+        self._ineffective_removals: set[str] = set()
+        # Device paths whose Pair call reports success without bonding --
+        # see set_pairing_ineffective().
+        self._ineffective_pairings: set[str] = set()
+        # Device paths whose Pair call never returns -- see
+        # set_pairing_hangs().
+        self._hanging_pairings: set[str] = set()
         self._introspection_cache: dict[str, MockNode] = {}
         self._should_fail_paths: set[str] = set()
         self._exported_objects: dict[str, Any] = {}
@@ -573,7 +649,10 @@ class MockMessageBus:
 
         # For adapter paths, give Adapter1 access to the device store so
         # RemoveDevice can actually remove entries from it.
-        adapter_device_data: dict[str, Any] = {"_devices_store": self._devices}
+        adapter_device_data: dict[str, Any] = {
+            "_devices_store": self._devices,
+            "_ineffective_removals": self._ineffective_removals,
+        }
         return MockProxyObject(bus_name, path, adapter_device_data, calling_bus=self)
 
     def _get_managed_objects(self) -> dict[str, dict[str, Any]]:
@@ -590,6 +669,51 @@ class MockMessageBus:
                 }
             }
         return objects
+
+    def set_pairing_hangs(
+        self, mac_address: str, adapter_path: str = "/org/bluez/hci0"
+    ) -> None:
+        """Make ``Device1.Pair`` never answer.
+
+        BlueZ really does this: ``device_bonding_complete()`` returns
+        without replying when the status is success and the device is
+        already paired, reachable when a link key arrives with
+        ``store_hint == 0`` (``Paired`` true, ``Bonded`` false).
+        ``dbus-fast`` imposes no timeout of its own, so the relay must
+        bound the wait itself.
+        """
+        self._hanging_pairings.add(
+            f"{adapter_path}/dev_{mac_address.replace(':', '_')}"
+        )
+
+    def set_pairing_ineffective(
+        self, mac_address: str, adapter_path: str = "/org/bluez/hci0"
+    ) -> None:
+        """Make ``Device1.Pair`` report success without creating the bond.
+
+        BlueZ is not supposed to do this -- a successful ``Pair()`` reply
+        is a positive assertion that the device was set paired. The state
+        exists so the relay's tripwire, which cross-checks its own
+        bookkeeping after pairing, can be exercised.
+        """
+        self._ineffective_pairings.add(
+            f"{adapter_path}/dev_{mac_address.replace(':', '_')}"
+        )
+
+    def set_removal_ineffective(
+        self, mac_address: str, adapter_path: str = "/org/bluez/hci0"
+    ) -> None:
+        """Make ``Adapter1.RemoveDevice`` succeed without removing the bond.
+
+        Models a BlueZ that reports a successful removal while the device
+        stays bonded. ``force_repair()`` must not treat that as success:
+        it has just been told the bond is gone, so a subsequent
+        ``pair_device()`` answering "already bonded" means the removal
+        did not take.
+        """
+        self._ineffective_removals.add(
+            f"{adapter_path}/dev_{mac_address.replace(':', '_')}"
+        )
 
     def add_device(
         self,
@@ -618,6 +742,8 @@ class MockMessageBus:
             "Trusted": trusted,
             "Connected": connected,
             "_device_path": device_path,
+            "_ineffective_pairings": self._ineffective_pairings,
+            "_hanging_pairings": self._hanging_pairings,
         }
         if requires_pin is not None:
             self._devices[device_path]["_requires_pin"] = requires_pin

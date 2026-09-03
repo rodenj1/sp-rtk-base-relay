@@ -8,6 +8,7 @@ Bluetooth agent/pairing tickets can be tested (see issue #13's series).
 """
 
 import pytest
+from dbus_fast.signature import Variant
 
 from tests.fixtures.mock_bluetooth import (
     MockBlueZ,
@@ -824,3 +825,60 @@ class TestDeviceStoreStaysPerBus:
 
         assert bus_a.get_device_data("AA:BB:CC:DD:EE:FF") is not None
         assert bus_b.get_device_data("AA:BB:CC:DD:EE:FF") is None
+
+
+class TestPropertiesGetReturnsVariants:
+    """The fake's ``Properties.Get`` must return ``Variant``s, as BlueZ does.
+
+    Returning the raw value made a production truthiness bug invisible for
+    two releases (issue #39): ``Variant`` defines no ``__bool__``, so every
+    ``Variant`` is truthy -- including one wrapping ``False``. Production
+    branched on the result of a property read and so always took the
+    "already paired" path, meaning ``Device1.Pair()`` was never called.
+    """
+
+    @pytest.mark.asyncio
+    async def test_get_returns_a_variant_not_a_raw_value(self):
+        bus = create_mock_message_bus()
+        bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE", paired=False)
+        props = bus.get_proxy_object(
+            "org.bluez", "/org/bluez/hci0/dev_00_11_22_33_44_55", None
+        ).get_interface("org.freedesktop.DBus.Properties")
+
+        result = await props.call_get("org.bluez.Device1", "Paired")
+
+        assert isinstance(result, Variant)
+        assert result.value is False
+
+    @pytest.mark.asyncio
+    async def test_a_variant_wrapping_false_is_truthy(self):
+        """The reason every property read must be unwrapped.
+
+        This is a property of ``dbus_fast.signature.Variant`` itself, not of
+        the fake. It is asserted here so the next person to add a property
+        read sees why a bare ``if`` on one is a bug.
+        """
+        bus = create_mock_message_bus()
+        bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE", paired=False)
+        props = bus.get_proxy_object(
+            "org.bluez", "/org/bluez/hci0/dev_00_11_22_33_44_55", None
+        ).get_interface("org.freedesktop.DBus.Properties")
+
+        result = await props.call_get("org.bluez.Device1", "Paired")
+
+        assert bool(result) is True, "a Variant is always truthy"
+        assert bool(result.value) is False, "its wrapped value is not"
+
+    @pytest.mark.asyncio
+    async def test_variants_carry_the_signature_bluez_uses(self):
+        bus = create_mock_message_bus()
+        bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE", paired=False)
+        props = bus.get_proxy_object(
+            "org.bluez", "/org/bluez/hci0/dev_00_11_22_33_44_55", None
+        ).get_interface("org.freedesktop.DBus.Properties")
+
+        paired = await props.call_get("org.bluez.Device1", "Paired")
+        name = await props.call_get("org.bluez.Device1", "Name")
+
+        assert paired.signature == "b"
+        assert name.signature == "s"

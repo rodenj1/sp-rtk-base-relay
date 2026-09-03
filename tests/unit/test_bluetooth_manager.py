@@ -6,6 +6,7 @@ for device discovery, pairing, trusting, and connection management.
 Updated for dbus-fast migration.
 """
 
+import logging
 from typing import Any
 from unittest.mock import patch
 
@@ -234,8 +235,8 @@ class TestBluetoothManagerDiscovery:
 class TestBluetoothManagerPairing:
     """Test device pairing methods."""
 
-    def test_pair_device_success(self):
-        """Test successful device pairing."""
+    def test_pair_device_returns_true_when_it_creates_the_bond(self):
+        """``True`` means this call created the bond (issue #48)."""
         bus_type, _, dbus_error = create_mock_dbus_fast()
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE", paired=False)
@@ -259,8 +260,12 @@ class TestBluetoothManagerPairing:
             device_data = mock_bus.get_device_data("00:11:22:33:44:55")
             assert device_data["Paired"] is True
 
-    def test_pair_device_already_paired(self):
-        """Test pairing when device already paired."""
+    def test_pair_device_returns_false_when_the_bond_already_exists(self):
+        """``False`` means "already bonded, nothing done" -- not failure.
+
+        Failure raises; the return value distinguishes a bond this call
+        created from one that was already there (issue #48).
+        """
         bus_type, _, dbus_error = create_mock_dbus_fast()
         mock_bus = create_mock_message_bus()
         mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE", paired=True)
@@ -280,7 +285,7 @@ class TestBluetoothManagerPairing:
             manager = BluetoothManager()
             result = manager.pair_device("00:11:22:33:44:55")
 
-            assert result is True
+            assert result is False
             device_data = mock_bus.get_device_data("00:11:22:33:44:55")
             assert device_data["Paired"] is True
 
@@ -1377,3 +1382,135 @@ class TestBluetoothManagerForceRepair:
 
         with pytest.raises(TypeError):
             manager.force_repair(self.MAC)  # type: ignore[call-arg]
+
+
+class TestPairDeviceReturnContract:
+    """``pair_device()``'s return value distinguishes two successes.
+
+    ``True`` -- this call created the bond. ``False`` -- the bond was
+    already there and nothing was done. Failure raises. Before issue #48
+    the value was vestigial (``True`` or raise), so both composers carried
+    a dead ``if not pair_device(): raise`` branch that would fire on the
+    idempotent success path once ``False`` became reachable.
+    """
+
+    MAC = "00:11:22:33:44:55"
+
+    def test_ensure_device_ready_succeeds_when_the_bond_already_exists(self):
+        """The idempotent path is a success, not a failure.
+
+        ``ensure_device_ready()`` runs on every relay start, so an
+        already-bonded device must not raise.
+        """
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device(self.MAC, "RTK_GPS_BASE", paired=True)
+        manager = _build_manager(mock_bus)
+
+        mac, channel = manager.ensure_device_ready(pin="1234", mac_address=self.MAC)
+
+        assert mac == self.MAC
+        assert channel == 1
+        assert mock_bus.get_device_data(self.MAC)["Trusted"] is True
+
+    def test_ensure_device_ready_bonds_a_cold_device(self):
+        """The other success: no bond yet, so this call creates one."""
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device(self.MAC, "RTK_GPS_BASE", paired=False)
+        manager = _build_manager(mock_bus)
+
+        mac, _ = manager.ensure_device_ready(pin="1234", mac_address=self.MAC)
+
+        assert mac == self.MAC
+        assert mock_bus.get_device_data(self.MAC)["Paired"] is True
+
+
+class TestForceRepairRejectsAnIneffectiveRemoval:
+    """Force-repair must not report success when its removal did not take.
+
+    ``force_repair()`` discards the bond and re-pairs. If ``pair_device()``
+    then answers ``False`` -- "already bonded, nothing done" -- the bond it
+    just removed is still there, so the operation silently did nothing.
+    This is the assertion that would have caught issue #39 inside
+    ``force_repair()`` rather than requiring a field probe.
+    """
+
+    MAC = "00:11:22:33:44:55"
+
+    def test_force_repair_raises_when_the_bond_survives_removal(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device(self.MAC, "RTK_GPS_BASE", paired=True)
+        mock_bus.set_removal_ineffective(self.MAC)
+        manager = _build_manager(mock_bus)
+
+        with pytest.raises(BluetoothError) as exc_info:
+            manager.force_repair(self.MAC, pin="1234")
+
+        message = str(exc_info.value)
+        assert "pair stage failed" in message
+        assert "still bonded" in message
+
+
+class TestPairingTripwire:
+    """A successful Pair() that leaves no bond is logged, not swallowed.
+
+    BlueZ does not do this -- a successful ``Pair()`` reply asserts the
+    device was set paired -- so this cross-checks the relay's own
+    bookkeeping rather than hedging against BlueZ. It exists because
+    issue #39's whole cost was a false success travelling two steps
+    before surfacing as a confusing RFCOMM error.
+    """
+
+    MAC = "00:11:22:33:44:55"
+
+    def test_disagreement_is_logged_distinctly_and_not_as_a_wrong_pin(self, caplog):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device(self.MAC, "RTK_GPS_BASE", paired=False)
+        mock_bus.set_pairing_ineffective(self.MAC)
+        manager = _build_manager(mock_bus)
+
+        with caplog.at_level(logging.WARNING):
+            result = manager.pair_device(self.MAC, pin="1234")
+
+        assert result is True, "BlueZ reported success, so this is not a failure"
+        assert "did not create a bond" in caplog.text
+        assert "not a wrong-PIN failure" in caplog.text
+
+
+class TestPairingIsBounded:
+    """A Pair() that never answers must not hang the relay indefinitely.
+
+    BlueZ can return from ``device_bonding_complete()`` without replying
+    at all, and ``dbus-fast`` imposes no timeout on its calls, so the
+    bound has to come from here.
+    """
+
+    MAC = "00:11:22:33:44:55"
+
+    def test_a_pair_call_that_never_answers_times_out(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device(self.MAC, "RTK_GPS_BASE", paired=False)
+        mock_bus.set_pairing_hangs(self.MAC)
+        manager = _build_manager(mock_bus)
+
+        with (
+            patch("src.sp_rtk_base_relay.core.bluetooth_manager._PAIRING_TIMEOUT", 0.2),
+            pytest.raises(BluetoothError) as exc_info,
+        ):
+            manager.pair_device(self.MAC, pin="1234")
+
+        assert "timed out" in str(exc_info.value).lower()
+
+    def test_a_timed_out_pairing_does_not_retain_the_pin(self):
+        """The PIN map must be cleaned even when the call is cancelled."""
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device(self.MAC, "RTK_GPS_BASE", paired=False)
+        mock_bus.set_pairing_hangs(self.MAC)
+        manager = _build_manager(mock_bus)
+
+        with (
+            patch("src.sp_rtk_base_relay.core.bluetooth_manager._PAIRING_TIMEOUT", 0.2),
+            pytest.raises(BluetoothError),
+        ):
+            manager.pair_device(self.MAC, pin="1234")
+
+        assert manager._pending_pins == {}

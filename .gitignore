@@ -213,3 +213,6 @@ config.yaml
 # Live Bluetooth GPS config (copy from config.bluetooth-gps.example.yaml and
 # fill in your own caster credentials + device MAC/name).
 config.bluetooth-gps.yaml
+
+# Machine-local agent scratch state (may contain host/site specifics)
+.claude/agent-memory/

@@ -415,6 +415,72 @@ class TestBluetoothManagerConnection:
             device_data = mock_bus.get_device_data("00:11:22:33:44:55")
             assert device_data["Connected"] is False
 
+    def test_connect_device_retries_after_not_available_then_succeeds(self):
+        """A transient 'NotAvailable' error is retried, not raised."""
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
+        manager = _build_manager(mock_bus)
+
+        attempts = {"count": 0}
+        original_call_connect = MockProxyInterface.call_connect
+
+        async def flaky_call_connect(self: Any) -> None:
+            attempts["count"] += 1
+            if attempts["count"] < 2:
+                raise RealDBusError(
+                    "org.bluez.Error.NotAvailable",
+                    "Operation currently not available",
+                )
+            await original_call_connect(self)
+
+        with patch.object(MockProxyInterface, "call_connect", flaky_call_connect):
+            result = manager.connect_device(
+                "00:11:22:33:44:55", max_retries=3, retry_delay=0
+            )
+
+        assert result is True
+        assert attempts["count"] == 2
+
+    def test_connect_device_retries_up_to_max_attempts_then_raises(self):
+        """A persistent 'NotAvailable' error is retried up to max_retries
+        times, then connect_device() raises.
+        """
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
+        manager = _build_manager(mock_bus)
+
+        attempts = {"count": 0}
+
+        async def always_not_available(self: Any) -> None:
+            attempts["count"] += 1
+            raise RealDBusError(
+                "org.bluez.Error.NotAvailable", "Operation currently not available"
+            )
+
+        with patch.object(MockProxyInterface, "call_connect", always_not_available):
+            with pytest.raises(BluetoothError):
+                manager.connect_device(
+                    "00:11:22:33:44:55", max_retries=2, retry_delay=0
+                )
+
+        assert attempts["count"] == 2
+
+    def test_connect_device_non_retryable_dbus_error_fails_immediately(self):
+        """A D-Bus error other than 'NotAvailable' isn't retried."""
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("00:11:22:33:44:55", "RTK_GPS_BASE")
+        manager = _build_manager(mock_bus)
+
+        with patch.object(
+            MockProxyInterface,
+            "call_connect",
+            side_effect=RealDBusError("org.bluez.Error.Failed", "nope"),
+        ):
+            with pytest.raises(BluetoothError, match="D-Bus connection error"):
+                manager.connect_device(
+                    "00:11:22:33:44:55", max_retries=3, retry_delay=0
+                )
+
 
 class TestBluetoothManagerHelpers:
     """Test helper methods."""

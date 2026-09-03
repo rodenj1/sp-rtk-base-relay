@@ -8,7 +8,10 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from src.sp_rtk_base_relay.core.bluetooth_manager import BluetoothManager
+from src.sp_rtk_base_relay.core.bluetooth_manager import (
+    BluetoothError,
+    BluetoothManager,
+)
 from src.sp_rtk_base_relay.core.input_sources.bluetooth_input import (
     BluetoothConfig,
     BluetoothInputSource,
@@ -180,6 +183,58 @@ class TestBluetoothInputSourceConnection:
             mac_address="00:11:22:33:44:55",
             scan_timeout=30,
         )
+
+    def test_connect_constructs_manager_with_claim_default_agent(self):
+        """The relay's own long-lived manager must claim BlueZ's default
+        pairing agent, so a caller-less pairing still reaches someone who
+        knows the PIN (issue #31) -- unlike a throwaway manager an
+        integrator (e.g. sp-rtk-base) might construct for a UI scan.
+
+        Unlike the other connect() tests, this one leaves ``bt_manager``
+        unset so the real construction branch runs, with the
+        ``BluetoothManager`` class itself (not just its methods) mocked.
+        """
+        config = BluetoothConfig(device_name="RTK_GPS_BASE", adapter_name="hci1")
+        source = BluetoothInputSource(config)
+
+        mock_manager = MagicMock(spec=BluetoothManager)
+        mock_manager.ensure_device_ready.return_value = ("00:11:22:33:44:55", 1)
+        mock_socket = Mock()
+
+        with (
+            patch(
+                "src.sp_rtk_base_relay.core.input_sources.bluetooth_input.BluetoothManager",
+                return_value=mock_manager,
+            ) as mock_manager_cls,
+            patch(
+                "src.sp_rtk_base_relay.core.input_sources.bluetooth_input.socket.socket",
+                return_value=mock_socket,
+            ),
+        ):
+            result = source.connect()
+
+        assert result is True
+        assert source.bt_manager is mock_manager
+        mock_manager_cls.assert_called_once_with(
+            adapter_name="hci1", claim_default_agent=True
+        )
+
+    def test_connect_wraps_manager_construction_failure(self):
+        """A BluetoothError raised while constructing the manager surfaces
+        as an InputSourceError, per the real construction branch's
+        except clause.
+        """
+        config = BluetoothConfig(device_name="RTK_GPS_BASE")
+        source = BluetoothInputSource(config)
+
+        with patch(
+            "src.sp_rtk_base_relay.core.input_sources.bluetooth_input.BluetoothManager",
+            side_effect=BluetoothError("adapter not found"),
+        ):
+            with pytest.raises(
+                InputSourceError, match="Failed to initialize Bluetooth"
+            ):
+                source.connect()
 
     def test_connect_forwards_configured_pin(self):
         """A non-default configured PIN is forwarded to ensure_device_ready.

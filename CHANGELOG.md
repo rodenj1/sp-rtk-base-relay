@@ -1,3 +1,36 @@
+## v3.0.0 (2026-09-03)
+
+### BREAKING CHANGE
+
+- `BluetoothManager.ensure_device_ready()` now requires a `pin` argument
+(first parameter, no default). Any caller invoking it positionally or
+without `pin` will break — notably `sp-rtk-base`'s UI, which imports
+`BluetoothManager` directly (non-public API) and will need updating to
+pass its configured PIN once it bumps its dependency constraint.
+
+- feat(bluetooth): register default pairing agent with full lifecycle
+`BluetoothManager` now registers a `KeyboardOnly` `org.bluez.Agent1`
+pairing agent on startup (export -> RegisterAgent -> RequestDefaultAgent,
+in that order to avoid a startup race) and unregisters it best-effort on
+shutdown. `RequestConfirmation`/`RequestAuthorization`/`AuthorizeService`
+auto-accept, `Release`/`Cancel` are no-ops, and the PIN/passkey methods
+existed but rejected every call as of this step.
+- fix(bluetooth): thread the configured PIN through pairing
+`RequestPinCode` on the registered agent now answers with the PIN
+recorded for whichever device path has a pairing attempt in flight,
+instead of rejecting every call. `ensure_device_ready()` forwards its
+new required `pin` argument through to the underlying pairing call, and
+the Bluetooth input source now passes its already-configured PIN
+through instead of silently dropping it — the actual user-facing fix
+for legacy-PIN GNSS receivers that could never pair automatically.
+- feat(bluetooth): add force_repair() for the same-MAC, PIN-changed case
+Adds `BluetoothManager.force_repair(mac_address, pin, scan_timeout=30)`
+for a device that's already bonded but whose configured PIN has since
+changed. One atomic operation — remove the bond, wait for BlueZ to
+repopulate `org.bluez.Device1`, re-pair with the given PIN, then trust —
+with no rollback or retry on partial failure; the raised error
+identifies which stage failed (remove/pair/trust).
+
 ## v2.1.2 (2026-05-27)
 
 

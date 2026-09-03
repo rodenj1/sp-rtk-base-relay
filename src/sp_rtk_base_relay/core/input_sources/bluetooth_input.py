@@ -115,6 +115,7 @@ class BluetoothInputSource(InputSource):
             # for BlueZ's two-phase rediscovery to restore it.
             try:
                 mac, channel = self.bt_manager.ensure_device_ready(
+                    pin=self.config.pin,
                     device_name=self.config.device_name,
                     mac_address=self.config.mac_address,
                     scan_timeout=self.config.scan_timeout,

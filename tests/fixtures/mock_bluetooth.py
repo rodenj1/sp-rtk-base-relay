@@ -27,9 +27,34 @@ class MockProxyInterface:
         pass
 
     async def call_pair(self) -> None:
-        """Mock Pair method."""
+        """Mock Pair method.
+
+        If the device was added with ``requires_pin=...`` (legacy PIN
+        pairing), this simulates BlueZ asking the currently-registered
+        default pairing agent for the PIN via ``RequestPinCode`` --
+        mirroring real BlueZ dispatch to ``Agent1`` -- and only succeeds
+        if the returned PIN matches the device's configured PIN. Devices
+        added without ``requires_pin`` pair immediately, as before
+        (Secure Simple Pairing / Just Works never requests a PIN).
+        """
         if self._should_fail.get("pair"):
             raise Exception("Pairing failed")
+
+        required_pin = self._device_data.get("_requires_pin")
+        if required_pin is not None:
+            bus = self._device_data.get("_bus")
+            device_path = self._device_data.get("_device_path")
+            agent_path = bus.get_default_agent() if bus is not None else None
+            if bus is None or agent_path is None:
+                raise Exception(
+                    "org.bluez.Error.AuthenticationFailed: no pairing agent registered"
+                )
+            supplied_pin = await bus.invoke_exported_method(
+                agent_path, "RequestPinCode", device_path
+            )
+            if supplied_pin != required_pin:
+                raise Exception("org.bluez.Error.AuthenticationFailed: incorrect PIN")
+
         self._device_data["Paired"] = True
 
     async def call_connect(self) -> None:
@@ -79,12 +104,23 @@ class MockProxyInterface:
         self._record_agent_manager_call("RegisterAgent", (agent_path, capability))
 
     async def call_request_default_agent(self, agent_path: str) -> None:
-        """Mock AgentManager1.RequestDefaultAgent -- records the call for assertion."""
+        """Mock AgentManager1.RequestDefaultAgent -- records the call for
+        assertion and tracks ``agent_path`` as the bus's default agent so
+        ``call_pair`` can simulate BlueZ dispatching to it.
+        """
         self._record_agent_manager_call("RequestDefaultAgent", (agent_path,))
+        bus = self._device_data.get("_bus")
+        if bus is not None:
+            bus.set_default_agent(agent_path)
 
     async def call_unregister_agent(self, agent_path: str) -> None:
-        """Mock AgentManager1.UnregisterAgent -- records the call for assertion."""
+        """Mock AgentManager1.UnregisterAgent -- records the call for
+        assertion and clears the tracked default agent if it matches.
+        """
         self._record_agent_manager_call("UnregisterAgent", (agent_path,))
+        bus = self._device_data.get("_bus")
+        if bus is not None:
+            bus.clear_default_agent(agent_path)
 
     def _record_agent_manager_call(self, name: str, args: tuple[Any, ...]) -> None:
         calls = self._device_data.get("_agent_manager_calls")
@@ -202,10 +238,30 @@ class MockMessageBus:
         self._should_fail_paths: set[str] = set()
         self._exported_objects: dict[str, Any] = {}
         self._agent_manager_calls: list[tuple[str, tuple[Any, ...]]] = []
+        # Set via set_default_agent / cleared via clear_default_agent --
+        # lets call_pair simulate BlueZ dispatching to the registered
+        # default agent.
+        self._default_agent_path: str | None = None
 
     async def connect(self) -> "MockMessageBus":
         """Mock connect method."""
         return self
+
+    def set_default_agent(self, agent_path: str) -> None:
+        """Record ``agent_path`` as BlueZ's current default pairing agent."""
+        self._default_agent_path = agent_path
+
+    def clear_default_agent(self, agent_path: str) -> None:
+        """Clear the tracked default agent if it currently matches
+        ``agent_path`` (a no-op otherwise -- mirrors BlueZ ignoring an
+        UnregisterAgent for an agent that isn't the default).
+        """
+        if self._default_agent_path == agent_path:
+            self._default_agent_path = None
+
+    def get_default_agent(self) -> str | None:
+        """The currently-registered default pairing agent's path, if any."""
+        return self._default_agent_path
 
     async def introspect(self, bus_name: str, path: str) -> "MockNode":
         """Mock introspect — returns a MockNode with the interfaces a
@@ -268,7 +324,8 @@ class MockMessageBus:
         # For the BlueZ root object (AgentManager1 lives here)
         if path == "/org/bluez":
             agent_manager_device_data: dict[str, Any] = {
-                "_agent_manager_calls": self._agent_manager_calls
+                "_agent_manager_calls": self._agent_manager_calls,
+                "_bus": self,
             }
             return MockProxyObject(bus_name, path, agent_manager_device_data)
 
@@ -300,8 +357,17 @@ class MockMessageBus:
         paired: bool = False,
         trusted: bool = False,
         connected: bool = False,
+        requires_pin: str | None = None,
     ) -> None:
-        """Add a mock device to the bus."""
+        """Add a mock device to the bus.
+
+        Args:
+            requires_pin: If set, marks this device as needing legacy PIN
+                pairing -- ``call_pair`` will simulate BlueZ asking the
+                registered default agent for the PIN and only succeed if
+                it matches. If ``None`` (default), the device pairs
+                immediately, as Secure Simple Pairing / Just Works does.
+        """
         device_path = f"{adapter_path}/dev_{mac_address.replace(':', '_')}"
         self._devices[device_path] = {
             "Address": mac_address,
@@ -309,7 +375,11 @@ class MockMessageBus:
             "Paired": paired,
             "Trusted": trusted,
             "Connected": connected,
+            "_bus": self,
+            "_device_path": device_path,
         }
+        if requires_pin is not None:
+            self._devices[device_path]["_requires_pin"] = requires_pin
 
     def remove_device(
         self, mac_address: str, adapter_path: str = "/org/bluez/hci0"
@@ -370,7 +440,20 @@ class MockMessageBus:
                 f"org.freedesktop.DBus.Error.UnknownMethod: {method_name} not found "
                 f"on object exported at {path}"
             )
-        result = method(*args)
+        # A real dbus_fast.service.ServiceInterface method decorated with
+        # @dbus_method() is wrapped: calling it directly always returns
+        # None regardless of what the underlying function returns (real
+        # dbus-fast's message dispatcher instead calls the wrapper's
+        # stashed "__DBUS_METHOD".fn directly -- see
+        # MessageBus._callback_method_handler). Mirror that so tests can
+        # observe real return values (e.g. RequestPinCode's PIN) exactly
+        # as BlueZ would receive them. Plain test-double methods (no
+        # dbus_method decorator) are called as before.
+        dbus_method_meta = getattr(method, "__DBUS_METHOD", None)
+        if dbus_method_meta is not None:
+            result = dbus_method_meta.fn(obj, *args)
+        else:
+            result = method(*args)
         if inspect.isawaitable(result):
             result = await result
         return result

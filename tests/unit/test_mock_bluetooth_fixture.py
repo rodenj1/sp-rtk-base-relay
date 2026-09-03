@@ -203,6 +203,187 @@ class TestAdapterRemoveDevice:
             await adapter.call_remove_device("/org/bluez/hci0/dev_NOT_THERE")
 
 
+class TestExportedMethodReturnValues:
+    """A @dbus_method()-decorated method's real return value must survive
+    dispatch through invoke_exported_method.
+
+    Real dbus-fast wraps @dbus_method()-decorated methods so that calling
+    the wrapper directly always returns None -- the real message
+    dispatcher instead calls the wrapper's stashed "__DBUS_METHOD".fn
+    directly (see dbus_fast.message_bus.MessageBus._callback_method_handler).
+    invoke_exported_method must mirror that so tests can observe real
+    return values (e.g. a pairing agent's RequestPinCode PIN) exactly as
+    BlueZ would receive them.
+    """
+
+    @pytest.mark.asyncio
+    async def test_decorated_method_return_value_is_not_discarded(self):
+        from typing import Annotated
+
+        from dbus_fast.annotations import DBusSignature
+        from dbus_fast.service import ServiceInterface, dbus_method
+
+        class RealAgent(ServiceInterface):
+            def __init__(self) -> None:
+                super().__init__("org.bluez.Agent1")
+
+            @dbus_method()
+            def RequestPinCode(
+                self, device: Annotated[str, DBusSignature("o")]
+            ) -> Annotated[str, DBusSignature("s")]:
+                return f"pin-for-{device}"
+
+        bus = create_mock_message_bus()
+        bus.export("/agent", RealAgent())
+
+        result = await bus.invoke_exported_method(
+            "/agent", "RequestPinCode", "/org/bluez/hci0/dev_AA"
+        )
+
+        assert result == "pin-for-/org/bluez/hci0/dev_AA"
+
+    @pytest.mark.asyncio
+    async def test_decorated_method_exception_still_propagates(self):
+        from typing import Annotated
+
+        from dbus_fast import DBusError
+        from dbus_fast.annotations import DBusSignature
+        from dbus_fast.service import ServiceInterface, dbus_method
+
+        class RealAgent(ServiceInterface):
+            def __init__(self) -> None:
+                super().__init__("org.bluez.Agent1")
+
+            @dbus_method()
+            def RequestPinCode(
+                self, device: Annotated[str, DBusSignature("o")]
+            ) -> Annotated[str, DBusSignature("s")]:
+                raise DBusError("org.bluez.Error.Rejected", "no PIN")
+
+        bus = create_mock_message_bus()
+        bus.export("/agent", RealAgent())
+
+        with pytest.raises(DBusError):
+            await bus.invoke_exported_method(
+                "/agent", "RequestPinCode", "/org/bluez/hci0/dev_AA"
+            )
+
+
+class TestDefaultAgentTracking:
+    """The fake tracks which agent is currently the default so call_pair
+    can simulate BlueZ dispatching a PIN request to it.
+    """
+
+    @pytest.mark.asyncio
+    async def test_request_default_agent_records_the_path(self):
+        bus = create_mock_message_bus()
+        agent_manager = bus.get_proxy_object(
+            "org.bluez", "/org/bluez", None
+        ).get_interface("org.bluez.AgentManager1")
+
+        await agent_manager.call_register_agent("/agent", "KeyboardOnly")
+        await agent_manager.call_request_default_agent("/agent")
+
+        assert bus.get_default_agent() == "/agent"
+
+    @pytest.mark.asyncio
+    async def test_unregister_agent_clears_the_default_path(self):
+        bus = create_mock_message_bus()
+        agent_manager = bus.get_proxy_object(
+            "org.bluez", "/org/bluez", None
+        ).get_interface("org.bluez.AgentManager1")
+
+        await agent_manager.call_register_agent("/agent", "KeyboardOnly")
+        await agent_manager.call_request_default_agent("/agent")
+        await agent_manager.call_unregister_agent("/agent")
+
+        assert bus.get_default_agent() is None
+
+
+class TestPinCodePairingSimulation:
+    """call_pair simulates BlueZ asking the registered default agent for
+    a PIN when the device was added with requires_pin=...
+    """
+
+    @pytest.mark.asyncio
+    async def test_pair_succeeds_when_agent_returns_matching_pin(self):
+        bus = create_mock_message_bus()
+        bus.add_device("AA:BB:CC:DD:EE:FF", requires_pin="1234")
+        device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+
+        class PinAgent:
+            def RequestPinCode(self, device: str) -> str:
+                assert device == device_path
+                return "1234"
+
+        bus.export("/agent", PinAgent())
+        agent_manager = bus.get_proxy_object(
+            "org.bluez", "/org/bluez", None
+        ).get_interface("org.bluez.AgentManager1")
+        await agent_manager.call_register_agent("/agent", "KeyboardOnly")
+        await agent_manager.call_request_default_agent("/agent")
+
+        device = bus.get_proxy_object("org.bluez", device_path, None).get_interface(
+            "org.bluez.Device1"
+        )
+        await device.call_pair()
+
+        assert bus.get_device_data("AA:BB:CC:DD:EE:FF")["Paired"] is True
+
+    @pytest.mark.asyncio
+    async def test_pair_fails_when_agent_returns_wrong_pin(self):
+        bus = create_mock_message_bus()
+        bus.add_device("AA:BB:CC:DD:EE:FF", requires_pin="1234")
+        device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+
+        class WrongPinAgent:
+            def RequestPinCode(self, device: str) -> str:
+                return "0000"
+
+        bus.export("/agent", WrongPinAgent())
+        agent_manager = bus.get_proxy_object(
+            "org.bluez", "/org/bluez", None
+        ).get_interface("org.bluez.AgentManager1")
+        await agent_manager.call_register_agent("/agent", "KeyboardOnly")
+        await agent_manager.call_request_default_agent("/agent")
+
+        device = bus.get_proxy_object("org.bluez", device_path, None).get_interface(
+            "org.bluez.Device1"
+        )
+
+        with pytest.raises(Exception, match="AuthenticationFailed"):
+            await device.call_pair()
+
+        assert bus.get_device_data("AA:BB:CC:DD:EE:FF")["Paired"] is False
+
+    @pytest.mark.asyncio
+    async def test_pair_fails_when_no_agent_registered(self):
+        bus = create_mock_message_bus()
+        bus.add_device("AA:BB:CC:DD:EE:FF", requires_pin="1234")
+        device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+
+        device = bus.get_proxy_object("org.bluez", device_path, None).get_interface(
+            "org.bluez.Device1"
+        )
+
+        with pytest.raises(Exception, match="AuthenticationFailed"):
+            await device.call_pair()
+
+    @pytest.mark.asyncio
+    async def test_device_without_requires_pin_pairs_immediately(self):
+        """Secure Simple Pairing / Just Works devices are unaffected."""
+        bus = create_mock_message_bus()
+        bus.add_device("AA:BB:CC:DD:EE:FF")
+        device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+
+        device = bus.get_proxy_object("org.bluez", device_path, None).get_interface(
+            "org.bluez.Device1"
+        )
+        await device.call_pair()
+
+        assert bus.get_device_data("AA:BB:CC:DD:EE:FF")["Paired"] is True
+
+
 class TestExistingBehaviourUnaffected:
     """Guard rails: unrelated fixture behaviour must be untouched."""
 

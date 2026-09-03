@@ -1,3 +1,37 @@
+## v3.1.0 (2026-09-03)
+
+- feat(bluetooth): stop claiming BlueZ's default pairing agent unconditionally
+Constructing a `BluetoothManager` unconditionally seized BlueZ's
+system-wide default pairing agent, displacing another manager, a
+desktop pairing agent, or an open `bluetoothctl` session. Registering
+already makes the caller the default when the queue is empty (BlueZ
+>= 5.51), so the unconditional `RequestDefaultAgent` call never helped
+in the common case — its only effect was theft.
+`BluetoothManager` gains `claim_default_agent: bool = False`;
+`RequestDefaultAgent` is now issued only when set. The relay's own
+long-lived manager (`bluetooth_input.py`) opts in. `connect_device()`
+gains an ephemeral `pin` argument, following `pair_device()`'s
+no-retention pattern, for the one route that can reach a caller-less
+pairing — guarded to fail fast on a manager that can't receive it. The
+pairing agent's `RequestPinCode` rejection now names a caller-less
+pairing explicitly, distinct from a wrong-PIN rejection, and points at
+`pair_device()`/`force_repair()` as the deliberate route.
+- test(bluetooth): give the mock fake a daemon-level agent registry
+`MockBlueZ` now stands in for the bluetoothd daemon — agents keyed by
+sender, one per connection; a head-first default-agent queue matching
+BlueZ's actual registration/promotion/handoff behaviour; and
+sender-first `Pair()` dispatch, with the default agent answering only
+for a caller that registered none. No production code is modified.
+- test(bluetooth): cover connect_device()'s real construction and retry paths
+Adds regression tests for the `NotAvailable`-retry-then-succeed and
+retry-exhausted paths, and for `bluetooth_input.py`'s real
+`BluetoothManager()` construction branch, which every prior test
+bypassed by pre-injecting `bt_manager` directly.
+- docs: track CONTEXT.md, CLAUDE.md and agent/ADR docs in git
+These files existed on disk since 2026-05 but were never committed, so
+the domain glossary, the ADR the wayfinder maps cite, and the agent
+tracker/triage/domain guides lived only in the working copy.
+
 ## v3.0.0 (2026-09-03)
 
 ### BREAKING CHANGE

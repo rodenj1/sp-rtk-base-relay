@@ -459,7 +459,9 @@ class TestBluetoothManagerHelpers:
             patch("asyncio.sleep"),
         ):
             manager = BluetoothManager()
-            mac, channel = manager.ensure_device_ready(device_name="RTK_GPS_BASE")
+            mac, channel = manager.ensure_device_ready(
+                pin="0000", device_name="RTK_GPS_BASE"
+            )
 
             assert mac == "00:11:22:33:44:55"
             assert channel == 1
@@ -485,7 +487,7 @@ class TestBluetoothManagerHelpers:
             manager = BluetoothManager()
 
             with pytest.raises(BluetoothError) as exc_info:
-                manager.ensure_device_ready(device_name="NonExistent")
+                manager.ensure_device_ready(pin="0000", device_name="NonExistent")
 
             assert "Device NonExistent not found" in str(exc_info.value)
 
@@ -509,7 +511,7 @@ class TestBluetoothManagerHelpers:
             manager = BluetoothManager()
 
             with pytest.raises(BluetoothError) as exc_info:
-                manager.ensure_device_ready()
+                manager.ensure_device_ready(pin="0000")
 
             assert "Must provide either device_name or mac_address" in str(
                 exc_info.value
@@ -534,7 +536,9 @@ class TestBluetoothManagerHelpers:
             ),
         ):
             manager = BluetoothManager()
-            mac, channel = manager.ensure_device_ready(mac_address="00:11:22:33:44:55")
+            mac, channel = manager.ensure_device_ready(
+                pin="0000", mac_address="00:11:22:33:44:55"
+            )
 
             assert mac == "00:11:22:33:44:55"
             assert channel == 1
@@ -705,7 +709,9 @@ class TestBluetoothManagerRecovery:
 
             manager._async_wait_for_device_interface = _patched_wait  # type: ignore[assignment]
 
-            mac, channel = manager.ensure_device_ready(mac_address="00:11:22:33:44:55")
+            mac, channel = manager.ensure_device_ready(
+                pin="0000", mac_address="00:11:22:33:44:55"
+            )
 
             assert mac == "00:11:22:33:44:55"
             assert channel == 1
@@ -736,7 +742,7 @@ class TestBluetoothManagerRecovery:
 
             with pytest.raises(BluetoothError) as exc_info:
                 manager.ensure_device_ready(
-                    mac_address="00:11:22:33:44:55", scan_timeout=2
+                    pin="0000", mac_address="00:11:22:33:44:55", scan_timeout=2
                 )
 
             msg = str(exc_info.value)
@@ -877,3 +883,114 @@ class TestBluetoothManagerPairingAgent:
             side_effect=Exception("BlueZ rejected UnregisterAgent"),
         ):
             manager.close()  # must not raise
+
+
+class TestBluetoothManagerPinThreading:
+    """Test threading the configured PIN through pairing (issue #16)."""
+
+    def test_request_pin_code_returns_recorded_pin_during_pairing(self):
+        """RequestPinCode answers with the PIN recorded for the device
+        path currently mid-pairing-attempt.
+        """
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("AA:BB:CC:DD:EE:FF", requires_pin="1234")
+        manager = _build_manager(mock_bus)
+
+        result = manager.pair_device("AA:BB:CC:DD:EE:FF", pin="1234")
+
+        assert result is True
+        assert mock_bus.get_device_data("AA:BB:CC:DD:EE:FF")["Paired"] is True
+
+    def test_request_pin_code_rejects_wrong_pin(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("AA:BB:CC:DD:EE:FF", requires_pin="1234")
+        manager = _build_manager(mock_bus)
+
+        with pytest.raises(BluetoothError):
+            manager.pair_device("AA:BB:CC:DD:EE:FF", pin="0000")
+
+        assert mock_bus.get_device_data("AA:BB:CC:DD:EE:FF")["Paired"] is False
+
+    def test_pending_pin_is_recorded_before_pairing(self):
+        """The PIN is recorded against the device path before Pair() is
+        invoked -- verified by an agent that inspects manager state
+        mid-call rather than relying on the mock's own PIN check.
+        """
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("AA:BB:CC:DD:EE:FF")
+        device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+        manager = _build_manager(mock_bus)
+
+        recorded_during_call: dict[str, str] = {}
+        original_call_pair = MockProxyInterface.call_pair
+
+        async def spy_call_pair(self: Any) -> None:
+            recorded_during_call.update(manager._pending_pins)
+            await original_call_pair(self)
+
+        with patch.object(MockProxyInterface, "call_pair", spy_call_pair):
+            manager.pair_device("AA:BB:CC:DD:EE:FF", pin="5678")
+
+        assert recorded_during_call == {device_path: "5678"}
+
+    def test_pending_pin_is_cleared_after_successful_pairing(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("AA:BB:CC:DD:EE:FF")
+        device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+        manager = _build_manager(mock_bus)
+
+        manager.pair_device("AA:BB:CC:DD:EE:FF", pin="5678")
+
+        assert device_path not in manager._pending_pins
+
+    def test_pending_pin_is_cleared_after_failed_pairing(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("AA:BB:CC:DD:EE:FF")
+        device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+        manager = _build_manager(mock_bus)
+
+        with patch.object(
+            MockProxyInterface, "call_pair", side_effect=Exception("boom")
+        ):
+            with pytest.raises(BluetoothError):
+                manager.pair_device("AA:BB:CC:DD:EE:FF", pin="5678")
+
+        assert device_path not in manager._pending_pins
+
+    def test_pin_recorded_for_one_device_does_not_leak_to_another(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("AA:BB:CC:DD:EE:FF", requires_pin="1234")
+        mock_bus.add_device("11:22:33:44:55:66", requires_pin="9999")
+        manager = _build_manager(mock_bus)
+
+        assert manager.pair_device("AA:BB:CC:DD:EE:FF", pin="1234") is True
+        with pytest.raises(BluetoothError):
+            # Wrong PIN for this device, even though it's the PIN that
+            # would have paired the other device.
+            manager.pair_device("11:22:33:44:55:66", pin="1234")
+
+    def test_ensure_device_ready_pairs_cold_device_requiring_legacy_pin(self):
+        """End-to-end: a simulated cold/unbonded device that requires
+        legacy PIN pairing pairs successfully using the configured PIN.
+        """
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("AA:BB:CC:DD:EE:FF", "RTK_GPS_BASE", requires_pin="1234")
+        manager = _build_manager(mock_bus)
+
+        mac, channel = manager.ensure_device_ready(
+            pin="1234", mac_address="AA:BB:CC:DD:EE:FF"
+        )
+
+        assert mac == "AA:BB:CC:DD:EE:FF"
+        assert channel == 1
+        device_data = mock_bus.get_device_data("AA:BB:CC:DD:EE:FF")
+        assert device_data["Paired"] is True
+        assert device_data["Trusted"] is True
+
+    def test_ensure_device_ready_fails_with_wrong_configured_pin(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("AA:BB:CC:DD:EE:FF", "RTK_GPS_BASE", requires_pin="1234")
+        manager = _build_manager(mock_bus)
+
+        with pytest.raises(BluetoothError):
+            manager.ensure_device_ready(pin="0000", mac_address="AA:BB:CC:DD:EE:FF")

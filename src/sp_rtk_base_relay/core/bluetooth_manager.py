@@ -41,19 +41,24 @@ try:
 
         Every device this project pairs with is a fixed, pre-configured
         device rather than a walk-up-and-pair UX, so the confirmation/
-        authorization methods auto-accept unconditionally. The PIN/passkey
-        methods are implemented (BlueZ has no graceful fallback for a
-        missing method — an unimplemented one is a silent dispatch
-        failure) but reject every call: there is no PIN source wired up
-        until a later ticket in this series.
+        authorization methods auto-accept unconditionally. ``RequestPinCode``
+        answers with the PIN recorded for whichever pairing attempt is
+        currently in flight against that device path (see
+        ``BluetoothManager._pending_pins``); an unrecognized device path is
+        rejected outright, never answered with a guess. The remaining
+        PIN/passkey methods are implemented (BlueZ has no graceful fallback
+        for a missing method — an unimplemented one is a silent dispatch
+        failure) but reject every call: there is no source for a displayed
+        PIN/passkey or a keyboard-entered passkey wired up.
 
         Method names match the ``org.bluez.Agent1`` D-Bus interface
         exactly (BlueZ dispatches by this literal name), so they can't
         be snake_case — each is annotated ``# noqa: N802``.
         """
 
-        def __init__(self) -> None:
+        def __init__(self, pending_pins: dict[str, str]) -> None:
             super().__init__(_AGENT_INTERFACE)
+            self._pending_pins = pending_pins
 
         @dbus_method()
         def Release(self) -> None:  # noqa: N802
@@ -81,9 +86,13 @@ try:
 
         @dbus_method()
         def RequestPinCode(self, device: _DBusObjectPath) -> _DBusStr:  # noqa: N802
-            raise DBusError(
-                "org.bluez.Error.Rejected", "PIN delivery is not yet supported"
-            )
+            pin = self._pending_pins.get(device)
+            if pin is None:
+                raise DBusError(
+                    "org.bluez.Error.Rejected",
+                    f"No PIN recorded for pending pairing attempt on {device}",
+                )
+            return pin
 
         @dbus_method()
         def DisplayPinCode(  # noqa: N802
@@ -179,6 +188,9 @@ class BluetoothManager:
         self._bus: AioMessageBus | None = None
         self._adapter: Any = None
         self._agent: Any = None
+        # PIN recorded per device path for the duration of its pending
+        # pairing attempt -- see _async_pair_device and _PairingAgent.
+        self._pending_pins: dict[str, str] = {}
 
         # Hybrid introspection cache: pre-cache adapter/root, lazy-cache devices
         self._introspection_cache: dict[str, Node] = {}
@@ -281,7 +293,7 @@ class BluetoothManager:
         if self._bus is None:
             raise BluetoothError("Bus not initialized")
 
-        agent = _PairingAgent()
+        agent = _PairingAgent(self._pending_pins)
         self._bus.export(_AGENT_OBJECT_PATH, agent)
         self._agent = agent
 
@@ -548,7 +560,16 @@ class BluetoothManager:
                 return True
 
             logger.info(f"Pairing with {mac_address}...")
-            await device_iface.call_pair()  # type: ignore[attr-defined]
+            # Record the PIN for this device path immediately before the
+            # pairing call starts, so the registered agent's
+            # RequestPinCode can answer BlueZ if it asks. Cleared once
+            # this attempt finishes, whether it succeeds or fails --
+            # PINs aren't retained any longer than necessary.
+            self._pending_pins[device_path] = pin
+            try:
+                await device_iface.call_pair()  # type: ignore[attr-defined]
+            finally:
+                self._pending_pins.pop(device_path, None)
             logger.info(f"Successfully paired with {mac_address}")
             return True
 
@@ -905,6 +926,7 @@ class BluetoothManager:
 
     def ensure_device_ready(
         self,
+        pin: str,
         device_name: str | None = None,
         mac_address: str | None = None,
         scan_timeout: int = 30,
@@ -919,6 +941,10 @@ class BluetoothManager:
         stale device path.
 
         Args:
+            pin: PIN to use if BlueZ requests one during pairing (legacy
+                PIN pairing). Forwarded to the underlying pairing call;
+                has no effect for Secure Simple Pairing / Just Works
+                devices, which never request a PIN.
             device_name: Name to search for (e.g., "RTK_GPS_BASE")
             mac_address: Or provide MAC directly if already known
             scan_timeout: Maximum seconds to wait for BlueZ to populate
@@ -956,7 +982,7 @@ class BluetoothManager:
         )
 
         # Interface guaranteed present — pair + trust now.
-        self._pair_and_trust(mac_address)
+        self._pair_and_trust(mac_address, pin)
 
         # NOTE: We do NOT call connect_device() for SPP (Serial Port Profile) devices!
         # SPP devices (like GPS receivers) reject D-Bus Connect() calls with NotAvailable error.
@@ -972,16 +998,17 @@ class BluetoothManager:
         logger.info(f"Device {mac_address} ready on channel {channel}")
         return mac_address, channel
 
-    def _pair_and_trust(self, mac_address: str) -> None:
+    def _pair_and_trust(self, mac_address: str, pin: str) -> None:
         """Pair and trust a device (helper for ensure_device_ready).
 
         Args:
             mac_address: Device MAC address.
+            pin: PIN to use if BlueZ requests one during pairing.
 
         Raises:
             BluetoothError: If pairing or trusting fails.
         """
-        if not self.pair_device(mac_address):
+        if not self.pair_device(mac_address, pin):
             raise BluetoothError(f"Failed to pair with {mac_address}")
 
         if not self.trust_device(mac_address):

@@ -151,7 +151,7 @@ class TestBluetoothInputSourceConnection:
         # v2.1.3: scan_timeout is now propagated from BluetoothConfig
         # so callers can tune the discovery window per-deployment.
         mock_manager.ensure_device_ready.assert_called_once_with(
-            device_name="RTK_GPS_BASE", mac_address=None, scan_timeout=30
+            pin="0000", device_name="RTK_GPS_BASE", mac_address=None, scan_timeout=30
         )
 
     def test_connect_success_with_mac_address(self):
@@ -175,7 +175,35 @@ class TestBluetoothInputSourceConnection:
         assert result is True
         assert source.is_connected is True
         mock_manager.ensure_device_ready.assert_called_once_with(
-            device_name=None, mac_address="00:11:22:33:44:55", scan_timeout=30
+            pin="0000",
+            device_name=None,
+            mac_address="00:11:22:33:44:55",
+            scan_timeout=30,
+        )
+
+    def test_connect_forwards_configured_pin(self):
+        """A non-default configured PIN is forwarded to ensure_device_ready.
+
+        Regression guard for the bug this fixes: the PIN in config was
+        previously never passed through at all.
+        """
+        config = BluetoothConfig(device_name="RTK_GPS_BASE", pin="1234")
+        source = BluetoothInputSource(config)
+
+        mock_manager = MagicMock(spec=BluetoothManager)
+        mock_manager.ensure_device_ready.return_value = ("00:11:22:33:44:55", 1)
+        source.bt_manager = mock_manager
+
+        mock_socket = Mock()
+
+        with patch(
+            "src.sp_rtk_base_relay.core.input_sources.bluetooth_input.socket.socket",
+            return_value=mock_socket,
+        ):
+            source.connect()
+
+        mock_manager.ensure_device_ready.assert_called_once_with(
+            pin="1234", device_name="RTK_GPS_BASE", mac_address=None, scan_timeout=30
         )
 
     def test_connect_already_connected(self):

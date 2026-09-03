@@ -101,8 +101,15 @@ class BluetoothInputSource(InputSource):
             # Initialize Bluetooth manager
             if self.bt_manager is None:
                 try:
+                    # The relay is the process that should hold BlueZ's
+                    # default pairing agent on its own machine, so a
+                    # caller-less pairing (see CONTEXT.md) still reaches
+                    # someone who knows the PIN -- unlike a throwaway
+                    # BluetoothManager an integrator (e.g. sp-rtk-base)
+                    # might construct for a UI scan.
                     self.bt_manager = BluetoothManager(
-                        adapter_name=self.config.adapter_name
+                        adapter_name=self.config.adapter_name,
+                        claim_default_agent=True,
                     )
                 except BluetoothError as e:
                     raise InputSourceError(f"Failed to initialize Bluetooth: {e}")

@@ -88,6 +88,25 @@ try:
         def RequestPinCode(self, device: _DBusObjectPath) -> _DBusStr:  # noqa: N802
             pin = self._pending_pins.get(device)
             if pin is None:
+                if not self._pending_pins:
+                    # No local Pair()/Connect() call is in flight anywhere
+                    # on this manager, so this request could only have
+                    # reached us as BlueZ's default agent answering for a
+                    # pairing this process did not initiate -- see
+                    # "Caller-less pairing" in CONTEXT.md. Distinct from a
+                    # wrong PIN: named explicitly so an operator reading
+                    # the logs doesn't mistake it for one.
+                    raise DBusError(
+                        "org.bluez.Error.Rejected",
+                        f"Rejecting caller-less pairing on {device}: no "
+                        "local pairing attempt is in flight, so this "
+                        "request reached us as BlueZ's default agent for "
+                        "a pairing this process did not initiate. No PIN "
+                        "can be known for it by design -- this is not a "
+                        "wrong-PIN failure. If this pairing was intended, "
+                        "initiate it deliberately via pair_device() or "
+                        "force_repair().",
+                    )
                 raise DBusError(
                     "org.bluez.Error.Rejected",
                     f"No PIN recorded for pending pairing attempt on {device}",
@@ -167,7 +186,7 @@ class BluetoothManager:
         _thread: Background daemon thread running the event loop
     """
 
-    def __init__(self, adapter_name: str = "hci0"):
+    def __init__(self, adapter_name: str = "hci0", claim_default_agent: bool = False):
         """Initialize Bluetooth manager.
 
         Creates a persistent background event loop thread, connects to the
@@ -175,6 +194,27 @@ class BluetoothManager:
 
         Args:
             adapter_name: Name of Bluetooth adapter (default: "hci0")
+            claim_default_agent: Whether to issue ``RequestDefaultAgent``
+                after registering this manager's pairing agent, making it
+                BlueZ's system-wide default -- the agent that answers a
+                caller-less pairing (see CONTEXT.md). Defaults to
+                ``False``: registering an agent already makes it the
+                default when nobody else holds one (BlueZ >= 5.51), so
+                the common single-manager case is unaffected; this flag
+                only matters when more than one ``BluetoothManager``
+                exists on the machine, and lets a manager that legitimately
+                wants to keep answering caller-less pairings (this repo's
+                own long-lived one) say so explicitly rather than seizing
+                the default from whoever holds it -- another manager, a
+                desktop pairing agent, an open ``bluetoothctl`` session.
+
+                A manager cannot *decline* becoming the default: with an
+                empty queue, registering makes you the default whether or
+                not this flag is set. This flag makes the default
+                *stable* -- first constructed wins, no churn -- not
+                *chosen*; only ``claim_default_agent=True`` makes it
+                chosen. ``connect_device()``'s ``pin`` argument is
+                honoured only on a manager constructed with this flag set.
 
         Raises:
             BluetoothError: If dbus-fast is not available or adapter not found
@@ -185,6 +225,7 @@ class BluetoothManager:
             )
 
         self.adapter_path = f"/org/bluez/{adapter_name}"
+        self._claim_default_agent = claim_default_agent
         self._bus: AioMessageBus | None = None
         self._adapter: Any = None
         self._agent: Any = None
@@ -282,13 +323,21 @@ class BluetoothManager:
         return agent_manager_proxy.get_interface("org.bluez.AgentManager1")
 
     async def _async_register_agent(self) -> None:
-        """Register a default BlueZ pairing agent.
+        """Register this manager's BlueZ pairing agent.
 
         Registration order matters: the local agent object must be
         exported on the bus before it's registered with BlueZ's agent
-        manager, and made the default agent only after that -- otherwise
-        an in-flight pairing event racing with startup could be dispatched
-        to an object that doesn't exist yet.
+        manager, and ``RequestDefaultAgent`` (when issued at all) only
+        after that -- otherwise an in-flight pairing event racing with
+        startup could be dispatched to an object that doesn't exist yet.
+
+        ``RequestDefaultAgent`` is issued only when this manager was
+        constructed with ``claim_default_agent=True``. On the BlueZ floor
+        this project supports (>= 5.51), ``RegisterAgent`` alone already
+        makes the caller the default when the default-agent queue is
+        empty -- the removed unconditional call never helped in that
+        common case, its only effect was to displace whoever already held
+        the default (see ``docs/adr/0002-*.md``).
         """
         if self._bus is None:
             raise BluetoothError("Bus not initialized")
@@ -299,9 +348,16 @@ class BluetoothManager:
 
         agent_manager = await self._async_get_agent_manager()
         await agent_manager.call_register_agent(_AGENT_OBJECT_PATH, _AGENT_CAPABILITY)
-        await agent_manager.call_request_default_agent(_AGENT_OBJECT_PATH)
 
-        logger.info("Registered default pairing agent at %s", _AGENT_OBJECT_PATH)
+        if self._claim_default_agent:
+            await agent_manager.call_request_default_agent(_AGENT_OBJECT_PATH)
+            logger.info(
+                "Registered pairing agent at %s and claimed it as BlueZ's "
+                "default agent",
+                _AGENT_OBJECT_PATH,
+            )
+        else:
+            logger.info("Registered pairing agent at %s", _AGENT_OBJECT_PATH)
 
     async def _async_unregister_agent(self) -> None:
         """Unregister the pairing agent from BlueZ's agent manager.
@@ -630,7 +686,11 @@ class BluetoothManager:
             raise BluetoothError(f"Trust failed: {e}")
 
     def connect_device(
-        self, mac_address: str, max_retries: int = 3, retry_delay: float = 2.0
+        self,
+        mac_address: str,
+        max_retries: int = 3,
+        retry_delay: float = 2.0,
+        pin: str | None = None,
     ) -> bool:
         """Connect to a paired Bluetooth device with retries.
 
@@ -638,21 +698,46 @@ class BluetoothManager:
             mac_address: Device MAC address
             max_retries: Maximum connection attempts (default: 3)
             retry_delay: Seconds to wait between retries (default: 2.0)
+            pin: Ephemeral PIN to answer BlueZ with if ``Connect()``
+                triggers security elevation on a device that isn't yet
+                bonded -- BlueZ routes that PIN request to the default
+                agent, since it wasn't raised by a local ``Pair()`` call
+                (a "caller-less pairing"; see CONTEXT.md). Recorded only
+                for the duration of this call and never retained. Honoured
+                only when this manager was constructed with
+                ``claim_default_agent=True`` -- a caller-less PIN request
+                always goes to the *default* agent, so a PIN recorded on a
+                manager that doesn't hold it can never be reached.
 
         Returns:
             True if connected successfully
 
         Raises:
-            BluetoothError: If all connection attempts fail
+            BluetoothError: If all connection attempts fail, or if ``pin``
+                is supplied on a manager that cannot receive a caller-less
+                PIN request.
         """
+        if pin is not None and not self._claim_default_agent:
+            raise BluetoothError(
+                "connect_device() was given a pin, but this manager was "
+                "not constructed with claim_default_agent=True. A "
+                "caller-less PIN request is always routed to BlueZ's "
+                "default agent, so a PIN recorded on a non-default "
+                "manager could never be reached."
+            )
+
         timeout = max(max_retries * (retry_delay + 10), _DEFAULT_ASYNC_TIMEOUT)
         return self._run_async(
-            self._async_connect_device(mac_address, max_retries, retry_delay),
+            self._async_connect_device(mac_address, max_retries, retry_delay, pin),
             timeout=timeout,
         )
 
     async def _async_connect_device(
-        self, mac_address: str, max_retries: int, retry_delay: float
+        self,
+        mac_address: str,
+        max_retries: int,
+        retry_delay: float,
+        pin: str | None = None,
     ) -> bool:
         """Async implementation of connect_device."""
         device_path = f"{self.adapter_path}/dev_{mac_address.replace(':', '_')}"
@@ -680,40 +765,52 @@ class BluetoothManager:
                 logger.info(f"Device {mac_address} already connected")
                 return True
 
-            # Try connecting with retries
-            last_error: DBusError | None = None
-            for attempt in range(1, max_retries + 1):
-                try:
-                    logger.info(
-                        f"Connecting to {mac_address} (attempt {attempt}/{max_retries})..."
-                    )
-                    await device_iface.call_connect()  # type: ignore[attr-defined]
-                    logger.info(f"Successfully connected to {mac_address}")
-                    return True
-                except DBusError as e:
-                    last_error = e
-                    error_str = str(e)
+            # Record the PIN for this device path immediately before the
+            # connect attempt(s) start, so the registered agent's
+            # RequestPinCode can answer BlueZ if a caller-less request
+            # arrives. Cleared once this call finishes, whether it
+            # succeeds or fails -- same no-retention pattern as
+            # _async_pair_device.
+            if pin is not None:
+                self._pending_pins[device_path] = pin
+            try:
+                # Try connecting with retries
+                last_error: DBusError | None = None
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        logger.info(
+                            f"Connecting to {mac_address} (attempt {attempt}/{max_retries})..."
+                        )
+                        await device_iface.call_connect()  # type: ignore[attr-defined]
+                        logger.info(f"Successfully connected to {mac_address}")
+                        return True
+                    except DBusError as e:
+                        last_error = e
+                        error_str = str(e)
 
-                    # Check for "Operation currently not available" error
-                    if (
-                        "NotAvailable" in error_str
-                        or "not available" in error_str.lower()
-                    ):
-                        if attempt < max_retries:
-                            logger.warning(
-                                f"Device not ready (attempt {attempt}/{max_retries}), "
-                                f"waiting {retry_delay}s before retry..."
-                            )
-                            await asyncio.sleep(retry_delay)
-                            continue
+                        # Check for "Operation currently not available" error
+                        if (
+                            "NotAvailable" in error_str
+                            or "not available" in error_str.lower()
+                        ):
+                            if attempt < max_retries:
+                                logger.warning(
+                                    f"Device not ready (attempt {attempt}/{max_retries}), "
+                                    f"waiting {retry_delay}s before retry..."
+                                )
+                                await asyncio.sleep(retry_delay)
+                                continue
 
-                    # For other errors, don't retry
-                    raise BluetoothError(f"D-Bus connection error: {e}")
+                        # For other errors, don't retry
+                        raise BluetoothError(f"D-Bus connection error: {e}")
 
-            # All retries exhausted
-            raise BluetoothError(
-                f"Connection failed after {max_retries} attempts: {last_error}"
-            )
+                # All retries exhausted
+                raise BluetoothError(
+                    f"Connection failed after {max_retries} attempts: {last_error}"
+                )
+            finally:
+                if pin is not None:
+                    self._pending_pins.pop(device_path, None)
 
         except BluetoothError:
             raise

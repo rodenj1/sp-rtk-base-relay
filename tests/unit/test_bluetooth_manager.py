@@ -19,13 +19,16 @@ from src.sp_rtk_base_relay.core.bluetooth_manager import (
     BluetoothManager,
 )
 from tests.fixtures.mock_bluetooth import (
+    MockBlueZ,
     MockProxyInterface,
     create_mock_dbus_fast,
     create_mock_message_bus,
 )
 
 
-def _build_manager(mock_bus: Any) -> BluetoothManager:
+def _build_manager(
+    mock_bus: Any, claim_default_agent: bool = False
+) -> BluetoothManager:
     """Construct a BluetoothManager wired to ``mock_bus`` for the duration
     of construction only -- patches are undone once this returns, so the
     module's real ``DBusError`` is back in effect for any later interaction
@@ -44,7 +47,7 @@ def _build_manager(mock_bus: Any) -> BluetoothManager:
             True,
         ),
     ):
-        return BluetoothManager()
+        return BluetoothManager(claim_default_agent=claim_default_agent)
 
 
 class TestBluetoothManagerInit:
@@ -779,11 +782,27 @@ class TestBluetoothManagerRecovery:
 class TestBluetoothManagerPairingAgent:
     """Test the default BlueZ pairing agent (org.bluez.Agent1) lifecycle."""
 
-    def test_agent_registered_and_made_default_on_init(self):
-        """RegisterAgent then RequestDefaultAgent are called, in that order."""
+    def test_agent_registered_but_not_made_default_by_default(self):
+        """RegisterAgent is called; RequestDefaultAgent is not, since
+        ``claim_default_agent`` defaults to False (issue #31) -- and never
+        helped anyway, since registering into an empty queue already makes
+        the caller the default (BlueZ >= 5.51).
+        """
         mock_bus = create_mock_message_bus()
 
         _build_manager(mock_bus)
+
+        assert mock_bus.get_agent_manager_calls() == [
+            ("RegisterAgent", (_AGENT_OBJECT_PATH, _AGENT_CAPABILITY)),
+        ]
+
+    def test_agent_registered_and_made_default_when_claiming(self):
+        """With claim_default_agent=True, RequestDefaultAgent follows
+        RegisterAgent, in that order.
+        """
+        mock_bus = create_mock_message_bus()
+
+        _build_manager(mock_bus, claim_default_agent=True)
 
         assert mock_bus.get_agent_manager_calls() == [
             ("RegisterAgent", (_AGENT_OBJECT_PATH, _AGENT_CAPABILITY)),
@@ -794,7 +813,31 @@ class TestBluetoothManagerPairingAgent:
         """The agent object must be exported before any AgentManager1 call.
 
         A pairing event racing with startup could otherwise be dispatched
-        to an object that doesn't exist yet.
+        to an object that doesn't exist yet. Checked against a claiming
+        manager so both AgentManager1 calls are exercised.
+        """
+        mock_bus = create_mock_message_bus()
+        events: list[tuple[str, tuple[Any, ...]]] = []
+        original_export = mock_bus.export
+
+        def spy_export(path: str, interface: Any) -> None:
+            events.append(("Export", (path,)))
+            original_export(path, interface)
+
+        mock_bus.export = spy_export  # type: ignore[method-assign]
+
+        _build_manager(mock_bus, claim_default_agent=True)
+        events.extend(mock_bus.get_agent_manager_calls())
+
+        assert events == [
+            ("Export", (_AGENT_OBJECT_PATH,)),
+            ("RegisterAgent", (_AGENT_OBJECT_PATH, _AGENT_CAPABILITY)),
+            ("RequestDefaultAgent", (_AGENT_OBJECT_PATH,)),
+        ]
+
+    def test_agent_exported_before_registration_without_claiming(self):
+        """Same export-before-register ordering holds when not claiming
+        the default -- just without the RequestDefaultAgent call.
         """
         mock_bus = create_mock_message_bus()
         events: list[tuple[str, tuple[Any, ...]]] = []
@@ -812,7 +855,6 @@ class TestBluetoothManagerPairingAgent:
         assert events == [
             ("Export", (_AGENT_OBJECT_PATH,)),
             ("RegisterAgent", (_AGENT_OBJECT_PATH, _AGENT_CAPABILITY)),
-            ("RequestDefaultAgent", (_AGENT_OBJECT_PATH,)),
         ]
 
     @pytest.mark.asyncio
@@ -883,6 +925,95 @@ class TestBluetoothManagerPairingAgent:
             side_effect=Exception("BlueZ rejected UnregisterAgent"),
         ):
             manager.close()  # must not raise
+
+    @pytest.mark.asyncio
+    async def test_caller_less_request_pin_code_names_the_case(self):
+        """A RequestPinCode with no local pairing attempt in flight is
+        rejected with a message naming the caller-less case, distinct
+        from a wrong-PIN rejection (issue #31).
+        """
+        mock_bus = create_mock_message_bus()
+        _build_manager(mock_bus, claim_default_agent=True)
+        device_path = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+
+        with pytest.raises(RealDBusError) as exc_info:
+            await mock_bus.bluez.simulate_caller_less_pairing(device_path)
+
+        message = str(exc_info.value)
+        assert "caller-less" in message
+        assert "pair_device()" in message
+        assert "force_repair()" in message
+
+    @pytest.mark.asyncio
+    async def test_pending_pairing_for_another_device_keeps_original_wording(self):
+        """A local pairing in flight for one device must not make an
+        unrelated request for a different, unrecognized device path read
+        as caller-less -- the two rejections must stay textually
+        distinguishable.
+        """
+        mock_bus = create_mock_message_bus()
+        manager = _build_manager(mock_bus, claim_default_agent=True)
+        manager._pending_pins["/org/bluez/hci0/dev_11_11_11_11_11_11"] = "9999"
+
+        with pytest.raises(RealDBusError) as exc_info:
+            await mock_bus.invoke_exported_method(
+                _AGENT_OBJECT_PATH,
+                "RequestPinCode",
+                "/org/bluez/hci0/dev_22_22_22_22_22_22",
+            )
+
+        message = str(exc_info.value)
+        assert "No PIN recorded for pending pairing attempt" in message
+        assert "caller-less" not in message
+
+
+class TestBluetoothManagerDefaultAgentOwnership:
+    """A second BluetoothManager no longer seizes the default pairing
+    agent from the first unless it explicitly asks to (issue #31).
+    """
+
+    def test_second_manager_without_claiming_does_not_disturb_the_default(self):
+        bluez = MockBlueZ()
+        bus_a = bluez.new_bus()
+        bus_b = bluez.new_bus()
+
+        _build_manager(bus_a)
+        _build_manager(bus_b)
+
+        assert bus_a.get_agent_manager_calls() == [
+            ("RegisterAgent", (_AGENT_OBJECT_PATH, _AGENT_CAPABILITY)),
+        ]
+        assert bus_b.get_agent_manager_calls() == [
+            ("RegisterAgent", (_AGENT_OBJECT_PATH, _AGENT_CAPABILITY)),
+        ]
+        assert [ref.sender for ref in bluez.default_agent_queue()] == [
+            bus_a.unique_name,
+            bus_b.unique_name,
+        ]
+        assert bluez.default_agent() == (bus_a.unique_name, _AGENT_OBJECT_PATH)
+
+    def test_claiming_manager_moves_itself_to_the_head(self):
+        bluez = MockBlueZ()
+        bus_a = bluez.new_bus()
+        bus_b = bluez.new_bus()
+
+        _build_manager(bus_a)
+        _build_manager(bus_b, claim_default_agent=True)
+
+        assert bluez.default_agent() == (bus_b.unique_name, _AGENT_OBJECT_PATH)
+
+    def test_closing_the_claiming_manager_promotes_the_first(self):
+        bluez = MockBlueZ()
+        bus_a = bluez.new_bus()
+        bus_b = bluez.new_bus()
+
+        _build_manager(bus_a)
+        manager_b = _build_manager(bus_b, claim_default_agent=True)
+        assert bluez.default_agent() == (bus_b.unique_name, _AGENT_OBJECT_PATH)
+
+        manager_b.close()
+
+        assert bluez.default_agent() == (bus_a.unique_name, _AGENT_OBJECT_PATH)
 
 
 class TestBluetoothManagerPinThreading:
@@ -994,6 +1125,62 @@ class TestBluetoothManagerPinThreading:
 
         with pytest.raises(BluetoothError):
             manager.ensure_device_ready(pin="0000", mac_address="AA:BB:CC:DD:EE:FF")
+
+
+class TestBluetoothManagerConnectDevicePin:
+    """Test the ephemeral ``pin`` argument on connect_device() (issue #31)."""
+
+    MAC = "AA:BB:CC:DD:EE:FF"
+    DEVICE_PATH = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+
+    def test_connect_device_with_pin_requires_claiming_manager(self):
+        """A caller-less PIN request is always routed to the default
+        agent, so a PIN recorded on a non-claiming manager could never be
+        reached -- fail fast at the API boundary instead.
+        """
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device(self.MAC)
+        manager = _build_manager(mock_bus)
+
+        with patch.object(
+            MockProxyInterface,
+            "call_connect",
+            side_effect=AssertionError("must not be called"),
+        ):
+            with pytest.raises(BluetoothError):
+                manager.connect_device(self.MAC, pin="1234")
+
+    def test_connect_device_pin_is_recorded_before_connect_and_cleared_after(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device(self.MAC)
+        manager = _build_manager(mock_bus, claim_default_agent=True)
+
+        recorded_during_call: dict[str, str] = {}
+        original_call_connect = MockProxyInterface.call_connect
+
+        async def spy_call_connect(self: Any) -> None:
+            recorded_during_call.update(manager._pending_pins)
+            await original_call_connect(self)
+
+        with patch.object(MockProxyInterface, "call_connect", spy_call_connect):
+            result = manager.connect_device(self.MAC, pin="4321")
+
+        assert result is True
+        assert recorded_during_call == {self.DEVICE_PATH: "4321"}
+        assert self.DEVICE_PATH not in manager._pending_pins
+
+    def test_connect_device_pin_is_cleared_after_failed_connection(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device(self.MAC)
+        manager = _build_manager(mock_bus, claim_default_agent=True)
+
+        with patch.object(
+            MockProxyInterface, "call_connect", side_effect=Exception("boom")
+        ):
+            with pytest.raises(BluetoothError):
+                manager.connect_device(self.MAC, max_retries=1, pin="4321")
+
+        assert self.DEVICE_PATH not in manager._pending_pins
 
 
 class TestBluetoothManagerForceRepair:

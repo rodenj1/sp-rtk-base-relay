@@ -14,6 +14,8 @@ import inspect
 from typing import Any, NamedTuple
 from unittest.mock import MagicMock
 
+from dbus_fast.signature import Variant
+
 
 class AgentRef(NamedTuple):
     """A registered pairing agent: the connection that owns it and its path.
@@ -273,10 +275,56 @@ class MockProxyInterface:
             raise Exception("Disconnection failed")
         self._device_data["Connected"] = False
 
+    # D-Bus signatures for org.bluez.Device1 properties, taken from
+    # `busctl introspect` against BlueZ 5.82. Real Properties.Get returns
+    # every value wrapped in a Variant carrying one of these; the fake
+    # returned the raw value, which is why a truthiness bug in production
+    # (`Variant` has no `__bool__`, so every Variant is truthy) was
+    # invisible to this suite.
+    _DEVICE1_SIGNATURES = {
+        "Address": "s",
+        "AddressType": "s",
+        "Alias": "s",
+        "Icon": "s",
+        "Modalias": "s",
+        "Name": "s",
+        "Adapter": "o",
+        "Blocked": "b",
+        "Bonded": "b",
+        "Connected": "b",
+        "LegacyPairing": "b",
+        "Paired": "b",
+        "ServicesResolved": "b",
+        "Trusted": "b",
+        "Class": "u",
+        "Appearance": "q",
+        "RSSI": "n",
+        "TxPower": "n",
+        "UUIDs": "as",
+    }
+
+    @classmethod
+    def _signature_for(cls, property_name: str, value: Any) -> str:
+        """Signature for a Device1 property, inferring for unknown names."""
+        if property_name in cls._DEVICE1_SIGNATURES:
+            return cls._DEVICE1_SIGNATURES[property_name]
+        if isinstance(value, bool):
+            return "b"
+        if isinstance(value, int):
+            return "u"
+        if isinstance(value, list):
+            return "as"
+        return "s"
+
     async def call_get(self, interface: str, property_name: str) -> Any:
-        """Mock Properties Get method."""
+        """Mock Properties Get method.
+
+        Returns a ``Variant``, as the real ``org.freedesktop.DBus.Properties``
+        does -- not the raw value.
+        """
         if interface == "org.bluez.Device1":
-            return self._device_data.get(property_name, False)
+            value = self._device_data.get(property_name, False)
+            return Variant(self._signature_for(property_name, value), value)
         return None
 
     async def call_set(self, interface: str, property_name: str, value: Any) -> None:

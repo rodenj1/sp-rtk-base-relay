@@ -610,7 +610,9 @@ class BluetoothManager:
             device_props = device_proxy.get_interface("org.freedesktop.DBus.Properties")
 
             # Check if already paired
-            paired: bool = await device_props.call_get("org.bluez.Device1", "Paired")  # type: ignore[attr-defined]
+            paired: bool = self._unwrap_variant(
+                await device_props.call_get("org.bluez.Device1", "Paired")  # type: ignore[attr-defined]
+            )
             if paired:
                 logger.info(f"Device {mac_address} already paired")
                 return True
@@ -758,8 +760,8 @@ class BluetoothManager:
             # ``call_*`` methods to ProxyInterface; cast to Any to satisfy
             # static type-checkers.
             device_props_any: Any = device_props
-            connected: bool = await device_props_any.call_get(
-                "org.bluez.Device1", "Connected"
+            connected: bool = self._unwrap_variant(
+                await device_props_any.call_get("org.bluez.Device1", "Connected")
             )
             if connected:
                 logger.info(f"Device {mac_address} already connected")

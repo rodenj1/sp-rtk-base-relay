@@ -12,7 +12,7 @@ import asyncio
 import logging
 import threading
 import time
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 if TYPE_CHECKING:
     from dbus_fast import BusType, DBusError, Variant
@@ -22,9 +22,94 @@ if TYPE_CHECKING:
 try:
     from dbus_fast import BusType, DBusError, Variant
     from dbus_fast.aio import MessageBus as AioMessageBus
+    from dbus_fast.annotations import DBusSignature
     from dbus_fast.introspection import Node
+    from dbus_fast.service import ServiceInterface, dbus_method
 
     _dbus_fast_available = True
+
+    # D-Bus signature type aliases for Agent1 method parameters/returns.
+    # dbus-fast's @dbus_method() reads these Annotated signatures to build
+    # the interface's D-Bus introspection XML.
+    _DBusObjectPath = Annotated[str, DBusSignature("o")]
+    _DBusStr = Annotated[str, DBusSignature("s")]
+    _DBusUInt32 = Annotated[int, DBusSignature("u")]
+    _DBusUInt16 = Annotated[int, DBusSignature("q")]
+
+    class _PairingAgent(ServiceInterface):
+        """``org.bluez.Agent1`` implementation for unattended pairing.
+
+        Every device this project pairs with is a fixed, pre-configured
+        device rather than a walk-up-and-pair UX, so the confirmation/
+        authorization methods auto-accept unconditionally. The PIN/passkey
+        methods are implemented (BlueZ has no graceful fallback for a
+        missing method — an unimplemented one is a silent dispatch
+        failure) but reject every call: there is no PIN source wired up
+        until a later ticket in this series.
+
+        Method names match the ``org.bluez.Agent1`` D-Bus interface
+        exactly (BlueZ dispatches by this literal name), so they can't
+        be snake_case — each is annotated ``# noqa: N802``.
+        """
+
+        def __init__(self) -> None:
+            super().__init__(_AGENT_INTERFACE)
+
+        @dbus_method()
+        def Release(self) -> None:  # noqa: N802
+            pass
+
+        @dbus_method()
+        def Cancel(self) -> None:  # noqa: N802
+            pass
+
+        @dbus_method()
+        def RequestConfirmation(  # noqa: N802
+            self, device: _DBusObjectPath, passkey: _DBusUInt32
+        ) -> None:
+            pass
+
+        @dbus_method()
+        def RequestAuthorization(self, device: _DBusObjectPath) -> None:  # noqa: N802
+            pass
+
+        @dbus_method()
+        def AuthorizeService(  # noqa: N802
+            self, device: _DBusObjectPath, uuid: _DBusStr
+        ) -> None:
+            pass
+
+        @dbus_method()
+        def RequestPinCode(self, device: _DBusObjectPath) -> _DBusStr:  # noqa: N802
+            raise DBusError(
+                "org.bluez.Error.Rejected", "PIN delivery is not yet supported"
+            )
+
+        @dbus_method()
+        def DisplayPinCode(  # noqa: N802
+            self, device: _DBusObjectPath, pincode: _DBusStr
+        ) -> None:
+            raise DBusError(
+                "org.bluez.Error.Rejected", "PIN delivery is not yet supported"
+            )
+
+        @dbus_method()
+        def RequestPasskey(self, device: _DBusObjectPath) -> _DBusUInt32:  # noqa: N802
+            raise DBusError(
+                "org.bluez.Error.Rejected", "Passkey delivery is not yet supported"
+            )
+
+        @dbus_method()
+        def DisplayPasskey(  # noqa: N802
+            self,
+            device: _DBusObjectPath,
+            passkey: _DBusUInt32,
+            entered: _DBusUInt16,
+        ) -> None:
+            raise DBusError(
+                "org.bluez.Error.Rejected", "Passkey delivery is not yet supported"
+            )
+
 except ImportError:
     _dbus_fast_available = False
 
@@ -33,6 +118,18 @@ logger = logging.getLogger(__name__)
 
 # Default timeout for async operations dispatched to background loop
 _DEFAULT_ASYNC_TIMEOUT = 60.0
+
+# Best-effort timeout for the shutdown-time agent unregistration -- this
+# must never meaningfully delay shutdown (see BluetoothManager.close()).
+_AGENT_UNREGISTER_TIMEOUT = 5.0
+
+# BlueZ's AgentManager1 always lives at this fixed path on the org.bluez
+# service. The agent object path itself is freely definable; this repo's
+# own namespace is used rather than reusing BlueZ's.
+_AGENT_MANAGER_PATH = "/org/bluez"
+_AGENT_INTERFACE = "org.bluez.Agent1"
+_AGENT_OBJECT_PATH = "/org/sp_rtk_base_relay/agent"
+_AGENT_CAPABILITY = "KeyboardOnly"
 
 
 class BluetoothError(Exception):
@@ -81,6 +178,7 @@ class BluetoothManager:
         self.adapter_path = f"/org/bluez/{adapter_name}"
         self._bus: AioMessageBus | None = None
         self._adapter: Any = None
+        self._agent: Any = None
 
         # Hybrid introspection cache: pre-cache adapter/root, lazy-cache devices
         self._introspection_cache: dict[str, Node] = {}
@@ -143,6 +241,8 @@ class BluetoothManager:
             )
             self._adapter = adapter_proxy.get_interface("org.bluez.Adapter1")  # type: ignore[arg-type]
 
+            await self._async_register_agent()
+
             logger.info(
                 f"Initialized Bluetooth manager with adapter {self.adapter_path}"
             )
@@ -153,6 +253,56 @@ class BluetoothManager:
             raise
         except Exception as e:
             raise BluetoothError(f"Failed to initialize Bluetooth adapter: {e}")
+
+    async def _async_get_agent_manager(self) -> Any:
+        """Get a proxy for BlueZ's ``org.bluez.AgentManager1`` interface.
+
+        Raises:
+            BluetoothError: If the bus is not initialized.
+        """
+        if self._bus is None:
+            raise BluetoothError("Bus not initialized")
+
+        agent_manager_intro = await self._get_introspection(_AGENT_MANAGER_PATH)
+        agent_manager_proxy = self._bus.get_proxy_object(
+            "org.bluez", _AGENT_MANAGER_PATH, agent_manager_intro
+        )
+        return agent_manager_proxy.get_interface("org.bluez.AgentManager1")
+
+    async def _async_register_agent(self) -> None:
+        """Register a default BlueZ pairing agent.
+
+        Registration order matters: the local agent object must be
+        exported on the bus before it's registered with BlueZ's agent
+        manager, and made the default agent only after that -- otherwise
+        an in-flight pairing event racing with startup could be dispatched
+        to an object that doesn't exist yet.
+        """
+        if self._bus is None:
+            raise BluetoothError("Bus not initialized")
+
+        agent = _PairingAgent()
+        self._bus.export(_AGENT_OBJECT_PATH, agent)
+        self._agent = agent
+
+        agent_manager = await self._async_get_agent_manager()
+        await agent_manager.call_register_agent(_AGENT_OBJECT_PATH, _AGENT_CAPABILITY)
+        await agent_manager.call_request_default_agent(_AGENT_OBJECT_PATH)
+
+        logger.info("Registered default pairing agent at %s", _AGENT_OBJECT_PATH)
+
+    async def _async_unregister_agent(self) -> None:
+        """Unregister the pairing agent from BlueZ's agent manager.
+
+        Not strictly required for correctness -- BlueZ tears an agent down
+        automatically when its D-Bus connection closes -- but cleaner for
+        default-agent handoff timing. Callers treat this as best-effort.
+        """
+        if self._bus is None or self._agent is None:
+            return
+
+        agent_manager = await self._async_get_agent_manager()
+        await agent_manager.call_unregister_agent(_AGENT_OBJECT_PATH)
 
     def _invalidate_device_cache(self, device_path: str) -> None:
         """Remove a device path from the introspection cache.
@@ -842,6 +992,13 @@ class BluetoothManager:
 
         Disconnects from the D-Bus bus and stops the background event loop thread.
         """
+        try:
+            self._run_async(
+                self._async_unregister_agent(), timeout=_AGENT_UNREGISTER_TIMEOUT
+            )
+        except Exception:
+            pass
+
         try:
             if self._bus is not None:
                 self._loop.call_soon_threadsafe(self._bus.disconnect)

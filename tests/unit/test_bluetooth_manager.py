@@ -6,15 +6,45 @@ for device discovery, pairing, trusting, and connection management.
 Updated for dbus-fast migration.
 """
 
+from typing import Any
 from unittest.mock import patch
 
 import pytest
+from dbus_fast import DBusError as RealDBusError
 
 from src.sp_rtk_base_relay.core.bluetooth_manager import (
+    _AGENT_CAPABILITY,
+    _AGENT_OBJECT_PATH,
     BluetoothError,
     BluetoothManager,
 )
-from tests.fixtures.mock_bluetooth import create_mock_dbus_fast, create_mock_message_bus
+from tests.fixtures.mock_bluetooth import (
+    MockProxyInterface,
+    create_mock_dbus_fast,
+    create_mock_message_bus,
+)
+
+
+def _build_manager(mock_bus: Any) -> BluetoothManager:
+    """Construct a BluetoothManager wired to ``mock_bus`` for the duration
+    of construction only -- patches are undone once this returns, so the
+    module's real ``DBusError`` is back in effect for any later interaction
+    with objects (like the pairing agent) exported on ``mock_bus``.
+    """
+    bus_type, _, dbus_error = create_mock_dbus_fast()
+    with (
+        patch("src.sp_rtk_base_relay.core.bluetooth_manager.BusType", bus_type),
+        patch(
+            "src.sp_rtk_base_relay.core.bluetooth_manager.AioMessageBus",
+            lambda bus_type: mock_bus,
+        ),
+        patch("src.sp_rtk_base_relay.core.bluetooth_manager.DBusError", dbus_error),
+        patch(
+            "src.sp_rtk_base_relay.core.bluetooth_manager._dbus_fast_available",
+            True,
+        ),
+    ):
+        return BluetoothManager()
 
 
 class TestBluetoothManagerInit:
@@ -738,3 +768,112 @@ class TestBluetoothManagerRecovery:
 
             # Should not raise
             manager._recovery_scan("00:11:22:33:44:55", scan_seconds=1)
+
+
+class TestBluetoothManagerPairingAgent:
+    """Test the default BlueZ pairing agent (org.bluez.Agent1) lifecycle."""
+
+    def test_agent_registered_and_made_default_on_init(self):
+        """RegisterAgent then RequestDefaultAgent are called, in that order."""
+        mock_bus = create_mock_message_bus()
+
+        _build_manager(mock_bus)
+
+        assert mock_bus.get_agent_manager_calls() == [
+            ("RegisterAgent", (_AGENT_OBJECT_PATH, _AGENT_CAPABILITY)),
+            ("RequestDefaultAgent", (_AGENT_OBJECT_PATH,)),
+        ]
+
+    def test_agent_exported_before_registration(self):
+        """The agent object must be exported before any AgentManager1 call.
+
+        A pairing event racing with startup could otherwise be dispatched
+        to an object that doesn't exist yet.
+        """
+        mock_bus = create_mock_message_bus()
+        events: list[tuple[str, tuple[Any, ...]]] = []
+        original_export = mock_bus.export
+
+        def spy_export(path: str, interface: Any) -> None:
+            events.append(("Export", (path,)))
+            original_export(path, interface)
+
+        mock_bus.export = spy_export  # type: ignore[method-assign]
+
+        _build_manager(mock_bus)
+        events.extend(mock_bus.get_agent_manager_calls())
+
+        assert events == [
+            ("Export", (_AGENT_OBJECT_PATH,)),
+            ("RegisterAgent", (_AGENT_OBJECT_PATH, _AGENT_CAPABILITY)),
+            ("RequestDefaultAgent", (_AGENT_OBJECT_PATH,)),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_release_and_cancel_are_noops(self):
+        mock_bus = create_mock_message_bus()
+        _build_manager(mock_bus)
+
+        await mock_bus.invoke_exported_method(_AGENT_OBJECT_PATH, "Release")
+        await mock_bus.invoke_exported_method(_AGENT_OBJECT_PATH, "Cancel")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "method_name,args",
+        [
+            ("RequestConfirmation", ("/org/bluez/hci0/dev_AA_BB", 123456)),
+            ("RequestAuthorization", ("/org/bluez/hci0/dev_AA_BB",)),
+            ("AuthorizeService", ("/org/bluez/hci0/dev_AA_BB", "00001101-0000")),
+        ],
+    )
+    async def test_confirmation_authorization_and_service_auto_accept(
+        self, method_name: str, args: tuple[Any, ...]
+    ) -> None:
+        mock_bus = create_mock_message_bus()
+        _build_manager(mock_bus)
+
+        # Must not raise -- an empty reply is BlueZ's success signal.
+        await mock_bus.invoke_exported_method(_AGENT_OBJECT_PATH, method_name, *args)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "method_name,args",
+        [
+            ("RequestPinCode", ("/org/bluez/hci0/dev_AA_BB",)),
+            ("DisplayPinCode", ("/org/bluez/hci0/dev_AA_BB", "1234")),
+            ("RequestPasskey", ("/org/bluez/hci0/dev_AA_BB",)),
+            ("DisplayPasskey", ("/org/bluez/hci0/dev_AA_BB", 123456, 4)),
+        ],
+    )
+    async def test_pin_and_passkey_methods_reject(
+        self, method_name: str, args: tuple[Any, ...]
+    ) -> None:
+        mock_bus = create_mock_message_bus()
+        _build_manager(mock_bus)
+
+        with pytest.raises(RealDBusError):
+            await mock_bus.invoke_exported_method(
+                _AGENT_OBJECT_PATH, method_name, *args
+            )
+
+    def test_close_unregisters_agent(self):
+        mock_bus = create_mock_message_bus()
+        manager = _build_manager(mock_bus)
+
+        manager.close()
+
+        assert ("UnregisterAgent", (_AGENT_OBJECT_PATH,)) in (
+            mock_bus.get_agent_manager_calls()
+        )
+
+    def test_close_swallows_unregister_failure(self):
+        """Unregistering is best-effort -- it must never block or fail shutdown."""
+        mock_bus = create_mock_message_bus()
+        manager = _build_manager(mock_bus)
+
+        with patch.object(
+            MockProxyInterface,
+            "call_unregister_agent",
+            side_effect=Exception("BlueZ rejected UnregisterAgent"),
+        ):
+            manager.close()  # must not raise

@@ -688,10 +688,10 @@ class BluetoothManager:
             # raised AuthenticationFailed above. Logged distinctly so a
             # future field report arrives correctly attributed (issue #39
             # cost two steps of misattribution).
-            bonded: bool = await self._async_get_property(
+            paired_after_pairing: bool = await self._async_get_property(
                 device_props, "org.bluez.Device1", "Paired"
             )
-            if not bonded:
+            if not paired_after_pairing:
                 logger.warning(
                     "BlueZ reported successful pairing with %s but the "
                     "device did not create a bond. This is a disagreement "

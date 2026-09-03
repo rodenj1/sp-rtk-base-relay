@@ -1439,7 +1439,7 @@ class TestForceRepairRejectsAnIneffectiveRemoval:
     def test_force_repair_raises_when_the_bond_survives_removal(self):
         mock_bus = create_mock_message_bus()
         mock_bus.add_device(self.MAC, "RTK_GPS_BASE", paired=True)
-        mock_bus.set_removal_ineffective(self.MAC)
+        mock_bus.set_device_fault("removal_ineffective", self.MAC)
         manager = _build_manager(mock_bus)
 
         with pytest.raises(BluetoothError) as exc_info:
@@ -1465,7 +1465,7 @@ class TestPairingTripwire:
     def test_disagreement_is_logged_distinctly_and_not_as_a_wrong_pin(self, caplog):
         mock_bus = create_mock_message_bus()
         mock_bus.add_device(self.MAC, "RTK_GPS_BASE", paired=False)
-        mock_bus.set_pairing_ineffective(self.MAC)
+        mock_bus.set_device_fault("pairing_ineffective", self.MAC)
         manager = _build_manager(mock_bus)
 
         with caplog.at_level(logging.WARNING):
@@ -1489,7 +1489,7 @@ class TestPairingIsBounded:
     def test_a_pair_call_that_never_answers_times_out(self):
         mock_bus = create_mock_message_bus()
         mock_bus.add_device(self.MAC, "RTK_GPS_BASE", paired=False)
-        mock_bus.set_pairing_hangs(self.MAC)
+        mock_bus.set_device_fault("pairing_hangs", self.MAC)
         manager = _build_manager(mock_bus)
 
         with (
@@ -1504,7 +1504,7 @@ class TestPairingIsBounded:
         """The PIN map must be cleaned even when the call is cancelled."""
         mock_bus = create_mock_message_bus()
         mock_bus.add_device(self.MAC, "RTK_GPS_BASE", paired=False)
-        mock_bus.set_pairing_hangs(self.MAC)
+        mock_bus.set_device_fault("pairing_hangs", self.MAC)
         manager = _build_manager(mock_bus)
 
         with (

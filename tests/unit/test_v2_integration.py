@@ -15,6 +15,7 @@ from __future__ import annotations
 import socket
 import threading
 import time
+from collections.abc import Callable
 from typing import Any
 
 from sp_rtk_base_relay.config import (
@@ -101,6 +102,59 @@ def _make_ntrip_dest(
         name=name,
         filter_config=filter_config or FilterConfig.pass_all(),
         ntrip_config=cfg,
+    )
+
+
+def _wait_until(
+    predicate: Callable[[], bool],
+    what: str,
+    timeout: float = 10.0,
+    interval: float = 0.02,
+) -> None:
+    """Block until ``predicate`` holds, or fail the test saying what didn't.
+
+    Replaces fixed ``time.sleep()`` waits, which are load-sensitive: a
+    sleep long enough on an idle machine is not long enough under a full
+    test run, and a sleep placed *after* the event it is meant to wait
+    for cannot help at all.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(interval)
+    raise AssertionError(f"timed out after {timeout}s waiting for {what}")
+
+
+def _connect_client(
+    port: int,
+    recv_timeout: float = 3.0,
+    timeout: float = 10.0,
+    interval: float = 0.02,
+) -> socket.socket:
+    """Connect to ``port``, retrying until the server accepts.
+
+    The destination's port is assigned at construction, so it is a
+    useless readiness signal -- it is non-zero long before
+    ``asyncio.start_server`` has bound anything. The only honest wait is
+    for a connection to actually be accepted.
+    """
+    deadline = time.monotonic() + timeout
+    last_error: OSError | None = None
+    while time.monotonic() < deadline:
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.settimeout(recv_timeout)
+        try:
+            client.connect(("127.0.0.1", port))
+        except OSError as exc:
+            last_error = exc
+            client.close()
+            time.sleep(interval)
+            continue
+        return client
+    raise AssertionError(
+        f"timed out after {timeout}s waiting for the TCP server on port "
+        f"{port} to accept a connection: {last_error!r}"
     )
 
 
@@ -265,15 +319,16 @@ class TestBroadcastToTcpServer:
         hub.start()
 
         try:
-            # Wait for TCP server to start
-            time.sleep(1.0)
             server_port: int = dest._port  # type: ignore[attr-defined]
-            assert server_port > 0, "TCP server should be listening"
 
             # Connect a client
-            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client.settimeout(3.0)
-            client.connect(("127.0.0.1", server_port))
+            client = _connect_client(server_port)
+            # The payload is dropped, not queued, if it is broadcast before
+            # the server has registered this client -- so wait for the
+            # registration, not for an arbitrary interval afterwards.
+            _wait_until(
+                lambda: dest.client_count >= 1, "the server to register 1 client"
+            )
 
             # Feed data
             payload = _build_rtcm_frame(1077, 30)
@@ -307,19 +362,17 @@ class TestBroadcastToTcpServer:
         hub.start()
 
         try:
-            time.sleep(1.0)
             server_port: int = dest._port  # type: ignore[attr-defined]
-            assert server_port > 0
 
             # Connect two clients
             clients: list[socket.socket] = []
             for _ in range(2):
-                c = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                c.settimeout(3.0)
-                c.connect(("127.0.0.1", server_port))
+                c = _connect_client(server_port)
                 clients.append(c)
 
-            time.sleep(0.3)
+            _wait_until(
+                lambda: dest.client_count >= 2, "the server to register 2 clients"
+            )
 
             # Feed data
             payload = _build_rtcm_frame(1087, 25)
@@ -355,14 +408,10 @@ class TestBroadcastToTcpServer:
             hub.start()
 
             try:
-                time.sleep(1.0)
                 server_port: int = tcp_dest._port  # type: ignore[attr-defined]
-                assert server_port > 0
 
                 # Connect and immediately disconnect TCP client
-                c = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                c.settimeout(1.0)
-                c.connect(("127.0.0.1", server_port))
+                c = _connect_client(server_port, recv_timeout=1.0)
                 c.close()
                 time.sleep(0.3)
 
@@ -399,15 +448,14 @@ class TestMultiDestinationFanOut:
             hub.start()
 
             try:
-                time.sleep(1.0)
                 server_port: int = tcp_dest._port  # type: ignore[attr-defined]
-                assert server_port > 0
 
                 # Connect TCP client
-                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                client.settimeout(3.0)
-                client.connect(("127.0.0.1", server_port))
-                time.sleep(0.3)
+                client = _connect_client(server_port)
+                _wait_until(
+                    lambda: tcp_dest.client_count >= 1,
+                    "the server to register 1 client",
+                )
 
                 # Feed data — triggers NTRIP lazy connect
                 payload = _build_rtcm_frame(1077, 35)
@@ -455,15 +503,14 @@ class TestMultiDestinationFanOut:
             hub.start()
 
             try:
-                time.sleep(1.0)
                 server_port: int = tcp_dest._port  # type: ignore[attr-defined]
-                assert server_port > 0
 
                 # Connect TCP client
-                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                client.settimeout(3.0)
-                client.connect(("127.0.0.1", server_port))
-                time.sleep(0.3)
+                client = _connect_client(server_port)
+                _wait_until(
+                    lambda: tcp_dest.client_count >= 1,
+                    "the server to register 1 client",
+                )
 
                 # Feed enough data to crash the NTRIP caster
                 big_payload = _build_rtcm_frame(1077, 50)

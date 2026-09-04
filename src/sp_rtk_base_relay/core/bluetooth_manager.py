@@ -147,6 +147,15 @@ logger = logging.getLogger(__name__)
 # Default timeout for async operations dispatched to background loop
 _DEFAULT_ASYNC_TIMEOUT = 60.0
 
+# Bound on a single Device1.Pair() call, tighter than the generic async
+# timeout. BlueZ can return from device_bonding_complete() without
+# replying at all -- reachable when a link key arrives with
+# store_hint == 0, leaving Paired true and Bonded false -- and dbus-fast
+# imposes no timeout on its own calls. Without this the wait is bounded
+# only by _DEFAULT_ASYNC_TIMEOUT, and a 60 s stall on relay start is a
+# bad outcome even though it does terminate.
+_PAIRING_TIMEOUT = 30.0
+
 # Best-effort timeout for the shutdown-time agent unregistration -- this
 # must never meaningfully delay shutdown (see BluetoothManager.close()).
 _AGENT_UNREGISTER_TIMEOUT = 5.0
@@ -455,6 +464,58 @@ class BluetoothManager:
             return value.value
         return value
 
+    async def _async_get_bool_property(
+        self, props: Any, interface: str, property_name: str
+    ) -> bool:
+        """Read a boolean D-Bus property, unwrapped and type-checked.
+
+        ``org.freedesktop.DBus.Properties.Get`` answers with a
+        ``Variant``. ``Variant`` defines no ``__bool__``, so every
+        ``Variant`` is truthy -- including one wrapping ``False``.
+        Branching on a raw property read is therefore always a bug: it
+        is what made pairing silently no-op in v3.0.0 and v3.1.0 (issue
+        #39), where ``Device1.Pair()`` was never reached at all.
+
+        Every boolean property read goes through here, and the declared
+        ``bool`` return is what makes that worth doing: it gives callers
+        a *checked* type rather than an ``Any`` they must annotate on
+        trust. An ``Any``-returning reader would leave ``paired: bool =
+        await ...`` exactly as unverified as the annotation this bug hid
+        behind. A read of a non-boolean property should get its own
+        sibling reader rather than this one.
+
+        The ``type: ignore`` is load-bearing and deliberately lives
+        here, exactly once: ``dbus-fast`` attaches its ``call_*`` methods
+        dynamically via ``__getattr__``, so ``ProxyInterface`` genuinely
+        has no static ``call_get``. Confining the suppression to this
+        one line keeps every call site fully type-checked -- deleting it
+        outright fails ``pyright`` strict.
+
+        Args:
+            props: The device's ``org.freedesktop.DBus.Properties``
+                proxy interface.
+            interface: Interface owning the property, e.g.
+                ``org.bluez.Device1``.
+            property_name: Property to read, e.g. ``Paired``.
+
+        Returns:
+            The property's unwrapped boolean value.
+
+        Raises:
+            BluetoothError: If the unwrapped value is not a ``bool`` --
+                a programming error (wrong reader for the property),
+                since ``Variant`` enforces its own signature.
+        """
+        value = self._unwrap_variant(
+            await props.call_get(interface, property_name)  # type: ignore[attr-defined]
+        )
+        if not isinstance(value, bool):
+            raise BluetoothError(
+                f"{interface}.{property_name} read as {type(value).__name__}, "
+                "expected bool -- use a reader matching the property's type"
+            )
+        return value
+
     async def _async_find_device_in_known(self, device_name: str) -> str | None:
         """Search BlueZ's known/paired devices for a device by name.
 
@@ -575,17 +636,24 @@ class BluetoothManager:
             return False
 
     def pair_device(self, mac_address: str, pin: str = "0000") -> bool:
-        """Pair with a Bluetooth device.
+        """Create a bond with a Bluetooth device, if one does not exist.
 
         Args:
             mac_address: Device MAC address
             pin: PIN code for pairing (default: "0000")
 
         Returns:
-            True if paired successfully
+            ``True`` if this call created the bond. ``False`` if the device
+            was already bonded and nothing was done. **Both are successes** --
+            ``False`` never signals failure, which is reported by raising.
+            Callers wanting only "did this work" should ignore the value;
+            an ``if not pair_device(...)`` guard rejects the idempotent
+            path that every relay start on a bonded device takes.
 
         Raises:
-            BluetoothError: If pairing fails
+            BluetoothError: If pairing fails, including a wrong PIN
+                (``AuthenticationFailed`` from BlueZ) and a pairing call
+                BlueZ never answers (see ``_PAIRING_TIMEOUT``).
         """
         return self._run_async(self._async_pair_device(mac_address, pin))
 
@@ -610,10 +678,12 @@ class BluetoothManager:
             device_props = device_proxy.get_interface("org.freedesktop.DBus.Properties")
 
             # Check if already paired
-            paired: bool = await device_props.call_get("org.bluez.Device1", "Paired")  # type: ignore[attr-defined]
+            paired: bool = await self._async_get_bool_property(
+                device_props, "org.bluez.Device1", "Paired"
+            )
             if paired:
                 logger.info(f"Device {mac_address} already paired")
-                return True
+                return False
 
             logger.info(f"Pairing with {mac_address}...")
             # Record the PIN for this device path immediately before the
@@ -623,10 +693,40 @@ class BluetoothManager:
             # PINs aren't retained any longer than necessary.
             self._pending_pins[device_path] = pin
             try:
-                await device_iface.call_pair()  # type: ignore[attr-defined]
+                await asyncio.wait_for(
+                    device_iface.call_pair(),  # type: ignore[attr-defined]
+                    timeout=_PAIRING_TIMEOUT,
+                )
+            except (TimeoutError, asyncio.TimeoutError) as e:
+                raise BluetoothError(
+                    f"Pairing with {mac_address} timed out after "
+                    f"{_PAIRING_TIMEOUT}s waiting for BlueZ to answer. This "
+                    "is neither a wrong PIN nor a confirmed failure to bond "
+                    "-- BlueZ never replied."
+                ) from e
             finally:
                 self._pending_pins.pop(device_path, None)
-            logger.info(f"Successfully paired with {mac_address}")
+
+            # Tripwire. A successful Pair() reply is BlueZ positively
+            # asserting the device was set paired, so a disagreement here
+            # means our own bookkeeping is wrong, not that BlueZ lied --
+            # and it is emphatically not a wrong PIN, which would have
+            # raised AuthenticationFailed above. Logged distinctly so a
+            # future field report arrives correctly attributed (issue #39
+            # cost two steps of misattribution).
+            paired_after_pairing: bool = await self._async_get_bool_property(
+                device_props, "org.bluez.Device1", "Paired"
+            )
+            if not paired_after_pairing:
+                logger.warning(
+                    "BlueZ reported successful pairing with %s but the "
+                    "device did not create a bond. This is a disagreement "
+                    "with the relay's own bookkeeping, not a wrong-PIN "
+                    "failure -- a wrong PIN raises AuthenticationFailed.",
+                    mac_address,
+                )
+            else:
+                logger.info(f"Successfully paired with {mac_address}")
             return True
 
         except DBusError as e:
@@ -758,8 +858,8 @@ class BluetoothManager:
             # ``call_*`` methods to ProxyInterface; cast to Any to satisfy
             # static type-checkers.
             device_props_any: Any = device_props
-            connected: bool = await device_props_any.call_get(
-                "org.bluez.Device1", "Connected"
+            connected: bool = await self._async_get_bool_property(
+                device_props_any, "org.bluez.Device1", "Connected"
             )
             if connected:
                 logger.info(f"Device {mac_address} already connected")
@@ -1105,8 +1205,12 @@ class BluetoothManager:
         Raises:
             BluetoothError: If pairing or trusting fails.
         """
-        if not self.pair_device(mac_address, pin):
-            raise BluetoothError(f"Failed to pair with {mac_address}")
+        # pair_device() raises on failure; its return value distinguishes
+        # "created the bond" (True) from "already bonded, nothing done"
+        # (False). Both are successes, so neither is checked here -- an
+        # `if not pair_device()` guard would reject the idempotent path
+        # that every relay start on a bonded device takes.
+        self.pair_device(mac_address, pin)
 
         if not self.trust_device(mac_address):
             raise BluetoothError(f"Failed to trust {mac_address}")
@@ -1164,8 +1268,16 @@ class BluetoothManager:
                 self._async_wait_for_device_interface(mac_address, scan_timeout),
                 timeout=max(float(scan_timeout) + 15.0, _DEFAULT_ASYNC_TIMEOUT),
             )
+            # Unlike ensure_device_ready, a False here IS a failure: the
+            # bond was just removed, so "already bonded, nothing done"
+            # means the removal did not take and this repair silently
+            # achieved nothing.
             if not self.pair_device(mac_address, pin):
-                raise BluetoothError(f"Failed to pair with {mac_address}")
+                raise BluetoothError(
+                    f"{mac_address} is still bonded after its bond was "
+                    "removed, so no new PIN was applied -- the removal did "
+                    "not take effect"
+                )
 
         def _trust_stage() -> None:
             if not self.trust_device(mac_address):

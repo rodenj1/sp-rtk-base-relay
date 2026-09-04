@@ -1,3 +1,63 @@
+## v3.1.1 (2026-09-04)
+
+### CORRECTION TO v3.0.0 AND v3.1.0
+
+**Automatic pairing has never worked in any released version before this
+one.** v3.0.0's changelog described its PIN-threading change as "the actual
+user-facing fix for legacy-PIN GNSS receivers that could never pair
+automatically". That claim was false, and it was equally false of v3.1.0.
+Any deployment on those versions that appears to work is running on a bond
+created manually or by a pre-3.0.0 path. See
+[#39](https://github.com/rodenj1/sp-rtk-base-relay/issues/39).
+
+- fix(bluetooth): unwrap Variants so pairing actually calls Device1.Pair()
+`org.freedesktop.DBus.Properties.Get` returns a `Variant`, which defines
+no `__bool__` and is therefore always truthy — including one wrapping
+`False`. `_async_pair_device` annotated that result `bool` and branched
+on it, so `pair_device()`'s "already paired" fast path fired
+unconditionally and `Device1.Pair()` was never called. Every part of
+v3.0.0's pairing work — the `KeyboardOnly` `Agent1`, the PIN threading,
+`force_repair()` — sat downstream of a branch that never executed.
+All property reads now go through `_async_get_bool_property()`, which
+unwraps the `Variant` and returns a checked `bool`, so a call site's
+annotation is verified by pyright rather than trusted.
+`pair_device()`'s return value gains meaning: `True` when this call
+created the bond, `False` when the device was already bonded and nothing
+was done, and failure raises. `_pair_and_trust()` therefore drops its
+`if not pair_device(): raise` guard, which would reject the idempotent
+path every relay start on a bonded device takes; `force_repair()` keeps
+it, where `False` genuinely means its own removal did not take, and now
+names that condition. `Pair()` is bounded by a pairing-specific timeout,
+since BlueZ can return from `device_bonding_complete()` without replying
+and `dbus-fast` imposes no timeout of its own. A tripwire re-reads
+`Paired` after a successful `Pair()` and logs any disagreement
+distinctly, named as not a wrong-PIN failure.
+- test(bluetooth): make the mock fake return Variants
+The fake returned raw property values where the real bus returns
+`Variant`s, which is why the whole offline suite stayed green against a
+`pair_device()` that could not pair. It now returns `Variant`s carrying
+the real `Device1` signatures. Nineteen existing tests were passing only
+because of the old behaviour and become regression tests unchanged; no
+test needed updating.
+- test(integration): wait for real conditions instead of fixed sleeps
+`test_hub_to_tcp_server_single_client` failed the pre-push hook
+deterministically, blocking every push. Two races hidden behind fixed
+sleeps: the payload was fed before the server had registered the client
+(a broadcast to zero clients is dropped, not queued), and the wait for
+the server to start polled a port number that is assigned at
+construction and so signals nothing. Both now wait on the real
+conditions.
+- docs: stop advertising a feature that did not exist
+`docs/bluetooth-python-integration.md` listed automatic pairing and a
+configurable PIN as working features. `docs/bluetooth-gps-setup.md` told
+readers on v3.1.0 and earlier that automatic pairing was broken and then
+recommended `force_repair()` for a changed PIN — which false-succeeds
+identically on exactly those versions. `CONTEXT.md`'s **Bond** entry no
+longer conflates `Device1.Paired` (the pairing exchange completed) with
+`Device1.Bonded` (the link key was persisted), and records why this
+project reads `Paired`: `Bonded` arrived in BlueZ 5.66 and the supported
+floor is 5.51.
+
 ## v3.1.0 (2026-09-03)
 
 - feat(bluetooth): stop claiming BlueZ's default pairing agent unconditionally

@@ -1,3 +1,28 @@
+## v3.2.0 (2026-09-30)
+
+- feat(engine): add Frame subscriber API (ADR 0003)
+`RelayEngine.subscribe_frames(message_ids=None)` gives an embedding
+application a copy of every complete, CRC-valid RTCM 3 **Frame** the Relay
+reads from its input, before destination filtering, optionally narrowed by
+message ID. Each is delivered as `Frame(message_id, data)`; read them with
+`get_frame()`, `drain()` or iteration. A **Frame subscriber** is not a
+destination: it is not configured or listed and has no effect on relaying.
+Each has its own bounded queue that drops when full, counted in the new
+`RelayStatus.frame_subscriber_drops` (alongside `frame_subscriber_count`),
+so a slow subscriber never blocks the hub. The hub delimits Frames only
+while a filtering destination or a subscriber exists; `pass_all`
+destinations still receive the raw chunks, byte for byte. A subscription
+belongs to one engine run: stopping the engine ends it once buffered Frames
+are read, so subscribe again after each `start()`. The Relay never decodes
+Frame payloads. `Frame` and `FrameSubscription` are exported from the
+package root.
+- fix(engine): refuse Frame subscriptions while the engine is stopping
+A `subscribe_frames()` call landing inside `stop()` could attach a
+subscription that was never closed; it now raises `ServiceError`.
+- docs: add Frame and Frame subscriber terms and ADR 0003
+- chore: drop the stale commitizen version (the version lives in
+`[project]`) and the "v2.1" wording in CLAUDE.md
+
 ## v3.1.1 (2026-09-04)
 
 ### CORRECTION TO v3.0.0 AND v3.1.0

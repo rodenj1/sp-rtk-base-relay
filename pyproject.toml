@@ -217,7 +217,7 @@ dev = [
 # permits projects to define their own type vocabulary.
 [tool.commitizen]
 name = "cz_customize"
-version = "2.1.2"
+# The version lives in [project].version (pep621 provider); don't duplicate it here.
 version_provider = "pep621"
 
 version_files = [

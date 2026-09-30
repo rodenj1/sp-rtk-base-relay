@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-SP-Base-Relay (v2.1) is a Python service **and embeddable library** that relays RTCM correction data from a single GPS input (TCP / serial / Bluetooth) to multiple output destinations simultaneously (Sure-Path, NTRIP v1.0/v2.0, TCP rebroadcast). Each destination runs in its own thread with an independent queue so a failure in one cannot affect the others.
+SP-Base-Relay is a Python service **and embeddable library** that relays RTCM correction data from a single GPS input (TCP / serial / Bluetooth) to multiple output destinations simultaneously (Sure-Path, NTRIP v1.0/v2.0, TCP rebroadcast). Each destination runs in its own thread with an independent queue so a failure in one cannot affect the others.
 
 ## Environment
 
@@ -57,7 +57,7 @@ Default `pytest` enforces `--cov-fail-under=70` and excludes `integration/` and 
 There are **two** ways to use this code:
 
 1. **Service** (`src/sp_rtk_base_relay/main.py`) — `SPBaseRelayService` orchestrates everything: loads YAML config, builds input source + destinations + hub via factories, owns its own signal handlers, runs a 1 Hz health/metrics loop. This is the `sp-rtk-base-relay` CLI entry point.
-2. **Library** (`src/sp_rtk_base_relay/engine.py`) — `RelayEngine` is the v2.1 embeddable façade. External apps (like `sp-rtk-base`) construct one programmatically, call `start([DestinationConfig, ...])`, `add_destination()` / `remove_destination()` while running, and read `get_status()` (typed `RelayStatus` snapshot). Subscribes to events via `subscribe_events()` → `EventSubscription`.
+2. **Library** (`src/sp_rtk_base_relay/engine.py`) — `RelayEngine` is the embeddable façade (introduced in v2.1). External apps (like `sp-rtk-base`) construct one programmatically, call `start([DestinationConfig, ...])`, `add_destination()` / `remove_destination()` while running, and read `get_status()` (typed `RelayStatus` snapshot). Subscribes to events via `subscribe_events()` → `EventSubscription`, and to input Frames via `subscribe_frames()` → `FrameSubscription` (ADR 0003; one engine run per subscription).
 
 Both paths build on the same `BroadcastHub` + `DestinationFactory` + `InputSourceFactory` machinery in `core/`.
 

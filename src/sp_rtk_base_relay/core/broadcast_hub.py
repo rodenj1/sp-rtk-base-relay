@@ -300,19 +300,37 @@ class BroadcastHub:
         True while any destination filters or any Frame subscriber exists.
         Must be called while holding ``_destinations_lock``.
         """
+        was_parsing = self._any_needs_parsing
         self._any_needs_parsing = bool(self._frame_subscribers) or any(
             d.message_filter.requires_parsing for d in self._destinations
         )
+        if was_parsing and not self._any_needs_parsing:
+            # Back on the raw path: drop any partial Frame so a later
+            # subscriber doesn't parse a stale tail against new bytes.
+            with self._frame_buffer_lock:
+                self._frame_buffer = b""
 
     # ------------------------------------------------------------------
     # Frame subscribers (ADR 0003)
     # ------------------------------------------------------------------
 
-    def add_frame_subscriber(self, subscription: FrameSubscription) -> None:
-        """Start offering input Frames to *subscription*."""
+    def add_frame_subscriber(self, subscription: FrameSubscription) -> bool:
+        """Start offering input Frames to *subscription*.
+
+        Returns ``False``, and closes the subscription, if the hub is not
+        running.  Checked under the lock that :meth:`stop` uses to collect
+        the subscriptions it ends, so a subscription added while the hub
+        is stopping is either ended by ``stop()`` or refused here, never
+        left open.
+        """
         with self._destinations_lock:
-            self._frame_subscribers.append(subscription)
-            self._recalculate_needs_parsing()
+            accepted = self._running
+            if accepted:
+                self._frame_subscribers.append(subscription)
+                self._recalculate_needs_parsing()
+        if not accepted:
+            subscription.close()
+        return accepted
 
     def remove_frame_subscriber(self, subscription: FrameSubscription) -> None:
         """Stop offering Frames to *subscription*.  Unknown ones are ignored."""
@@ -587,7 +605,7 @@ class BroadcastHub:
                 dest.enqueue(data)
 
     def _distribute_filtered(self, data: bytes) -> None:
-        """Slow path: at least one destination uses filtering.
+        """Slow path: a destination filters or a Frame subscriber exists.
 
         1. Parse RTCM frames from the accumulated buffer.
         2. For each destination:

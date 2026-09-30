@@ -71,7 +71,8 @@ class FrameSubscription:
     def offer(self, frame: Frame) -> bool:
         """Hand a Frame to this subscription without ever blocking.
 
-        Called by the hub.  Returns ``False`` if the Frame was not queued
+        Called only by the hub's broadcast thread, which is the sole
+        writer of the drop counter; subscribers never call it.  Returns ``False`` if the Frame was not queued
         because the subscription is closed, filtered it out, or is full
         (the last case is counted in :attr:`dropped`).
         """

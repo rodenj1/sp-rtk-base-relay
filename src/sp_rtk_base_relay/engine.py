@@ -333,7 +333,8 @@ class RelayEngine:
         subscription = FrameSubscription(
             message_ids=ids, on_close=self._hub.remove_frame_subscriber
         )
-        self._hub.add_frame_subscriber(subscription)
+        if not self._hub.add_frame_subscriber(subscription):
+            raise ServiceError("Cannot call subscribe_frames(): engine is stopping")
         return subscription
 
     def get_recent_events(self, count: int = 50) -> list[RelayEvent]:

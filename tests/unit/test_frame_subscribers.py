@@ -363,3 +363,15 @@ def test_the_hub_only_frames_the_stream_while_a_subscriber_needs_it(rig: Rig) ->
     rig.feed(rtcm_frame(1074))
     rig.settle()
     assert rig.engine.get_status().frames_parsed == 1  # back on the fast path
+
+
+def test_subscribing_while_the_engine_is_stopping_is_refused(rig: Rig) -> None:
+    from sp_rtk_base_relay.exceptions import ServiceError
+
+    # The window inside engine.stop(): the hub has stopped (and closed its
+    # subscriptions) but the engine has not yet marked itself stopped.
+    rig.engine._hub.stop()  # pyright: ignore[reportPrivateUsage, reportOptionalMemberAccess]
+
+    with pytest.raises(ServiceError):
+        rig.engine.subscribe_frames()
+    assert rig.engine.get_status().frame_subscriber_count == 0

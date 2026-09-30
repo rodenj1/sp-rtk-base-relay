@@ -5,6 +5,7 @@ __version__ = "3.1.1"
 # v2.1 public API — RelayEngine facade
 # v2.1 public API — Event system
 from sp_rtk_base_relay.core.events import EventBus, EventSubscription, RelayEvent
+from sp_rtk_base_relay.core.frame_subscription import Frame, FrameSubscription
 
 # v2.1 public API — Typed status snapshots
 from sp_rtk_base_relay.core.status import (
@@ -18,6 +19,8 @@ __all__ = [
     "DestinationStatus",
     "EventBus",
     "EventSubscription",
+    "Frame",
+    "FrameSubscription",
     "InputStatus",
     "RelayEngine",
     "RelayEvent",

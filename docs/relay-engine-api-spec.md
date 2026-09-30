@@ -38,6 +38,9 @@ from sp_rtk_base_relay import RelayEngine
 # Event system
 from sp_rtk_base_relay import EventBus, EventSubscription, RelayEvent
 
+# Frame subscribers (ADR 0003)
+from sp_rtk_base_relay import Frame, FrameSubscription
+
 # Status snapshots
 from sp_rtk_base_relay import RelayStatus, DestinationStatus, InputStatus
 
@@ -411,6 +414,36 @@ Creates a new event subscription. Can be called **before or after** `start()`. S
 
 **Returns:** An `EventSubscription` — call `.close()` when done.
 
+#### `engine.subscribe_frames(message_ids=None) -> FrameSubscription`
+
+```python
+def subscribe_frames(
+    self, message_ids: set[int] | frozenset[int] | None = None
+) -> FrameSubscription
+```
+
+Subscribes to the **Frames** this engine run reads from its input (ADR 0003). A Frame is one complete, CRC-valid RTCM 3 message; each is delivered as `Frame(message_id: int, data: bytes)`, where `data` is the whole frame (header, payload, CRC) exactly as read.
+
+- **Every input Frame, before destination filtering.** A destination's allowlist or blocklist never hides Frames from a subscriber, and Frames are delivered even when every destination is `pass_all` (the hub delimits Frames while any subscriber exists; `pass_all` destinations still receive the raw chunks, so relaying is unchanged).
+- **`message_ids`** narrows delivery to those RTCM message numbers; `None` delivers every Frame.
+- **Not a destination.** A subscriber is not configured, not listed in `get_destination_names()` or `RelayStatus.destinations`, not counted in destination counts or metrics, and has no effect on relaying.
+- **Never blocks the hub.** Each subscription has its own bounded queue (100 Frames). When full, new Frames are dropped for that subscriber and counted in `RelayStatus.frame_subscriber_drops`.
+- **One engine run.** Must be called while running (raises `ServiceError` otherwise, like `get_status()`). Stopping the engine ends every subscription: Frames already queued can still be read, then reads report closed. **Subscribe again after each `start()`**. This differs from `subscribe_events()`, whose event bus outlives engine runs.
+- **The Relay never decodes Frame payloads**; decoding (e.g. MSM with `pyrtcm`) is the subscriber's job.
+
+Consumption, from a worker thread:
+
+```python
+sub = engine.subscribe_frames({1074, 1084, 1094, 1124})
+frame = sub.get_frame(timeout=1.0)   # Frame | None (timeout, or closed and empty)
+batch = sub.drain(max_frames=50)     # non-blocking
+for frame in sub:                    # blocks; ends when the subscription closes
+    handle(frame.message_id, frame.data)
+sub.close()                          # idempotent; detaches from the hub
+```
+
+`sub.closed` and `sub.dropped` report the subscription's state.
+
 #### `engine.get_recent_events(count=50) -> list[RelayEvent]`
 
 ```python
@@ -558,6 +591,8 @@ class RelayStatus:
     chunks_distributed: int                    # Total data chunks sent to destinations
     frames_parsed: int                         # Total RTCM frames parsed
     no_data_warnings: int                      # No-data warning count
+    frame_subscriber_count: int = 0            # Frame subscribers attached (never destinations)
+    frame_subscriber_drops: int = 0            # Frames dropped for full subscriber queues, this run
 ```
 
 ### 5.2 InputStatus

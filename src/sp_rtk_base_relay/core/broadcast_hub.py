@@ -35,6 +35,7 @@ from sp_rtk_base_relay.core.events import (
     INPUT_RECONNECTING,
     EventBus,
 )
+from sp_rtk_base_relay.core.frame_subscription import Frame, FrameSubscription
 from sp_rtk_base_relay.core.input_sources.base_input import InputSource
 from sp_rtk_base_relay.rtcm_decoder import RTCMMessageDecoder
 
@@ -120,6 +121,11 @@ class BroadcastHub:
         # Frame buffer for RTCM parsing (only used in filtered path)
         self._frame_buffer = b""
         self._frame_buffer_lock = threading.Lock()
+
+        # Frame subscribers (ADR 0003): in-process copies of input Frames.
+        # Guarded by _destinations_lock alongside the destination list.
+        self._frame_subscribers: list[FrameSubscription] = []
+        self._removed_subscriber_drops = 0
 
         # Pre-compute whether any destination needs parsing (DR-1)
         self._any_needs_parsing = any(
@@ -289,13 +295,46 @@ class BroadcastHub:
             return [d.name for d in self._destinations]
 
     def _recalculate_needs_parsing(self) -> None:
-        """Recalculate whether any destination needs RTCM parsing.
+        """Recalculate whether the hub must delimit RTCM Frames.
 
+        True while any destination filters or any Frame subscriber exists.
         Must be called while holding ``_destinations_lock``.
         """
-        self._any_needs_parsing = any(
+        self._any_needs_parsing = bool(self._frame_subscribers) or any(
             d.message_filter.requires_parsing for d in self._destinations
         )
+
+    # ------------------------------------------------------------------
+    # Frame subscribers (ADR 0003)
+    # ------------------------------------------------------------------
+
+    def add_frame_subscriber(self, subscription: FrameSubscription) -> None:
+        """Start offering input Frames to *subscription*."""
+        with self._destinations_lock:
+            self._frame_subscribers.append(subscription)
+            self._recalculate_needs_parsing()
+
+    def remove_frame_subscriber(self, subscription: FrameSubscription) -> None:
+        """Stop offering Frames to *subscription*.  Unknown ones are ignored."""
+        with self._destinations_lock:
+            if subscription in self._frame_subscribers:
+                self._frame_subscribers.remove(subscription)
+                self._removed_subscriber_drops += subscription.dropped
+            self._recalculate_needs_parsing()
+
+    @property
+    def frame_subscriber_count(self) -> int:
+        """Number of Frame subscribers currently attached."""
+        with self._destinations_lock:
+            return len(self._frame_subscribers)
+
+    @property
+    def frame_subscriber_drops(self) -> int:
+        """Frames dropped for full subscriber queues during this hub's life."""
+        with self._destinations_lock:
+            return self._removed_subscriber_drops + sum(
+                s.dropped for s in self._frame_subscribers
+            )
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -388,6 +427,14 @@ class BroadcastHub:
         with self._destinations_lock:
             for dest in self._destinations:
                 dest.stop()
+
+        # End every Frame subscription: a subscription belongs to one run
+        # (ADR 0003).  Closed outside the lock, since close() detaches
+        # itself through remove_frame_subscriber().
+        with self._destinations_lock:
+            ending = list(self._frame_subscribers)
+        for sub in ending:
+            sub.close()
 
         # Disconnect input source
         try:
@@ -552,6 +599,13 @@ class BroadcastHub:
 
         with self._destinations_lock:
             snapshot = list(self._destinations)
+            subscribers = list(self._frame_subscribers)
+
+        # Frame subscribers see every input Frame, before destination filtering
+        for msg_id, frame_bytes in parsed_frames:
+            frame = Frame(message_id=msg_id, data=frame_bytes)
+            for sub in subscribers:
+                sub.offer(frame)
 
         for dest in snapshot:
             if not dest.enabled:

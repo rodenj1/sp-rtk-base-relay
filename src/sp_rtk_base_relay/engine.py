@@ -40,6 +40,7 @@ from sp_rtk_base_relay.core.events import (
     EventSubscription,
     RelayEvent,
 )
+from sp_rtk_base_relay.core.frame_subscription import FrameSubscription
 from sp_rtk_base_relay.core.input_sources.input_factory import InputSourceFactory
 from sp_rtk_base_relay.core.status import RelayStatus, build_relay_status
 from sp_rtk_base_relay.exceptions import ConfigurationError, ServiceError
@@ -298,6 +299,42 @@ class RelayEngine:
             :class:`RelayEvent` objects.  Call ``.close()`` when done.
         """
         return self._event_bus.subscribe()
+
+    def subscribe_frames(
+        self, message_ids: set[int] | frozenset[int] | None = None
+    ) -> FrameSubscription:
+        """Subscribe to the Frames this engine run reads from its input.
+
+        A Frame subscriber receives a copy of every complete, CRC-valid
+        RTCM 3 Frame read from the input, before any destination
+        filtering, whether or not any destination filters.  It is not a
+        destination: it is not listed, has no effect on relaying, and
+        never blocks the hub.  Its queue is bounded; when full, Frames
+        are dropped and counted in :class:`RelayStatus`.  The Relay never
+        decodes Frame payloads (ADR 0003).
+
+        Unlike :meth:`subscribe_events`, a Frame subscription belongs to
+        one engine run: stopping the engine ends it, so subscribe again
+        after each :meth:`start`.
+
+        Args:
+            message_ids: Only deliver these RTCM message numbers.  ``None``
+                (the default) delivers every Frame.
+
+        Returns:
+            A :class:`FrameSubscription`.  Call ``.close()`` when done.
+
+        Raises:
+            ServiceError: If the engine is not running.
+        """
+        self._require_running("subscribe_frames")
+        assert self._hub is not None
+        ids = frozenset(message_ids) if message_ids is not None else None
+        subscription = FrameSubscription(
+            message_ids=ids, on_close=self._hub.remove_frame_subscriber
+        )
+        self._hub.add_frame_subscriber(subscription)
+        return subscription
 
     def get_recent_events(self, count: int = 50) -> list[RelayEvent]:
         """Get recent events from the ring buffer.

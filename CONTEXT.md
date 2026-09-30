@@ -15,3 +15,11 @@ _Avoid_: "incoming pairing" — the distinction is the absence of a local caller
 **Force-repair**:
 Discarding a device's existing bond and re-establishing it with a newly supplied PIN, for the case where the configured PIN changed after the device was already bonded. Distinct from ordinary pairing, which only applies to a device with no existing bond.
 _Avoid_: "Re-pair" alone — ambiguous with a device simply reconnecting after being briefly out of range.
+
+**Frame**:
+One complete, CRC-valid RTCM 3 message as delimited by the Relay. The Relay knows a Frame's message number and length, and never what is inside it: decoding payloads is always the consumer's job.
+_Avoid_: packet, message chunk, chunk (a chunk is whatever the input read returned, and may split a Frame)
+
+**Frame subscriber**:
+An in-process consumer that receives a copy of every Frame the Relay reads from its input, before any destination filtering. It never affects relaying, and it is not a destination: nothing is delivered to it on the operator's behalf, it is not configured, and it does not appear in the destination list.
+_Avoid_: tap, listener, destination, sink

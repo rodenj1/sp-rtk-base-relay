@@ -134,6 +134,10 @@ class RelayStatus:
         chunks_distributed: Total data chunks distributed to destinations.
         frames_parsed: Total RTCM frames parsed.
         no_data_warnings: Number of no-data warning events.
+        frame_subscriber_count: Frame subscribers currently attached.
+            Subscribers are never counted as destinations.
+        frame_subscriber_drops: Frames dropped because a subscriber's
+            queue was full, over this engine run.
     """
 
     running: bool
@@ -146,6 +150,8 @@ class RelayStatus:
     chunks_distributed: int
     frames_parsed: int
     no_data_warnings: int
+    frame_subscriber_count: int = 0
+    frame_subscriber_drops: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -267,4 +273,6 @@ def build_relay_status(
         chunks_distributed=hub.stats.chunks_distributed,
         frames_parsed=hub.stats.frames_parsed,
         no_data_warnings=hub.stats.no_data_warnings,
+        frame_subscriber_count=hub.frame_subscriber_count,
+        frame_subscriber_drops=hub.frame_subscriber_drops,
     )

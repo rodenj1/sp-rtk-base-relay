@@ -203,7 +203,7 @@ class NtripDestinationConfig:
     port: int = 2101                    # Caster port
     mountpoint: str                     # Required — mount point name
     password: str                       # Required — stream password
-    username: str = ""                  # Username (often empty for NTRIP)
+    username: str = ""                  # Required for version "2.0"; unused in "1.0"
     version: str = "2.0"               # "1.0" or "2.0"
     connection_timeout: int = 15        # Seconds
     retry_initial_delay: int = 10       # Initial retry delay (seconds)

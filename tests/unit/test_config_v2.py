@@ -76,6 +76,7 @@ def _ntrip_dest(
             "port": port,
             "mountpoint": mountpoint,
             "password": password,
+            "username": "user",
             "version": version,
         },
     }
@@ -294,7 +295,7 @@ class TestNtripDestinationConfig:
 
     def test_valid_v2_config(self) -> None:
         c = NtripDestinationConfig(
-            caster="rtk2go.com", mountpoint="MOUNT1", password="pass"
+            caster="rtk2go.com", mountpoint="MOUNT1", password="pass", username="u"
         )
         assert c.caster == "rtk2go.com"
         assert c.port == 2101
@@ -306,6 +307,23 @@ class TestNtripDestinationConfig:
             caster="rtk2go.com", mountpoint="MOUNT1", password="pass", version="1.0"
         )
         assert c.version == "1.0"
+
+    @pytest.mark.parametrize("username", ["", "   "])
+    def test_v2_requires_a_username(self, username: str) -> None:  # R3
+        with pytest.raises(ConfigurationError, match="username is required"):
+            NtripDestinationConfig(
+                caster="c",
+                mountpoint="M",
+                password="p",
+                version="2.0",
+                username=username,
+            )
+
+    def test_v1_needs_no_username(self) -> None:
+        c = NtripDestinationConfig(
+            caster="c", mountpoint="M", password="p", version="1.0", username=""
+        )
+        assert c.username == ""
 
     def test_empty_caster(self) -> None:
         with pytest.raises(ConfigurationError, match="caster cannot be empty"):

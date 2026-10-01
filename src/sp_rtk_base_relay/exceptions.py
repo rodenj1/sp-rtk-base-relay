@@ -4,6 +4,8 @@ This module defines all custom exceptions used throughout the SP-Base-Relay
 application, providing clear error handling and debugging information.
 """
 
+from enum import Enum
+
 
 class SPBaseRelayError(Exception):
     """Base exception class for all SP-Base-Relay related errors.
@@ -338,3 +340,60 @@ class NtripError(DestinationError):
         SPBaseRelayError.__init__(self, full_message, details)
         self.destination_name = destination_name
         self.destination_type = "ntrip"
+
+
+class NtripFailure(str, Enum):
+    """Why an NTRIP connection failed, for either role (server or client)."""
+
+    CONNECT = "connect"  # DNS, TCP or TLS: never reached the caster
+    CASTER = "caster"  # no or unusable reply (not NTRIP, 400, ban page), or dropped mid-handshake
+    AUTH = "auth"  # credentials rejected
+    MOUNTPOINT = "mountpoint"  # unknown, offline or taken mountpoint (sourcetable, 404)
+    DATA_TIMEOUT = "data_timeout"  # connected, but the data stopped
+
+
+class ConnectFailure(str, Enum):
+    """The finer cause of a :attr:`NtripFailure.CONNECT` failure."""
+
+    DNS = "dns"
+    REFUSED = "refused"
+    TIMEOUT = "timeout"
+    TLS_HANDSHAKE = "tls_handshake"
+    TLS_CERTIFICATE = "tls_certificate"
+    OTHER = "other"  # any other socket error, e.g. network unreachable
+
+
+class NtripConnectionError(NtripError):
+    """An NTRIP connection failed, with a typed reason.
+
+    Raised by the shared NTRIP module (``core/ntrip``) for both the NTRIP
+    destination and the NTRIP client input.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        reason: NtripFailure,
+        connect_failure: ConnectFailure | None = None,
+        caster: str | None = None,
+        mountpoint: str | None = None,
+        destination_name: str | None = None,
+    ) -> None:
+        """Initialize an NTRIP connection error.
+
+        Args:
+            message: The error message
+            reason: Why the connection failed
+            connect_failure: The finer cause, for ``reason=NtripFailure.CONNECT``
+            caster: Optional caster hostname
+            mountpoint: Optional mountpoint name
+            destination_name: Optional name of the destination
+        """
+        super().__init__(
+            message,
+            caster=caster,
+            mountpoint=mountpoint,
+            destination_name=destination_name,
+        )
+        self.reason = reason
+        self.connect_failure = connect_failure

@@ -15,13 +15,11 @@ Design decisions applied:
 
 from __future__ import annotations
 
-import base64
 import logging
 import socket
 import time
 from typing import Any
 
-from sp_rtk_base_relay import __version__
 from sp_rtk_base_relay.config import (
     DestinationConfig,
     NtripDestinationConfig,
@@ -34,20 +32,24 @@ from sp_rtk_base_relay.core.destinations.destination_factory import (
     DestinationFactory,
 )
 from sp_rtk_base_relay.core.message_filter import FilterConfig
-from sp_rtk_base_relay.exceptions import ConfigurationError, NtripError
+from sp_rtk_base_relay.core.ntrip import (
+    NtripOutcome,
+    open_connection,
+    post_request,
+    read_reply,
+    source_request,
+)
+from sp_rtk_base_relay.exceptions import (
+    ConfigurationError,
+    NtripConnectionError,
+    NtripError,
+    NtripFailure,
+)
 
 logger = logging.getLogger(__name__)
 
-# User-Agent / Source-Agent string
-_USER_AGENT = f"NTRIP sp-rtk-base-relay/{__version__}"
-
 # Timeout for the authentication handshake response (seconds)
 _AUTH_RESPONSE_TIMEOUT = 10.0
-
-# TCP keepalive settings (DR-5: passive safety net)
-_TCP_KEEPALIVE_IDLE = 60  # seconds before first probe
-_TCP_KEEPALIVE_INTERVAL = 10  # seconds between probes
-_TCP_KEEPALIVE_COUNT = 5  # number of probes before giving up
 
 
 class NtripDestination(BaseDestination):
@@ -96,42 +98,35 @@ class NtripDestination(BaseDestination):
         """Establish TCP connection and perform NTRIP auth handshake.
 
         Raises:
-            NtripError: If connection or authentication fails.
+            NtripError: If connection or authentication fails (an
+                :class:`NtripConnectionError` with a typed reason).
         """
         cfg = self._config
-        sock: socket.socket | None = None
+        logger.debug(
+            f"NtripDestination '{self.name}': connecting to {cfg.caster}:{cfg.port}"
+        )
+        sock = open_connection(cfg.caster, cfg.port, float(cfg.connection_timeout))
 
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(float(cfg.connection_timeout))
-
-            # Enable TCP keepalive (DR-5: passive safety net)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-            if hasattr(socket, "TCP_KEEPIDLE"):
-                sock.setsockopt(
-                    socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, _TCP_KEEPALIVE_IDLE
-                )
-            if hasattr(socket, "TCP_KEEPINTVL"):
-                sock.setsockopt(
-                    socket.IPPROTO_TCP,
-                    socket.TCP_KEEPINTVL,
-                    _TCP_KEEPALIVE_INTERVAL,
-                )
-            if hasattr(socket, "TCP_KEEPCNT"):
-                sock.setsockopt(
-                    socket.IPPROTO_TCP, socket.TCP_KEEPCNT, _TCP_KEEPALIVE_COUNT
-                )
-
-            logger.debug(
-                f"NtripDestination '{self.name}': connecting to {cfg.caster}:{cfg.port}"
-            )
-            sock.connect((cfg.caster, cfg.port))
-
-            # Perform protocol-specific handshake
             if cfg.version == "1.0":
-                self._auth_v1(sock)
+                request = source_request(cfg.mountpoint, cfg.password)
             else:
-                self._auth_v2(sock)
+                request = post_request(
+                    cfg.caster, cfg.mountpoint, cfg.username, cfg.password
+                )
+            logger.debug(
+                f"NtripDestination '{self.name}': sending v{cfg.version} request"
+            )
+            sock.sendall(request)
+
+            reply = read_reply(sock, _AUTH_RESPONSE_TIMEOUT)
+            if reply.outcome is not NtripOutcome.ACCEPTED:
+                raise NtripConnectionError(
+                    f"NtripDestination '{self.name}': v{cfg.version} auth failed: "
+                    f"{reply.status_line!r}",
+                    reason=reply.failure_reason or NtripFailure.CASTER,
+                    destination_name=self.name,
+                )
 
             # Set a generous send timeout so shutdown isn't blocked forever
             sock.settimeout(30.0)
@@ -143,15 +138,13 @@ class NtripDestination(BaseDestination):
             )
 
         except NtripError:
-            # Re-raise NTRIP-specific errors as-is
-            if sock:
-                sock.close()
+            sock.close()
             raise
         except OSError as e:
-            if sock:
-                sock.close()
-            raise NtripError(
+            sock.close()
+            raise NtripConnectionError(
                 f"NtripDestination '{self.name}': connection failed: {e}",
+                reason=NtripFailure.CASTER,
                 destination_name=self.name,
             ) from e
 
@@ -242,138 +235,6 @@ class NtripDestination(BaseDestination):
         """Reset retry delay to initial value (public, for testing)."""
         self._retry_delay = float(self._config.retry_initial_delay)
         self._next_connect_time = 0.0
-
-    # ------------------------------------------------------------------
-    # NTRIP v1.0 authentication
-    # ------------------------------------------------------------------
-
-    def _auth_v1(self, sock: socket.socket) -> None:
-        """Perform NTRIP v1.0 SOURCE authentication.
-
-        Protocol:
-            SOURCE <password>\\r\\n
-            Source-Agent: NTRIP sp-rtk-base-relay/x.y.z\\r\\n
-            \\r\\n
-
-        Expected response:
-            ICY 200 OK\\r\\n
-
-        Args:
-            sock: Connected TCP socket.
-
-        Raises:
-            NtripError: If authentication fails.
-        """
-        cfg = self._config
-        request = (
-            f"SOURCE {cfg.password} /{cfg.mountpoint}\r\n"
-            f"Source-Agent: {_USER_AGENT}\r\n"
-            f"\r\n"
-        )
-
-        logger.debug(f"NtripDestination '{self.name}': sending v1.0 SOURCE request")
-        sock.sendall(request.encode("ascii"))
-
-        response = self._read_response(sock)
-        if "ICY 200 OK" not in response:
-            raise NtripError(
-                f"NtripDestination '{self.name}': v1.0 auth failed: {response!r}",
-                destination_name=self.name,
-            )
-
-        logger.debug(f"NtripDestination '{self.name}': v1.0 auth successful")
-
-    # ------------------------------------------------------------------
-    # NTRIP v2.0 authentication
-    # ------------------------------------------------------------------
-
-    def _auth_v2(self, sock: socket.socket) -> None:
-        """Perform NTRIP v2.0 HTTP POST authentication.
-
-        Protocol:
-            POST /<mountpoint> HTTP/1.1\\r\\n
-            Host: <caster>\\r\\n
-            Ntrip-Version: Ntrip/2.0\\r\\n
-            Authorization: Basic <base64(username:password)>\\r\\n
-            User-Agent: NTRIP sp-rtk-base-relay/x.y.z\\r\\n
-            Transfer-Encoding: chunked\\r\\n
-            \\r\\n
-
-        Expected response:
-            HTTP/1.1 200 OK
-
-        Args:
-            sock: Connected TCP socket.
-
-        Raises:
-            NtripError: If authentication fails.
-        """
-        cfg = self._config
-        credentials = base64.b64encode(
-            f"{cfg.username}:{cfg.password}".encode()
-        ).decode("ascii")
-
-        request = (
-            f"POST /{cfg.mountpoint} HTTP/1.1\r\n"
-            f"Host: {cfg.caster}\r\n"
-            f"Ntrip-Version: Ntrip/2.0\r\n"
-            f"Authorization: Basic {credentials}\r\n"
-            f"User-Agent: {_USER_AGENT}\r\n"
-            f"Transfer-Encoding: chunked\r\n"
-            f"\r\n"
-        )
-
-        logger.debug(f"NtripDestination '{self.name}': sending v2.0 POST request")
-        sock.sendall(request.encode("ascii"))
-
-        response = self._read_response(sock)
-        if "200" not in response:
-            raise NtripError(
-                f"NtripDestination '{self.name}': v2.0 auth failed: {response!r}",
-                destination_name=self.name,
-            )
-
-        logger.debug(f"NtripDestination '{self.name}': v2.0 auth successful")
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _read_response(
-        sock: socket.socket, timeout: float = _AUTH_RESPONSE_TIMEOUT
-    ) -> str:
-        """Read the authentication response from the caster.
-
-        Reads until \\r\\n\\r\\n or timeout, whichever comes first.
-
-        Args:
-            sock: Connected TCP socket.
-            timeout: Maximum time to wait for response.
-
-        Returns:
-            Response string from the caster.
-
-        Raises:
-            NtripError: If no response received within timeout.
-        """
-        original_timeout = sock.gettimeout()
-        sock.settimeout(timeout)
-
-        try:
-            buf = b""
-            while True:
-                chunk = sock.recv(1024)
-                if not chunk:
-                    break
-                buf += chunk
-                if b"\r\n" in buf:
-                    break
-            return buf.decode("ascii", errors="replace")
-        except TimeoutError as e:
-            raise NtripError(f"NTRIP auth response timeout after {timeout}s") from e
-        finally:
-            sock.settimeout(original_timeout)
 
 
 # ======================================================================

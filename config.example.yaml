@@ -74,7 +74,7 @@ destinations:
       port: 2101
       mountpoint: "YOUR_MOUNT"
       password: "your_password"
-      # username: ""          # optional for some casters
+      username: "your_username"  # required for v2.0 (RTK2go: your email address); unused in v1.0
       version: "2.0"          # "1.0" or "2.0"
       connection_timeout: 15
       retry_initial_delay: 10

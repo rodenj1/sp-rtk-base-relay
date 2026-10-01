@@ -378,6 +378,7 @@ class TestFactoryBuilder:
                 port=2101,
                 mountpoint="MOUNT",
                 password="pass",
+                username="user",
             ),
         )
         with pytest.raises(

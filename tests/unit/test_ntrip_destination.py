@@ -19,7 +19,12 @@ from sp_rtk_base_relay.core.destinations.ntrip_destination import (
     build_ntrip_destination,
 )
 from sp_rtk_base_relay.core.message_filter import FilterConfig
-from sp_rtk_base_relay.exceptions import ConfigurationError, NtripError
+from sp_rtk_base_relay.exceptions import (
+    ConfigurationError,
+    NtripConnectionError,
+    NtripError,
+    NtripFailure,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -174,7 +179,7 @@ class TestNtripConnectionV2:
     ) -> None:
         mock_sock = MagicMock()
         mock_socket_cls.return_value = mock_sock
-        mock_sock.recv.return_value = b"HTTP/1.1 200 OK\r\n"
+        mock_sock.recv.return_value = b"HTTP/1.1 200 OK\r\n\r\n"
 
         dest_v2._connect()
 
@@ -217,7 +222,7 @@ class TestNtripConnectionV2:
     ) -> None:
         mock_sock = MagicMock()
         mock_socket_cls.return_value = mock_sock
-        mock_sock.recv.return_value = b"HTTP/1.1 200 OK\r\n"
+        mock_sock.recv.return_value = b"HTTP/1.1 200 OK\r\n\r\n"
 
         dest_v2._connect()
 
@@ -229,6 +234,71 @@ class TestNtripConnectionV2:
         ]
         assert len(keepalive_calls) == 1
         assert keepalive_calls[0][0][2] == 1
+
+
+class TestNtripHandshakeReplies:
+    """How the destination judges a caster's reply to its SOURCE / POST (R1, R4)."""
+
+    @pytest.mark.parametrize(
+        "reply", [b"ICY 200 OK\r\n", b"OK\r\n", b"HTTP/1.1 200 OK\r\n\r\n"]
+    )
+    @patch("sp_rtk_base_relay.core.destinations.ntrip_destination.socket.socket")
+    def test_v1_accepts_every_success_form(
+        self, mock_socket_cls: Mock, dest_v1: NtripDestination, reply: bytes
+    ) -> None:  # R1
+        mock_sock = MagicMock()
+        mock_socket_cls.return_value = mock_sock
+        mock_sock.recv.return_value = reply
+
+        dest_v1._connect()
+
+        assert dest_v1._socket is mock_sock
+
+    @pytest.mark.parametrize(
+        ("reply", "reason"),
+        [
+            (
+                b"HTTP/1.1 400 Bad request (see section 200)\r\n\r\n",
+                NtripFailure.CASTER,
+            ),
+            (b"SOURCETABLE 200 OK\r\n", NtripFailure.MOUNTPOINT),
+            (
+                b"HTTP/1.1 200 OK\r\nContent-Type: gnss/sourcetable\r\n\r\n",
+                NtripFailure.MOUNTPOINT,
+            ),
+            (b"HTTP/1.1 404 Not Found\r\n\r\n", NtripFailure.MOUNTPOINT),
+            (b"HTTP/1.1 401 Unauthorized\r\n\r\n", NtripFailure.AUTH),
+        ],
+    )
+    @patch("sp_rtk_base_relay.core.destinations.ntrip_destination.socket.socket")
+    def test_v2_rejects_anything_but_a_200_stream(
+        self,
+        mock_socket_cls: Mock,
+        dest_v2: NtripDestination,
+        reply: bytes,
+        reason: NtripFailure,
+    ) -> None:  # R4
+        mock_sock = MagicMock()
+        mock_socket_cls.return_value = mock_sock
+        mock_sock.recv.return_value = reply
+
+        with pytest.raises(NtripConnectionError, match="v2.0 auth failed") as raised:
+            dest_v2._connect()
+        assert raised.value.reason is reason
+        assert dest_v2._socket is None
+        mock_sock.close.assert_called()
+
+    @patch("sp_rtk_base_relay.core.destinations.ntrip_destination.socket.socket")
+    def test_v1_bad_password_is_an_auth_failure(
+        self, mock_socket_cls: Mock, dest_v1: NtripDestination
+    ) -> None:
+        mock_sock = MagicMock()
+        mock_socket_cls.return_value = mock_sock
+        mock_sock.recv.return_value = b"ERROR - Bad Password\r\n"
+
+        with pytest.raises(NtripConnectionError) as raised:
+            dest_v1._connect()
+        assert raised.value.reason is NtripFailure.AUTH
 
 
 # ---------------------------------------------------------------------------
@@ -406,39 +476,6 @@ class TestNtripBackoff:
 
 
 # ---------------------------------------------------------------------------
-# Read response helper
-# ---------------------------------------------------------------------------
-
-
-class TestReadResponse:
-    """Tests for _read_response static method."""
-
-    def test_reads_single_line(self) -> None:
-        mock_sock = MagicMock()
-        mock_sock.recv.return_value = b"ICY 200 OK\r\n"
-        result = NtripDestination._read_response(mock_sock)
-        assert "ICY 200 OK" in result
-
-    def test_reads_multipart(self) -> None:
-        mock_sock = MagicMock()
-        mock_sock.recv.side_effect = [b"HTTP/1.1 ", b"200 OK\r\n"]
-        result = NtripDestination._read_response(mock_sock)
-        assert "200 OK" in result
-
-    def test_timeout_raises_ntrip_error(self) -> None:
-        mock_sock = MagicMock()
-        mock_sock.recv.side_effect = TimeoutError("timed out")
-        with pytest.raises(NtripError, match="timeout"):
-            NtripDestination._read_response(mock_sock, timeout=1.0)
-
-    def test_empty_response(self) -> None:
-        mock_sock = MagicMock()
-        mock_sock.recv.return_value = b""
-        result = NtripDestination._read_response(mock_sock)
-        assert result == ""
-
-
-# ---------------------------------------------------------------------------
 # Factory builder
 # ---------------------------------------------------------------------------
 
@@ -516,7 +553,7 @@ class TestProtocolFormat:
         """Verify v2 HTTP POST format matches NTRIP v2.0 spec."""
         mock_sock = MagicMock()
         mock_socket_cls.return_value = mock_sock
-        mock_sock.recv.return_value = b"HTTP/1.1 200 OK\r\n"
+        mock_sock.recv.return_value = b"HTTP/1.1 200 OK\r\n\r\n"
 
         dest_v2._connect()
 

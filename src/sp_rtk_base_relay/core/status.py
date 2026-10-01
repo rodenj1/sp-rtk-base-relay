@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from sp_rtk_base_relay.core.broadcast_hub import BroadcastHub
+    from sp_rtk_base_relay.core.broadcast_hub import BroadcastHub, BroadcastStats
     from sp_rtk_base_relay.core.destinations.base_destination import BaseDestination
     from sp_rtk_base_relay.core.input_sources.base_input import InputSource
 
@@ -96,8 +96,9 @@ class InputStatus:
         messages_received: Total read operations that returned data.
         seconds_since_last_data: Seconds since last successful data read,
             or -1.0 if no data has been received yet.
-        reconnect_attempts: Total connection attempts.
-        reconnect_successes: Total successful connections.
+        reconnect_attempts: Reconnect attempts after the input dropped (the
+            first connect at start isn't one).
+        reconnect_successes: Reconnect attempts that succeeded.
         connected_since: Epoch timestamp of current connection, or None.
         last_error: The input's last connection error as text, or None once
             it has (re)connected.
@@ -203,13 +204,15 @@ def build_destination_status(dest: BaseDestination) -> DestinationStatus:
 
 
 def build_input_status(
-    input_source: InputSource, last_error: str | None = None
+    input_source: InputSource, hub_stats: BroadcastStats | None = None
 ) -> InputStatus:
     """Build an InputStatus snapshot from a live InputSource.
 
     Args:
         input_source: A live InputSource instance.
-        last_error: The input's last connection error, as the hub recorded it.
+        hub_stats: The stats of the hub reading it, which counts the input's
+            reconnects and keeps its last connection error. Without them,
+            both read as none.
 
     Returns:
         Frozen InputStatus snapshot.
@@ -228,10 +231,10 @@ def build_input_status(
         bytes_received=stats.bytes_read,
         messages_received=stats.messages_read,
         seconds_since_last_data=seconds_since_last,
-        reconnect_attempts=stats.connection_attempts,
-        reconnect_successes=stats.successful_connections,
+        reconnect_attempts=hub_stats.input_reconnect_attempts if hub_stats else 0,
+        reconnect_successes=hub_stats.input_reconnect_successes if hub_stats else 0,
         connected_since=stats.connected_since,
-        last_error=last_error,
+        last_error=hub_stats.input_last_error if hub_stats else None,
     )
 
 
@@ -259,7 +262,7 @@ def build_relay_status(
         uptime = now - hub.stats.started_at
 
     # Build input status
-    input_status = build_input_status(input_source, hub.stats.input_last_error)
+    input_status = build_input_status(input_source, hub.stats)
 
     # Build destination statuses
     dest_statuses: list[DestinationStatus] = []

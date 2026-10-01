@@ -763,15 +763,6 @@ class TestInputSourceMetrics:
         assert mc.input_bytes_received._value.get() == 250.0
         assert mc.input_messages_received._value.get() == 15.0
 
-    def test_input_reconnect_counters_delta(self) -> None:
-        mc = MetricsCollector()
-        src1 = _mock_input_source(connection_attempts=1, successful_connections=1)
-        mc.update_all([], input_source=src1)
-        src2 = _mock_input_source(connection_attempts=5, successful_connections=3)
-        mc.update_all([], input_source=src2)
-        assert mc.input_reconnect_attempts._value.get() == 4.0
-        assert mc.input_reconnect_successes._value.get() == 2.0
-
 
 class TestHubV21Metrics:
     """Hub counters (bytes/chunks/frames/warnings) introduced in v2.1."""

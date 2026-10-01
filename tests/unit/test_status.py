@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from sp_rtk_base_relay.core.broadcast_hub import BroadcastStats
 from sp_rtk_base_relay.core.destinations.base_destination import DestinationStats
 from sp_rtk_base_relay.core.input_sources.base_input import InputSourceStats
 from sp_rtk_base_relay.core.status import (
@@ -618,15 +619,29 @@ class TestBuildInputStatus:
         with pytest.raises(AttributeError):
             status.connected = False  # type: ignore[misc]
 
-    def test_build_preserves_reconnect_stats(self) -> None:
-        """Test that reconnect stats are preserved."""
+    def test_build_takes_reconnects_from_the_hub(self) -> None:
+        """Reconnects are the hub's count, not the input's connection attempts."""
         src = _make_mock_input_source(
             connection_attempts=10,
             successful_connections=8,
         )
+        hub_stats = BroadcastStats(
+            input_reconnect_attempts=9, input_reconnect_successes=7
+        )
+
+        status = build_input_status(src, hub_stats)
+
+        assert status.reconnect_attempts == 9
+        assert status.reconnect_successes == 7
+
+    def test_build_without_a_hub_shows_no_reconnects(self) -> None:
+        """Without the hub's stats there are no reconnects or last error to show."""
+        src = _make_mock_input_source(connection_attempts=10, successful_connections=8)
+
         status = build_input_status(src)
-        assert status.reconnect_attempts == 10
-        assert status.reconnect_successes == 8
+
+        assert (status.reconnect_attempts, status.reconnect_successes) == (0, 0)
+        assert status.last_error is None
 
     def test_build_recent_data(self) -> None:
         """Test seconds_since_last_data with recent data."""

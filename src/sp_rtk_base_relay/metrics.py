@@ -32,8 +32,9 @@ Input source (labels: ``{source_type}`` on ``input_info`` only):
 * ``input_seconds_since_last_data`` — watchdog gauge (-1 if never)
 * ``input_bytes_received_total`` — cumulative bytes read
 * ``input_messages_received_total`` — cumulative read ops
-* ``input_reconnect_attempts_total`` — cumulative reconnect attempts
-* ``input_reconnect_successes_total`` — cumulative reconnect successes
+* ``input_reconnect_attempts_total`` — reconnect attempts after the input
+  dropped (the first connect at start isn't one)
+* ``input_reconnect_successes_total`` — reconnect attempts that succeeded
 * ``input_connected_since_timestamp_seconds`` — epoch of current connect
 
 Broadcast hub:
@@ -236,11 +237,11 @@ class MetricsCollector:
         )
         self.input_reconnect_attempts = Counter(
             f"{namespace}_input_reconnect_attempts_total",
-            "Total input source reconnect attempts",
+            "Input source reconnect attempts after it dropped (not the first connect)",
         )
         self.input_reconnect_successes = Counter(
             f"{namespace}_input_reconnect_successes_total",
-            "Total successful input source reconnects",
+            "Input source reconnect attempts that succeeded",
         )
         self.input_connection_failures = Counter(
             f"{namespace}_input_connection_failures_total",
@@ -329,6 +330,8 @@ class MetricsCollector:
         # Hub failure counts and this counter both start at 0, so failures that
         # happen before the first update (e.g. a failed start) still count.
         self._prev_input_failures: dict[str, int] = {}
+        self._prev_reconnect_attempts = 0
+        self._prev_reconnect_successes = 0
         # Previous event bus snapshot.
         self._prev_event_bus: _EventBusSnapshot | None = None
         # Set of destination names that have had dest_info published.
@@ -566,22 +569,10 @@ class MetricsCollector:
             _inc_delta_global(
                 self.input_messages_received, stats.messages_read, prev.messages
             )
-            _inc_delta_global(
-                self.input_reconnect_attempts,
-                stats.connection_attempts,
-                prev.attempts,
-            )
-            _inc_delta_global(
-                self.input_reconnect_successes,
-                stats.successful_connections,
-                prev.successes,
-            )
 
         self._prev_input = _InputSnapshot(
             bytes=stats.bytes_read,
             messages=stats.messages_read,
-            attempts=stats.connection_attempts,
-            successes=stats.successful_connections,
         )
 
     # ================================================================
@@ -632,6 +623,21 @@ class MetricsCollector:
                 hub_stats.no_data_warnings,
                 prev.no_data_warnings,
             )
+
+        # Input reconnects are counted by the hub (the first connect at start
+        # isn't one). Both start at 0, so count from 0, not from the first update.
+        _inc_delta_global(
+            self.input_reconnect_attempts,
+            hub_stats.input_reconnect_attempts,
+            self._prev_reconnect_attempts,
+        )
+        _inc_delta_global(
+            self.input_reconnect_successes,
+            hub_stats.input_reconnect_successes,
+            self._prev_reconnect_successes,
+        )
+        self._prev_reconnect_attempts = hub_stats.input_reconnect_attempts
+        self._prev_reconnect_successes = hub_stats.input_reconnect_successes
 
         failures = dict(hub_stats.input_connection_failures)
         for reason, count in failures.items():
@@ -733,19 +739,11 @@ class _DestSnapshot:
 class _InputSnapshot:
     """Snapshot of input-source cumulative counters."""
 
-    __slots__ = ("attempts", "bytes", "messages", "successes")
+    __slots__ = ("bytes", "messages")
 
-    def __init__(
-        self,
-        bytes: int = 0,
-        messages: int = 0,
-        attempts: int = 0,
-        successes: int = 0,
-    ) -> None:
+    def __init__(self, bytes: int = 0, messages: int = 0) -> None:
         self.bytes = bytes
         self.messages = messages
-        self.attempts = attempts
-        self.successes = successes
 
 
 class _HubSnapshot:

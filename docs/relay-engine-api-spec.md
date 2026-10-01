@@ -608,6 +608,8 @@ class InputStatus:
     reconnect_attempts: int                    # Total connection attempts
     reconnect_successes: int                   # Total successful connections
     connected_since: float | None              # Epoch timestamp or None
+    last_error: str | None = None              # Last failed connection's error as text; None once (re)connected
+                                               # (a dropped connection that reconnects at once never sets it)
 ```
 
 ### 5.3 DestinationStatus

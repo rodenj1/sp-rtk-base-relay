@@ -84,6 +84,8 @@ from prometheus_client import (
     start_http_server,
 )
 
+from sp_rtk_base_relay.exceptions import NtripFailure
+
 if TYPE_CHECKING:
     from sp_rtk_base_relay.core.broadcast_hub import BroadcastHub
     from sp_rtk_base_relay.core.destinations.base_destination import BaseDestination
@@ -240,6 +242,15 @@ class MetricsCollector:
             f"{namespace}_input_reconnect_successes_total",
             "Total successful input source reconnects",
         )
+        self.input_connection_failures = Counter(
+            f"{namespace}_input_connection_failures_total",
+            "Failed input source connections, by reason ("
+            + ", ".join(reason.value for reason in NtripFailure)
+            + "; inputs without typed errors count as connect)",
+            ["reason"],
+        )
+        for reason in NtripFailure:  # export every reason from the start, at 0
+            self.input_connection_failures.labels(reason=reason.value)
         self.input_connected_since_timestamp = Gauge(
             f"{namespace}_input_connected_since_timestamp_seconds",
             "Unix timestamp of current input connection (0 if disconnected)",
@@ -315,6 +326,9 @@ class MetricsCollector:
         self._prev_input: _InputSnapshot | None = None
         # Previous hub snapshot for hub counter deltas.
         self._prev_hub: _HubSnapshot | None = None
+        # Hub failure counts and this counter both start at 0, so failures that
+        # happen before the first update (e.g. a failed start) still count.
+        self._prev_input_failures: dict[str, int] = {}
         # Previous event bus snapshot.
         self._prev_event_bus: _EventBusSnapshot | None = None
         # Set of destination names that have had dest_info published.
@@ -618,6 +632,15 @@ class MetricsCollector:
                 hub_stats.no_data_warnings,
                 prev.no_data_warnings,
             )
+
+        failures = dict(hub_stats.input_connection_failures)
+        for reason, count in failures.items():
+            _inc_delta_global(
+                self.input_connection_failures.labels(reason=reason),
+                count,
+                self._prev_input_failures.get(reason, 0),
+            )
+        self._prev_input_failures = failures
 
         self._prev_hub = _HubSnapshot(
             bytes=hub_stats.bytes_received,

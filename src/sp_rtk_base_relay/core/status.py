@@ -99,6 +99,8 @@ class InputStatus:
         reconnect_attempts: Total connection attempts.
         reconnect_successes: Total successful connections.
         connected_since: Epoch timestamp of current connection, or None.
+        last_error: The input's last connection error as text, or None once
+            it has (re)connected.
     """
 
     connected: bool
@@ -109,6 +111,7 @@ class InputStatus:
     reconnect_attempts: int
     reconnect_successes: int
     connected_since: float | None
+    last_error: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -199,11 +202,14 @@ def build_destination_status(dest: BaseDestination) -> DestinationStatus:
     )
 
 
-def build_input_status(input_source: InputSource) -> InputStatus:
+def build_input_status(
+    input_source: InputSource, last_error: str | None = None
+) -> InputStatus:
     """Build an InputStatus snapshot from a live InputSource.
 
     Args:
         input_source: A live InputSource instance.
+        last_error: The input's last connection error, as the hub recorded it.
 
     Returns:
         Frozen InputStatus snapshot.
@@ -225,6 +231,7 @@ def build_input_status(input_source: InputSource) -> InputStatus:
         reconnect_attempts=stats.connection_attempts,
         reconnect_successes=stats.successful_connections,
         connected_since=stats.connected_since,
+        last_error=last_error,
     )
 
 
@@ -252,7 +259,7 @@ def build_relay_status(
         uptime = now - hub.stats.started_at
 
     # Build input status
-    input_status = build_input_status(input_source)
+    input_status = build_input_status(input_source, hub.stats.input_last_error)
 
     # Build destination statuses
     dest_statuses: list[DestinationStatus] = []

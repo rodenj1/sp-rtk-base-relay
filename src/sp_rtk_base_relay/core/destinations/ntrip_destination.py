@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import socket
 import time
+from collections.abc import Callable
 from typing import Any
 
 from sp_rtk_base_relay.config import (
@@ -51,6 +52,13 @@ logger = logging.getLogger(__name__)
 # Timeout for the authentication handshake response (seconds)
 _AUTH_RESPONSE_TIMEOUT = 10.0
 
+# Wait before the first reconnect after a send error (R2 in the NTRIP conformance
+# audit, rodenj1/rtk_development#22). Some casters hold the
+# old session for a moment (2RTKNTRIP force-closes a same-IP reconnect within
+# 1.5 s), so an immediate retry would fail; the full backoff would leave a long
+# gap in corrections for one dropped connection.
+_RECONNECT_DELAY_AFTER_SEND_ERROR = 2.0
+
 
 class NtripDestination(BaseDestination):
     """NTRIP server destination — pushes RTCM to casters.
@@ -66,6 +74,7 @@ class NtripDestination(BaseDestination):
         filter_config: FilterConfig,
         ntrip_config: NtripDestinationConfig,
         queue_size: int = DEFAULT_QUEUE_SIZE,
+        clock: Callable[[], float] = time.time,
     ) -> None:
         """Initialise an NTRIP destination.
 
@@ -74,10 +83,12 @@ class NtripDestination(BaseDestination):
             filter_config: Message filter configuration.
             ntrip_config: NTRIP-specific config (caster, mountpoint, creds …).
             queue_size: Maximum queue depth (default 100, per DR-2).
+            clock: Time source for reconnect timing, in seconds (for tests).
         """
         super().__init__(name, "ntrip", filter_config, queue_size)
 
         self._config = ntrip_config
+        self._clock = clock
         self._socket: socket.socket | None = None
 
         # Backoff state
@@ -93,6 +104,12 @@ class NtripDestination(BaseDestination):
     # ------------------------------------------------------------------
     # BaseDestination abstract method implementations
     # ------------------------------------------------------------------
+
+    def start(self) -> None:
+        """Start the destination; a (re)start connects at once, without backoff."""
+        if not self.is_running:
+            self.reset_retry_delay()
+        super().start()
 
     def _connect(self) -> None:
         """Establish TCP connection and perform NTRIP auth handshake.
@@ -156,7 +173,6 @@ class NtripDestination(BaseDestination):
             except OSError:
                 pass
             self._socket = None
-        self._next_connect_time = 0.0
 
     def _send_data(self, data: bytes) -> None:
         """Send RTCM data to the caster.
@@ -171,11 +187,17 @@ class NtripDestination(BaseDestination):
             raise OSError(f"NtripDestination '{self.name}': socket is None")
 
         if self._config.version == "1.0":
-            self._socket.sendall(data)
+            payload = data
         else:
             # HTTP chunked encoding: <hex_length>\r\n<data>\r\n
-            chunk = f"{len(data):x}\r\n".encode() + data + b"\r\n"
-            self._socket.sendall(chunk)
+            payload = f"{len(data):x}\r\n".encode() + data + b"\r\n"
+        try:
+            self._socket.sendall(payload)
+        except OSError:
+            # The connection is gone; the run loop disconnects. Reconnect soon,
+            # but not on the very next frame.
+            self._next_connect_time = self._clock() + _RECONNECT_DELAY_AFTER_SEND_ERROR
+            raise
 
     def _is_connected(self) -> bool:
         """Check if the TCP socket is alive."""
@@ -206,14 +228,14 @@ class NtripDestination(BaseDestination):
         retry delay, preventing reconnection storms when the caster
         is down.
         """
-        now = time.time()
+        now = self._clock()
         if now < self._next_connect_time:
             return
 
         super()._attempt_connect()
 
         if not self._is_connected():
-            self._next_connect_time = time.time() + self._retry_delay
+            self._next_connect_time = self._clock() + self._retry_delay
             logger.info(
                 f"NtripDestination '{self.name}': next connect attempt "
                 f"in {self._retry_delay:.0f}s"
@@ -232,7 +254,7 @@ class NtripDestination(BaseDestination):
         )
 
     def reset_retry_delay(self) -> None:
-        """Reset retry delay to initial value (public, for testing)."""
+        """Reset retry delay to initial value and allow an immediate connect."""
         self._retry_delay = float(self._config.retry_initial_delay)
         self._next_connect_time = 0.0
 

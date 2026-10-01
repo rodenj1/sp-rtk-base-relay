@@ -108,7 +108,7 @@ Observability for the internal pub/sub `EventBus` used by the RelayEngine.
 
 The `MetricsCollector` uses a **pull model**: the main loop calls `update_all()` every ~1 second, which reads `DestinationStats` from each destination and `BroadcastHub` state.
 
-Counter metrics use **delta-based increments** — the collector tracks previous values and only increments by the difference, so Prometheus sees monotonically increasing counters.
+Counter metrics use **delta-based increments** — the collector tracks previous values and only increments by the difference, so Prometheus sees monotonically increasing counters. When a total falls below its previous value, its source started again from 0, for example a new hub, input and destinations after a `RelayEngine` restart that kept the same collector. The collector then counts the whole new value, as Prometheus does for a counter reset, so counting carries on.
 
 ---
 

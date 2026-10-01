@@ -775,27 +775,37 @@ class _EventBusSnapshot:
         self.dropped = dropped
 
 
+def _growth(current: int, previous: int) -> int:
+    """How much a cumulative total grew since it was last seen.
+
+    A total below the remembered one means its source started again from 0
+    (e.g. a new hub after an engine restart): all of the new value is growth,
+    as Prometheus treats a counter reset.
+    """
+    return current - previous if current >= previous else current
+
+
 def _inc_delta(counter: Counter, current: int, previous: int) -> None:
-    """Increment a labelled Prometheus Counter child by a positive delta.
+    """Increment a labelled Prometheus Counter child by the growth of a total.
 
     Args:
         counter: A labelled Counter child (result of ``.labels(...)``).
         current: Current cumulative value.
         previous: Previous cumulative value.
     """
-    delta = current - previous
+    delta = _growth(current, previous)
     if delta > 0:
         counter.inc(delta)
 
 
 def _inc_delta_global(counter: Counter, current: int, previous: int) -> None:
-    """Increment an unlabelled Prometheus Counter by a positive delta.
+    """Increment an unlabelled Prometheus Counter by the growth of a total.
 
     Args:
         counter: An unlabelled Counter instance.
         current: Current cumulative value.
         previous: Previous cumulative value.
     """
-    delta = current - previous
+    delta = _growth(current, previous)
     if delta > 0:
         counter.inc(delta)

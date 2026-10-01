@@ -640,8 +640,8 @@ class InputStatus:
     bytes_received: int                        # Total bytes read
     messages_received: int                     # Total read operations with data
     seconds_since_last_data: float             # Seconds since last data (-1.0 if never)
-    reconnect_attempts: int                    # Total connection attempts
-    reconnect_successes: int                   # Total successful connections
+    reconnect_attempts: int                    # Reconnect attempts after the input dropped (not the first connect)
+    reconnect_successes: int                   # Reconnect attempts that succeeded
     connected_since: float | None              # Epoch timestamp or None
     last_error: str | None = None              # Last failed connection's error as text; None once (re)connected
                                                # (a dropped connection that reconnects at once never sets it)

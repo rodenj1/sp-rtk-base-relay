@@ -75,12 +75,12 @@ All configuration is done by constructing Python dataclass instances. **No YAML 
 
 ### 2.1 InputConfig
 
-Defines the RTCM input source (serial port, TCP, or Bluetooth).
+Defines the RTCM input source (serial port, TCP, Bluetooth, or an NTRIP caster).
 
 ```python
 @dataclass
 class InputConfig:
-    source: str               # One of: "tcp", "serial", "usb_serial", "bluetooth"
+    source: str               # One of: "tcp", "serial", "usb_serial", "bluetooth", "ntrip"
     config: dict[str, Any]    # Source-specific key-value configuration
 ```
 
@@ -127,6 +127,41 @@ input_config = InputConfig(
     },
 )
 ```
+
+#### NTRIP Client Input (RTCM from an NTRIP caster)
+
+Field names match the NTRIP destination (`NtripDestinationConfig`).
+
+```python
+input_config = InputConfig(
+    source="ntrip",
+    config={
+        "caster": "caster.example.com",  # Required
+        "mountpoint": "MP1",             # Required
+        "port": 2101,                    # Default: 2101
+        "username": "rover",             # Default: "" (no credentials, for anonymous casters)
+        "password": "secret",            # Default: ""
+        "version": "2.0",                # "1.0" or "2.0" (default); no auto-detection
+        "tls": False,                    # v2 only; verified against the system CA store.
+                                         # TLS casters usually listen on another port (often 443): set "port" too
+        "connection_timeout": 15.0,      # Seconds for TCP/TLS connect and the caster's reply
+        "data_timeout": 30.0,            # No bytes for this long drops the connection
+        "retry_initial_delay": 10.0,     # Reconnect backoff: 10 s ...
+        "retry_max_delay": 120.0,        # ... doubling up to 120 s
+        "retry_multiplier": 2.0,
+    },
+)
+```
+
+Behaviour:
+
+- **Request:** both versions send `Host`. v2 also sends `Ntrip-Version: Ntrip/2.0`.
+- **Reply:** the input is connected once the caster accepts the request with a reply that isn't a sourcetable. It accepts `ICY 200 OK`, a bare `OK` or `HTTP/1.x 200`.
+- **Body:** bytes after the reply's headers are the start of the RTCM stream. A v2 body is de-chunked when the caster sends `Transfer-Encoding: chunked`.
+- **Persistent failures:** a sourcetable (unknown or offline mountpoint), 401/403 or 404 is retried at `retry_max_delay`, so the Relay doesn't hammer the caster. Other failures back off from `retry_initial_delay`.
+- **Data timeout:** no bytes for `data_timeout` drops the connection, and the Relay reconnects.
+- **Start:** `start()` fails if the first connect fails, as for every input.
+- **Failure reasons:** reported by reason in `RelayStatus.input.last_error` and `input_connection_failures_total{reason}`.
 
 > **⚠️ Important — Serial Port Exclusivity**: Only one process can open a serial port at a time. When `RelayEngine` is running, it owns the serial port. You must call `engine.stop()` before using PyUBX2 for device configuration. See [Section 6](#6-serial-port-handoff-pattern).
 

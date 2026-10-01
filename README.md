@@ -196,6 +196,15 @@ Import `templates/grafana_dashboard.json` for a pre-built v2 dashboard with per-
 | `serial` | Direct GNSS receiver via UART | `port`, `baudrate` |
 | `usb_serial` | USB-to-serial adapters | `port`, `baudrate` |
 | `bluetooth` | Bluetooth GPS devices | `device_address`, `channel` |
+| `ntrip` | RTCM from an NTRIP caster (v1 or v2 client) | `caster`, `mountpoint`, `username`, `password`, `version` |
+
+### NTRIP client input (`ntrip`)
+
+Takes RTCM from a caster's mountpoint, as an NTRIP v1 or v2 client.
+- **Fields:** the same as the NTRIP destination: `caster`, `port` (default 2101), `mountpoint`, `username`, `password`, `version` (`"1.0"` or `"2.0"`, default `"2.0"`), `tls` (v2 only; TLS casters usually listen on another port, often 443, so set `port` too), `connection_timeout`, `data_timeout` (default 30 s) and `retry_*` (default 10 s → 120 s, ×2). An empty `username` sends no credentials, for anonymous casters.
+- **Rejections:** a sourcetable (unknown or offline mountpoint), a credentials rejection or a 404 is retried at the maximum delay. Other failures back off normally.
+- **Data timeout:** if no data arrives for `data_timeout`, the Relay drops the connection and reconnects.
+- **Reference:** see `docs/relay-engine-api-spec.md` §2.1 for the full behaviour, and `config.example.yaml` for an example.
 
 ## Project Structure
 

@@ -7,7 +7,7 @@
 
 # Input Source Configuration (Required - Single Source)
 # Only ONE source type can be active at a time.
-# Supported sources: tcp, serial, usb_serial, bluetooth
+# Supported sources: tcp, serial, usb_serial, bluetooth, ntrip
 
 # Option 1: TCP Input (for RTKBase integration)
 input:
@@ -31,6 +31,24 @@ input:
 #    timeout: 1.0
 #    rtscts: false
 #    xonxoff: false
+
+# Option 3: NTRIP Client Input (take RTCM from an NTRIP caster's mountpoint)
+# Uncomment and replace the TCP section above to use NTRIP:
+#input:
+#  source: "ntrip"
+#  config:
+#    caster: "caster.example.com"
+#    port: 2101
+#    mountpoint: "YOUR_MOUNT"
+#    username: "your_username"   # leave empty for anonymous casters
+#    password: "your_password"
+#    version: "2.0"              # "1.0" or "2.0"
+#    tls: false                  # v2 only; TLS casters often use port 443
+#    connection_timeout: 15
+#    data_timeout: 30            # no data for this long drops the connection
+#    retry_initial_delay: 10
+#    retry_max_delay: 120        # also the wait after a 401/404/sourcetable
+#    retry_multiplier: 2.0
 
 # ============================================================================
 # Destinations (Required - at least one must be enabled)

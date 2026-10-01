@@ -412,6 +412,17 @@ def _register_bluetooth_source() -> None:
         logger.debug("Bluetooth input source not available")
 
 
+def _register_ntrip_source() -> None:
+    """Register the NTRIP client input source."""
+    from ...config import NtripInputConfig
+    from .ntrip_input import NtripInputSource
+
+    InputSourceFactory.register_source_type(
+        "ntrip", NtripInputSource, lambda cfg: NtripInputConfig(**cfg)
+    )
+
+
 # Try to register additional source types
 _register_tcp_source()
 _register_bluetooth_source()
+_register_ntrip_source()

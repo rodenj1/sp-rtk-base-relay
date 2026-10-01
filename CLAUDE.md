@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-SP-Base-Relay is a Python service **and embeddable library** that relays RTCM correction data from a single GPS input (TCP / serial / Bluetooth) to multiple output destinations simultaneously (Sure-Path, NTRIP v1.0/v2.0, TCP rebroadcast). Each destination runs in its own thread with an independent queue so a failure in one cannot affect the others.
+SP-Base-Relay is a Python service **and embeddable library** that relays RTCM correction data from a single GPS input (TCP / serial / Bluetooth / an NTRIP caster) to multiple output destinations simultaneously (Sure-Path, NTRIP v1.0/v2.0, TCP rebroadcast). Each destination runs in its own thread with an independent queue so a failure in one cannot affect the others.
 
 ## Environment
 
@@ -66,7 +66,7 @@ Both paths build on the same `BroadcastHub` + `DestinationFactory` + `InputSourc
 - `broadcast_hub.py` — the heart of v2. Reads from the input source, parses RTCM frames, fans out filtered copies to each destination's queue, owns reconnection. Each destination has an independent queue so backpressure / errors in one don't propagate.
 - `message_filter.py` — per-destination RTCM filtering: `pass_all` (zero overhead), `allowlist`, `blocklist` by message ID.
 - `destinations/` — `base_destination.py` is the ABC (owns its queue + stats + thread). `destination_factory.py` is a registry-based factory; `surepath_destination.py`, `ntrip_destination.py`, `tcp_server_destination.py` are the three built-in destination types. Importing `core.destinations` registers all builders as a side effect (see `main.py` and `engine.py` — the `_destinations_registry` import is load-bearing, `# pyright: ignore[reportUnusedImport]`).
-- `input_sources/` — `base_input.py` ABC + `tcp_input.py`, `serial_input.py`, `bluetooth_input.py`. Factory in `input_factory.py`.
+- `input_sources/` — `base_input.py` ABC + `tcp_input.py`, `serial_input.py`, `bluetooth_input.py`, `ntrip_input.py` (NTRIP v1/v2 client, built on the shared `core/ntrip/` module). Factory in `input_factory.py`.
 - `bluetooth_manager.py` — self-healing BlueZ recovery via `dbus-fast`. Reconnects without manual intervention when the adapter or device disappears.
 - `connection_states.py` — connection state machine used by destinations.
 - `rtcm_decoder.py` (top-level) — RTCM 3.x frame parser; called by `BroadcastHub` to slice the byte stream into frames.

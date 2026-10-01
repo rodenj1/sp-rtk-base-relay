@@ -126,6 +126,70 @@ class TCPInputConfig:
 
 
 @dataclass
+class NtripInputConfig:
+    """NTRIP client input configuration: take RTCM from an NTRIP caster.
+
+    Field names and defaults match :class:`NtripDestinationConfig`.
+    """
+
+    caster: str = ""
+    port: int = 2101
+    mountpoint: str = ""
+    username: str = ""  # empty: send no credentials (anonymous casters)
+    password: str = ""
+    version: str = "2.0"  # "1.0" or "2.0"; no auto-detection
+    tls: bool = False  # v2 only; verified against the system CA store
+    connection_timeout: float = 15.0
+    data_timeout: float = 30.0  # no bytes for this long drops the connection
+    retry_initial_delay: float = 10.0
+    retry_max_delay: float = 120.0
+    retry_multiplier: float = 2.0
+
+    def __post_init__(self) -> None:
+        """Validate NTRIP input configuration."""
+        if not self.caster:
+            raise ConfigurationError(
+                "input.config.caster cannot be empty", config_key="input.config.caster"
+            )
+        if not isinstance(self.port, int) or self.port < 1 or self.port > 65535:
+            raise ConfigurationError(
+                "input.config.port must be an integer between 1 and 65535",
+                config_key="input.config.port",
+            )
+        if not self.mountpoint:
+            raise ConfigurationError(
+                "input.config.mountpoint cannot be empty",
+                config_key="input.config.mountpoint",
+            )
+        if self.version not in ("1.0", "2.0"):
+            raise ConfigurationError(
+                'input.config.version must be "1.0" or "2.0"',
+                config_key="input.config.version",
+            )
+        if self.tls and self.version != "2.0":
+            raise ConfigurationError(
+                'input.config.tls requires version "2.0" (NTRIP v1 has no TLS)',
+                config_key="input.config.tls",
+            )
+        for name in ("connection_timeout", "data_timeout", "retry_initial_delay"):
+            if getattr(self, name) <= 0:
+                raise ConfigurationError(
+                    f"input.config.{name} must be positive",
+                    config_key=f"input.config.{name}",
+                )
+        if self.retry_max_delay < self.retry_initial_delay:
+            raise ConfigurationError(
+                "input.config.retry_max_delay must be >= retry_initial_delay",
+                config_key="input.config.retry_max_delay",
+            )
+        if self.retry_multiplier <= 1.0:
+            raise ConfigurationError(
+                "input.config.retry_multiplier must be > 1.0",
+                config_key="input.config.retry_multiplier",
+            )
+
+
+@dataclass
 class SerialInputConfig:
     """Serial input source configuration."""
 
@@ -187,12 +251,12 @@ class InputConfig:
     The 'config' field contains source-specific configuration parameters.
     """
 
-    source: str  # One of: tcp, serial, usb_serial
+    source: str  # One of: tcp, serial, usb_serial, bluetooth, ntrip
     config: dict[str, Any]  # Source-specific configuration
 
     def __post_init__(self) -> None:
         """Validate input configuration."""
-        valid_sources = {"tcp", "serial", "usb_serial", "bluetooth"}
+        valid_sources = {"tcp", "serial", "usb_serial", "bluetooth", "ntrip"}
 
         if self.source not in valid_sources:
             raise ConfigurationError(
@@ -205,6 +269,8 @@ class InputConfig:
             self._validate_tcp_config()
         elif self.source in ("serial", "usb_serial"):
             self._validate_serial_config()
+        elif self.source == "ntrip":
+            self._validate_ntrip_config()
 
     def _validate_tcp_config(self) -> None:
         """Validate TCP-specific configuration."""
@@ -245,6 +311,30 @@ class InputConfig:
             raise ConfigurationError(
                 f"Invalid serial input configuration: {e}", config_key="input.config"
             )
+
+    def _validate_ntrip_config(self) -> None:
+        """Validate NTRIP-client-specific configuration."""
+        try:
+            NtripInputConfig(**self.config)
+        except ConfigurationError:
+            raise
+        except Exception as e:
+            raise ConfigurationError(
+                f"Invalid NTRIP input configuration: {e}", config_key="input.config"
+            ) from e
+
+    def get_ntrip_config(self) -> NtripInputConfig:
+        """Get typed NTRIP client configuration.
+
+        Raises:
+            ConfigurationError: If current source is not ntrip
+        """
+        if self.source != "ntrip":
+            raise ConfigurationError(
+                f"Cannot get NTRIP config when input source is '{self.source}'",
+                config_key="input.source",
+            )
+        return NtripInputConfig(**self.config)
 
     def get_tcp_config(self) -> TCPInputConfig:
         """Get typed TCP configuration.

@@ -379,6 +379,21 @@ class TestServiceComponents:
         assert args[0][0] == "tcp"
 
     @patch("sp_rtk_base_relay.main.InputSourceFactory")
+    def test_create_ntrip_input_source(
+        self, mock_factory: Mock, mock_config: Mock, mock_input_source: Mock
+    ) -> None:
+        mock_factory.create_input_source.return_value = mock_input_source
+        mock_config.input.source = "ntrip"
+        mock_config.input.config = {"caster": "caster.example", "mountpoint": "MP1"}
+
+        service = SPBaseRelayService(mock_config)
+        service._create_input_source()
+
+        mock_factory.create_input_source.assert_called_once_with(
+            "ntrip", {"caster": "caster.example", "mountpoint": "MP1"}
+        )
+
+    @patch("sp_rtk_base_relay.main.InputSourceFactory")
     def test_create_serial_input_source(
         self, mock_factory: Mock, mock_config: Mock, mock_input_source: Mock
     ) -> None:

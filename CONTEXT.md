@@ -1,6 +1,6 @@
 # SP-Base-Relay
 
-Relays RTCM correction data from a single GPS input (TCP / serial / Bluetooth) to multiple output destinations.
+Relays RTCM correction data from a single GPS input (TCP / serial / Bluetooth / an NTRIP caster) to multiple output destinations.
 
 ## Language
 

@@ -203,7 +203,7 @@ class SPBaseRelayService:
                 "parity": serial_cfg.parity,
                 "stopbits": serial_cfg.stopbits,
             }
-        elif self.config.input.source == "bluetooth":
+        elif self.config.input.source in ("bluetooth", "ntrip"):
             input_config = self.config.input.config
         else:
             raise ConfigurationError(

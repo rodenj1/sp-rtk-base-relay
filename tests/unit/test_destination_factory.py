@@ -121,6 +121,7 @@ def _ntrip_cfg(
             port=2101,
             mountpoint="MOUNT",
             password="secret",
+            username="user",
         ),
     )
 

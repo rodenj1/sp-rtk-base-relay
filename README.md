@@ -101,6 +101,7 @@ destinations:
       port: 2101
       mountpoint: "MY_MOUNT"
       password: "my_password"
+      username: "my_username"   # required for v2.0
       version: "2.0"
 
   - name: local_tcp
@@ -139,8 +140,8 @@ Custom proprietary protocol with `INIT:user:pass*` authentication and `$HB$` hea
 
 ### NTRIP (`ntrip`)
 Pushes RTCM corrections to NTRIP casters. Supports both protocol versions:
-- **v2.0** (default): HTTP POST + Basic auth + chunked transfer encoding
-- **v1.0**: SOURCE auth + raw binary streaming
+- **v2.0** (default): HTTP POST + Basic auth + chunked transfer encoding. Requires a `username`.
+- **v1.0**: SOURCE auth + raw binary streaming. Uses only the mountpoint `password`.
 
 Tested against RTK2go, Onocoy, and rtkdirect.
 

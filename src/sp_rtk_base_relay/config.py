@@ -642,6 +642,12 @@ class NtripDestinationConfig:
                 "destinations[ntrip].config.retry_multiplier must be > 1.0",
                 config_key="config.retry_multiplier",
             )
+        if self.version == "2.0" and not self.username.strip():
+            raise ConfigurationError(
+                "destinations[ntrip].config.username is required for version 2.0 "
+                "(v2 casters authenticate the server with Basic auth)",
+                config_key="config.username",
+            )
 
 
 @dataclass
@@ -1229,6 +1235,7 @@ class ConfigManager:
                         "port": 2101,
                         "mountpoint": "YOUR_MOUNT",
                         "password": "your_password",
+                        "username": "your_username",
                         "version": "2.0",
                     },
                 },

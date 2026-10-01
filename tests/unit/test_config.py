@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from pathlib import Path
 from typing import Any
 from unittest.mock import mock_open, patch
 
@@ -698,6 +699,15 @@ class TestConfigManager:
         assert len(data["destinations"]) == 2
         assert data["destinations"][0]["name"] == "surepath"
         assert data["destinations"][0]["type"] == "surepath"
+
+    def test_generated_default_config_loads(self, tmp_path: Path) -> None:
+        """The --generate-config output must pass validation as generated."""
+        path = tmp_path / "config.yaml"
+        path.write_text(ConfigManager.generate_default_config())
+
+        config = ConfigManager.load_config(str(path), apply_env_overrides=False)
+
+        assert [d.name for d in config.destinations] == ["surepath", "rtk2go"]
 
     @patch(
         "builtins.open",

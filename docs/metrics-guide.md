@@ -76,6 +76,7 @@ Driven directly by the active `InputSource` (replaces relying on the broadcast h
 | `sp_rtk_base_relay_input_messages_received_total` | Counter | Total RTCM messages parsed from the input source |
 | `sp_rtk_base_relay_input_reconnect_attempts_total` | Counter | Reconnect attempts against the input source |
 | `sp_rtk_base_relay_input_reconnect_successes_total` | Counter | Successful reconnects |
+| `sp_rtk_base_relay_input_connection_failures_total` | Counter | Failed input connections, labelled `reason`: `connect`, `caster`, `auth`, `mountpoint` or `data_timeout`. Inputs without typed errors (TCP, serial, Bluetooth) count as `connect`; every reason is exported from 0 |
 
 ### Broadcast-Hub Metrics (v2.1)
 

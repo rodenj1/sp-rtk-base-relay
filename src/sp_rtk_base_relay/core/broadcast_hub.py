@@ -20,7 +20,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from sp_rtk_base_relay.core.destinations.base_destination import BaseDestination
@@ -38,6 +38,7 @@ from sp_rtk_base_relay.core.events import (
 )
 from sp_rtk_base_relay.core.frame_subscription import Frame, FrameSubscription
 from sp_rtk_base_relay.core.input_sources.base_input import InputSource
+from sp_rtk_base_relay.exceptions import NtripConnectionError, NtripFailure
 from sp_rtk_base_relay.rtcm_decoder import RTCMMessageDecoder
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,10 @@ class BroadcastStats:
     last_data_time: float = 0.0
     started_at: float | None = None
     no_data_warnings: int = 0
+    # Why the input failed to connect: reason -> count (see _record_input_failure)
+    input_connection_failures: dict[str, int] = field(default_factory=dict[str, int])
+    # The input's last connection error, or None once it has (re)connected
+    input_last_error: str | None = None
 
 
 class BroadcastHub:
@@ -374,10 +379,17 @@ class BroadcastHub:
 
         # Connect input source
         if not self._input_source.is_connected:
-            if not self._input_source.connect():
+            try:
+                connected = self._input_source.connect()
+            except Exception as exc:
+                self._record_input_failure(exc)
+                raise
+            if not connected:
+                self._record_input_failure(None)
                 raise ConnectionError(
                     f"Failed to connect input source ({self._input_source.source_type})"
                 )
+        self.stats.input_last_error = None
         self._emit(
             INPUT_CONNECTED,
             "Input source connected",
@@ -502,6 +514,9 @@ class BroadcastHub:
                 data = self._input_source.read_data(timeout=1.0)
             except Exception as exc:
                 logger.error("Input read error: %s", exc)
+                if isinstance(exc, NtripConnectionError):
+                    # A typed failure after connecting, e.g. an NTRIP data timeout
+                    self._record_input_failure(exc)
                 try:
                     self._input_source.disconnect()
                 except Exception:
@@ -548,8 +563,14 @@ class BroadcastHub:
             )
 
             try:
-                if self._input_source.connect():
+                connected = self._input_source.connect()
+            except Exception as exc:
+                logger.warning("Input reconnect failed: %s", exc)
+                self._record_input_failure(exc)
+            else:
+                if connected:
                     self.stats.input_reconnect_successes += 1
+                    self.stats.input_last_error = None
                     self._emit(
                         INPUT_RECONNECTED,
                         "Input source reconnected",
@@ -558,8 +579,7 @@ class BroadcastHub:
                     )
                     logger.info("Input source reconnected")
                     return
-            except Exception as exc:
-                logger.warning("Input reconnect failed: %s", exc)
+                self._record_input_failure(None)
 
             # Backoff
             if self._input_source.last_failure_persistent:
@@ -568,6 +588,28 @@ class BroadcastHub:
             if self._reconnect_wait(delay):
                 return  # Stop requested
             delay = min(delay * policy.multiplier, policy.max_delay)
+
+    def _record_input_failure(self, error: Exception | None) -> None:
+        """Count a failed input connection by reason and keep its error text.
+
+        The reason is the typed :class:`NtripConnectionError` reason; inputs
+        without typed errors count as ``connect``. ``error`` is None when
+        connect() returned False without raising.
+        """
+        if isinstance(error, NtripConnectionError):
+            reason = error.reason.value
+        else:
+            reason = NtripFailure.CONNECT.value
+        failures = self.stats.input_connection_failures
+        failures[reason] = failures.get(reason, 0) + 1
+
+        if error is None:
+            error = self._input_source.last_error
+        self.stats.input_last_error = (
+            str(error)
+            if error is not None
+            else f"{self._input_source.source_type} input connection failed"
+        )
 
     # ------------------------------------------------------------------
     # Broadcast thread

@@ -601,14 +601,14 @@ class TestIncDelta:
 
         assert counter_child._value.get() == 0.0
 
-    def test_negative_delta_ignored(self) -> None:
-        """Negative delta (counter reset) is ignored."""
+    def test_a_reset_counts_the_whole_new_value(self) -> None:
+        """A total below the previous one is a reset (e.g. an engine restart)."""
         mc = MetricsCollector()
         counter_child = mc.dest_bytes_sent.labels(destination="test")
 
         _inc_delta(counter_child, current=50, previous=100)
 
-        assert counter_child._value.get() == 0.0
+        assert counter_child._value.get() == 50.0
 
 
 # ======================================================================

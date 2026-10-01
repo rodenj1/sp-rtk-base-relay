@@ -1,3 +1,101 @@
+## v4.0.0 (2026-10-01)
+
+### BREAKING CHANGE
+
+**An NTRIP destination using NTRIP v2 now needs a `username`.** v2 is the
+default, so this includes every NTRIP destination that doesn't set
+`version: "1.0"`, even one with no `version` at all. A missing, empty or
+whitespace-only `username` now fails validation when the config is
+loaded. NTRIP v2 casters authenticate a server with Basic auth, so such a
+destination could never have been accepted anyway. v1 destinations still
+use only the mountpoint `password`. Before upgrading, add a `username` to
+every NTRIP destination that isn't explicitly `version: "1.0"`. Embedding
+apps that build `NtripDestinationConfig` themselves (sp-rtk-base's Outputs
+page) must require one for v2.
+
+### API changes
+
+- `BroadcastHub`'s `INPUT_RECONNECT_BASE_DELAY`, `INPUT_RECONNECT_MAX_DELAY`
+  and `INPUT_RECONNECT_MULTIPLIER` constants are removed. Use
+  `DEFAULT_RECONNECT_POLICY` from `core.input_sources`.
+- `build_input_status(input_source, hub_stats=None)`: the reconnect counts
+  and `last_error` now come from the hub's stats. Called with the input
+  alone, it reports 0 reconnects and no last error. `build_relay_status()`
+  passes the hub's stats for you.
+- New in `sp_rtk_base_relay.exceptions`: `NtripConnectionError`, a subclass
+  of `NtripError` with `reason` (`NtripFailure`) and `connect_failure`
+  (`ConnectFailure`). The NTRIP destination now raises it.
+- New config API: `NtripInputConfig`, `InputConfig.get_ntrip_config()`, and
+  `"ntrip"` as an `InputConfig.source`.
+- New fields: `InputStatus.last_error` (default `None`), and
+  `BroadcastStats.input_connection_failures` / `input_last_error`.
+- `core.ntrip` is internal: it's shared by the NTRIP destination and input,
+  and may change without notice.
+
+- feat(input): add an NTRIP v1/v2 client input source
+The Relay can take its RTCM from an NTRIP caster's mountpoint, alongside
+TCP, serial and Bluetooth: `input: {source: ntrip, config: {...}}` in the
+service config, or `InputConfig(source="ntrip", ...)` for `RelayEngine`.
+It uses the NTRIP destination's field names: `caster`, `port` (2101),
+`mountpoint`, `username`/`password` (an empty username sends no
+credentials, for anonymous casters), `version` (`"1.0"` or `"2.0"`, default
+2.0, no auto mode), `tls` (v2 only, verified against the system CA store),
+`connection_timeout`, `data_timeout` (30 s) and `retry_*` (10 s → 120 s,
+×2). It always sends `Host` and parses replies tolerantly. It counts as
+connected once the caster accepts the request with a reply that isn't a
+sourcetable. Bytes after the headers are the start of the RTCM stream, and a
+chunked v2 body is decoded. A sourcetable, 401/403 or 404 is retried at the
+maximum delay instead of hammering the caster. No data for `data_timeout`
+drops the connection, and the Relay reconnects. `start()` fails if the first
+connect fails. See the README, `config.example.yaml` and
+`docs/relay-engine-api-spec.md` §2.1.
+- feat(ntrip)!: extract a shared NTRIP module and harden the destination handshake
+The NTRIP protocol handling moves into `core/ntrip/`, shared by the
+destination and the new input: socket setup with TCP keepalive and optional
+TLS (used only by the input; destinations have no TLS option), request building, a reply reader that keeps the bytes after the
+headers, a typed reply outcome, and `NtripConnectionError` with a reason
+(`connect`, `caster`, `auth`, `mountpoint`, `data_timeout`) and, for connect
+failures, a finer code (`dns`, `refused`, `timeout`, `tls_handshake`,
+`tls_certificate`, `other`). The destination's bytes on the wire are
+unchanged. Its handshake now:
+  - accepts the BKG reference caster's bare `OK`, as well as `ICY 200 OK`
+    and `HTTP/1.x 200` (R1)
+  - decides success by the parsed numeric status code, so a 400 that
+    mentions "200", or a sourcetable, is no longer taken for success (R4)
+  - requires a v2 username (R3, above)
+- fix(ntrip): wait 2 s before the destination's first reconnect after a send error
+The NTRIP destination reconnected on the very next Frame after a send
+error. Some casters hold the old session for a moment (2RTKNTRIP
+force-closes a same-IP reconnect within 1.5 s), so that retry failed and
+the backoff jumped to 10 s. It now waits 2 s, then follows its configured
+backoff (R2). A restarted destination still connects at once.
+- feat(hub): let an input source supply its own reconnect policy
+`InputSource.reconnect_policy` (a `ReconnectPolicy` of initial delay,
+maximum delay and multiplier) replaces the hub's hard-coded 2 s → 60 s,
+×2, which stays the default, so TCP, serial and Bluetooth don't change.
+An input that reports `last_failure_persistent` (e.g. a caster rejecting
+the credentials) waits the policy's maximum before the next attempt.
+`ReconnectPolicy` and `DEFAULT_RECONNECT_POLICY` are exported from
+`core.input_sources`.
+- feat(status): report the input's last error and connection failures by reason
+`RelayStatus.input.last_error` carries the input's last failed connection
+as text, or `None` once it has (re)connected. The new Prometheus counter
+`input_connection_failures_total{reason}` counts failed input connections
+by reason, for every input kind (`connect`, `caster`, `auth`,
+`mountpoint`, `data_timeout`). Inputs without typed errors count as
+`connect`, and every reason is exported from 0.
+- fix(status): count only reconnects in the input reconnect status and metrics
+`RelayStatus.input.reconnect_attempts` / `reconnect_successes` and the
+`input_reconnect_*_total` counters included the first connect at start,
+so an input that had never dropped showed one reconnect. They now count
+real reconnects only. `build_input_status()` takes the hub's stats as its
+second argument.
+- fix(metrics): keep counting after an engine restart
+A `RelayEngine` restarted with the same `MetricsCollector` creates a new
+hub, input and destinations whose stats start at 0. The collector ignored
+the fall and counted nothing until the new totals passed the old ones. A
+total that falls is now treated as a reset, as Prometheus does.
+
 ## v3.2.0 (2026-09-30)
 
 - feat(engine): add Frame subscriber API (ADR 0003)

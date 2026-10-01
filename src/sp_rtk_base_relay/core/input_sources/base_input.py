@@ -14,6 +14,25 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class ReconnectPolicy:
+    """How long the hub waits between attempts to reconnect an input source.
+
+    The first wait is ``initial_delay``; each further wait is multiplied by
+    ``multiplier``, up to ``max_delay``.
+    """
+
+    initial_delay: float
+    max_delay: float
+    multiplier: float
+
+
+# What TCP, serial and Bluetooth inputs use: 2 s, doubling, up to 60 s.
+DEFAULT_RECONNECT_POLICY = ReconnectPolicy(
+    initial_delay=2.0, max_delay=60.0, multiplier=2.0
+)
+
+
 @dataclass
 class InputSourceStats:
     """Input source statistics and metrics."""
@@ -58,6 +77,21 @@ class InputSource(ABC):
     def last_error(self) -> Exception | None:
         """Get the last error that occurred, if any."""
         return self._last_error
+
+    @property
+    def reconnect_policy(self) -> ReconnectPolicy:
+        """How the hub should space out reconnect attempts for this input."""
+        return DEFAULT_RECONNECT_POLICY
+
+    @property
+    def last_failure_persistent(self) -> bool:
+        """Whether the last connect failure won't fix itself soon.
+
+        For example a caster rejecting the credentials. The hub then waits the
+        policy's maximum delay before the next attempt, instead of retrying
+        quickly. Inputs that can't tell keep the default, ``False``.
+        """
+        return False
 
     @property
     def connection_statistics(self) -> InputSourceStats:

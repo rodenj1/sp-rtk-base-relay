@@ -19,6 +19,7 @@ import logging
 import queue
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -46,11 +47,6 @@ NO_DATA_WARNING_SECONDS = 30.0
 
 # Input queue size — small, just for thread coordination
 INPUT_QUEUE_SIZE = 10
-
-# Maximum time to wait for input reconnection before retrying
-INPUT_RECONNECT_BASE_DELAY = 2.0
-INPUT_RECONNECT_MAX_DELAY = 60.0
-INPUT_RECONNECT_MULTIPLIER = 2.0
 
 
 @dataclass
@@ -88,6 +84,7 @@ class BroadcastHub:
         destinations: list[BaseDestination] | None = None,
         input_queue_size: int = INPUT_QUEUE_SIZE,
         event_bus: EventBus | None = None,
+        reconnect_wait: Callable[[float], bool] | None = None,
     ) -> None:
         """Initialise the broadcast hub.
 
@@ -98,6 +95,9 @@ class BroadcastHub:
                 :meth:`add_destination`.
             input_queue_size: Internal queue between input and broadcast threads.
             event_bus: Optional event bus for lifecycle event emissions.
+            reconnect_wait: Waits between input reconnect attempts: called with a delay
+                in seconds, returns True if the hub is stopping. Defaults to
+                waiting on the hub's stop event (injectable for tests).
         """
         self._input_source = input_source
         self._destinations: list[BaseDestination] = list(destinations or [])
@@ -112,6 +112,7 @@ class BroadcastHub:
         # Threading
         self._running = False
         self._stop_event = threading.Event()
+        self._reconnect_wait = reconnect_wait or self._stop_event.wait
         self._input_thread: threading.Thread | None = None
         self._broadcast_thread: threading.Thread | None = None
 
@@ -524,8 +525,14 @@ class BroadcastHub:
         logger.debug("Input thread exited")
 
     def _reconnect_input(self) -> None:
-        """Attempt to reconnect the input source with exponential backoff."""
-        delay = INPUT_RECONNECT_BASE_DELAY
+        """Attempt to reconnect the input source with exponential backoff.
+
+        The waits follow the input's :attr:`InputSource.reconnect_policy`. After
+        a failure that the input reports as persistent, the wait jumps to the
+        policy's maximum and stays there until the input reconnects.
+        """
+        policy = self._input_source.reconnect_policy
+        delay = policy.initial_delay
 
         while self._running and not self._stop_event.is_set():
             self.stats.input_reconnect_attempts += 1
@@ -555,10 +562,12 @@ class BroadcastHub:
                 logger.warning("Input reconnect failed: %s", exc)
 
             # Backoff
+            if self._input_source.last_failure_persistent:
+                delay = policy.max_delay
             logger.info("Waiting %.1fs before next reconnect attempt", delay)
-            if self._stop_event.wait(timeout=delay):
+            if self._reconnect_wait(delay):
                 return  # Stop requested
-            delay = min(delay * INPUT_RECONNECT_MULTIPLIER, INPUT_RECONNECT_MAX_DELAY)
+            delay = min(delay * policy.multiplier, policy.max_delay)
 
     # ------------------------------------------------------------------
     # Broadcast thread

@@ -1,3 +1,25 @@
+## v4.1.0 (2026-10-06)
+
+- feat(bluetooth): add a shared RFCOMM link helper
+`open_rfcomm_link(manager, config)` in `sp_rtk_base_relay.core.rfcomm_link`
+is the one place the order-sensitive Bluetooth open and teardown live. It
+prepares the device through the `BluetoothManager` you hand it (pairing
+with the config's PIN when there's no Bond), then connects an
+`AF_BLUETOOTH`/`BTPROTO_RFCOMM` socket within `connect_timeout`. A socket
+reopened straight after a close can return `EBUSY`, so that error is
+retried every 0.25 s for up to 3 s (`busy_retry_for`,
+`busy_retry_interval`) before it gives up. A preparation failure raises
+`BluetoothError`; a connect failure raises the new `RfcommConnectError`,
+with the `OSError` as its cause, after disconnecting the device and closing
+the socket (the manager is left open for the caller to retry with). The
+returned `RfcommLink` holds the `manager`, `socket`, `mac` and `channel`,
+and `RfcommLink.close()` tears down in sp-rtk-base ADR 0002's order:
+`Device1.Disconnect`, then the socket, then `manager.close()`, each step
+attempted even when an earlier one fails. `BluetoothInputSource` now uses
+it, with no change in behaviour beyond the `EBUSY` retry.
+`AF_BLUETOOTH` and `BTPROTO_RFCOMM` are still importable from
+`core.input_sources.bluetooth_input`.
+
 ## v4.0.0 (2026-10-01)
 
 ### BREAKING CHANGE

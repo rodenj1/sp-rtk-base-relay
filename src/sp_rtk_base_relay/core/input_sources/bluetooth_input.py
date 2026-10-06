@@ -8,19 +8,26 @@ Uses native BlueZ D-Bus API via dbus-fast and native Python Bluetooth sockets.
 import logging
 import socket
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ...exceptions import InputSourceError
 from ..bluetooth_manager import BluetoothError, BluetoothManager
+from ..rfcomm_link import (
+    AF_BLUETOOTH,
+    BTPROTO_RFCOMM,
+    RfcommConnectError,
+    RfcommLink,
+    open_rfcomm_link,
+)
 from .base_input import InputSource
 
-# Bluetooth socket constants (Linux-only)
-if TYPE_CHECKING:
-    AF_BLUETOOTH: int = getattr(socket, "AF_BLUETOOTH", 31)
-    BTPROTO_RFCOMM: int = getattr(socket, "BTPROTO_RFCOMM", 3)
-else:
-    AF_BLUETOOTH = getattr(socket, "AF_BLUETOOTH", 31)
-    BTPROTO_RFCOMM = getattr(socket, "BTPROTO_RFCOMM", 3)
+# Re-exported: integrators import the socket constants from here.
+__all__ = [
+    "AF_BLUETOOTH",
+    "BTPROTO_RFCOMM",
+    "BluetoothConfig",
+    "BluetoothInputSource",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +78,7 @@ class BluetoothInputSource(InputSource):
         self.bt_socket: socket.socket | None = None
         self.connected_mac: str | None = None
         self.rfcomm_channel: int | None = None
+        self._link: RfcommLink | None = None
 
         # Validate configuration
         self._validate_config()
@@ -114,50 +122,25 @@ class BluetoothInputSource(InputSource):
                 except BluetoothError as e:
                     raise InputSourceError(f"Failed to initialize Bluetooth: {e}")
 
-            # Ensure device is ready (discover, pair, trust, connect via D-Bus).
+            # Prepare the device (discover, pair, trust) and connect the
+            # RFCOMM socket through the shared helper, which owns the
+            # connect timeout and the brief retry on EBUSY.
             # ``scan_timeout`` bounds how long we'll wait for BlueZ to
-            # populate ``org.bluez.Device1`` on the device path — the
-            # interface gets stripped ~30 s after RFCOMM close on
-            # ZED-F9P and a fixed 5 s scan in v2.1.2 was not enough
-            # for BlueZ's two-phase rediscovery to restore it.
+            # populate ``org.bluez.Device1`` on the device path.
             try:
-                mac, channel = self.bt_manager.ensure_device_ready(
-                    pin=self.config.pin,
-                    device_name=self.config.device_name,
-                    mac_address=self.config.mac_address,
-                    scan_timeout=self.config.scan_timeout,
-                )
-                self.connected_mac = mac
-                self.rfcomm_channel = channel
-                logger.info(f"Bluetooth device ready: {mac} on channel {channel}")
+                link = open_rfcomm_link(self.bt_manager, self.config)
             except BluetoothError as e:
                 raise InputSourceError(f"Failed to prepare Bluetooth device: {e}")
-
-            # Create native Bluetooth socket for data transfer
-            try:
-                logger.info(
-                    f"Creating native Bluetooth socket for {self.connected_mac}:{self.rfcomm_channel}"
-                )
-
-                # Create AF_BLUETOOTH socket
-                self.bt_socket = socket.socket(
-                    AF_BLUETOOTH,  # type: ignore[arg-type]
-                    socket.SOCK_STREAM,
-                    BTPROTO_RFCOMM,  # type: ignore[arg-type]
-                )
-                self.bt_socket.settimeout(self.config.connect_timeout)
-
-                # Connect to device
-                self.bt_socket.connect((self.connected_mac, self.rfcomm_channel))
-
-                # Set read timeout
-                self.bt_socket.settimeout(self.config.read_timeout)
-
-                logger.info("Bluetooth socket connected successfully")
-            except OSError as e:
+            except RfcommConnectError as e:
                 raise InputSourceError(f"Bluetooth socket connection failed: {e}")
-            except Exception as e:
-                raise InputSourceError(f"Unexpected socket error: {e}")
+
+            self._link = link
+            self.bt_socket = link.socket
+            self.connected_mac = link.mac
+            self.rfcomm_channel = link.channel
+            logger.info(
+                f"Bluetooth socket connected to {link.mac} on channel {link.channel}"
+            )
 
             self._update_connection_stats(True)
             return True
@@ -218,63 +201,27 @@ class BluetoothInputSource(InputSource):
     def disconnect(self) -> None:
         """Disconnect from Bluetooth device and cleanup resources.
 
-        Teardown ordering matters here.  We ask BlueZ to disconnect the
-        device **first** (via ``org.bluez.Device1.Disconnect``) and only
-        then close our local RFCOMM socket.  This way BlueZ owns the
-        teardown of the underlying ACL/RFCOMM channel state — if the
-        process is ``SIGKILL``-ed midway through ``disconnect()``, the
-        kernel will still tear down our local socket descriptor, but
-        BlueZ's view of the device will already be ``Connected=false``
-        and the next connect attempt won't have to fight a stale
-        half-paired state.
-
-        The previous order — close socket, then ask BlueZ to disconnect
-        — could leave BlueZ believing the device was still connected
-        after an unclean exit, which manifested as the next startup
-        either failing to bind the RFCOMM channel or having to scan +
-        re-pair to recover.
-
-        Finally we shut down the ``BluetoothManager``'s background event
-        loop so the next ``connect()`` gets a fresh manager with an empty
-        introspection cache.
-
-        All three steps are independently wrapped in ``try/except`` so
-        no single failure can short-circuit the rest of the cleanup.
+        The RFCOMM link helper tears down in sp-rtk-base ADR 0002's order:
+        ``Device1.Disconnect`` first, so BlueZ's view is already
+        ``Connected=false`` if the process dies part-way, then the socket,
+        then the ``BluetoothManager``, so the next ``connect()`` gets a fresh
+        manager. Each step is wrapped so no failure skips the rest.
         """
         logger.info("Disconnecting from Bluetooth device")
 
-        # Step 1 — ask BlueZ to disconnect the device FIRST so the
-        # canonical "Connected" state is updated before we tear down
-        # our local handle.
-        if self.bt_manager and self.connected_mac:
-            try:
-                self.bt_manager.disconnect_device(self.connected_mac)
-            except Exception as e:
-                logger.warning(f"Error disconnecting Bluetooth D-Bus: {e}")
-
-        # Step 2 — close our local RFCOMM socket.  By this point BlueZ
-        # has (best-effort) already torn down the underlying channel,
-        # so this is effectively releasing our local fd.
-        if self.bt_socket:
-            try:
-                self.bt_socket.close()
-            except Exception as e:
-                logger.warning(f"Error closing Bluetooth socket: {e}")
-            finally:
-                self.bt_socket = None
-
-        # Step 3 — release the BluetoothManager's background event loop
-        # and D-Bus connection.  The next connect() will create a fresh
-        # manager with an empty introspection cache, avoiding stale
-        # cache issues.
-        if self.bt_manager is not None:
+        if self._link is not None:
+            self._link.close()
+        elif self.bt_manager is not None:
+            # A manager with no open link (a connect that failed after the
+            # manager was built): only the manager is left to release.
             try:
                 self.bt_manager.close()
             except Exception as e:
                 logger.warning(f"Error closing BluetoothManager: {e}")
-            finally:
-                self.bt_manager = None
 
+        self._link = None
+        self.bt_socket = None
+        self.bt_manager = None
         self.connected_mac = None
         self.rfcomm_channel = None
         self._connected = False
@@ -327,20 +274,13 @@ class BluetoothInputSource(InputSource):
             )
 
     def _cleanup_on_error(self) -> None:
-        """Cleanup resources after connection error."""
-        if self.bt_socket:
-            try:
-                self.bt_socket.close()
-            except:
-                pass
-            self.bt_socket = None
+        """Reset link state after a failed connect.
 
-        if self.bt_manager and self.connected_mac:
-            try:
-                self.bt_manager.disconnect_device(self.connected_mac)
-            except:
-                pass
-
+        The RFCOMM helper has already disconnected the device and closed
+        any socket it opened. The manager is kept for the next attempt.
+        """
+        self._link = None
+        self.bt_socket = None
         self.connected_mac = None
         self.rfcomm_channel = None
 

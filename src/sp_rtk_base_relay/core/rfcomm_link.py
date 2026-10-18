@@ -28,6 +28,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .hci_link_info import READ_RSSI_TIMEOUT, HciSocketFactory, hci_socket, read_rssi
+
 if TYPE_CHECKING:
     from .bluetooth_manager import BluetoothManager
     from .input_sources.bluetooth_input import BluetoothConfig
@@ -76,6 +78,35 @@ class RfcommLink:
     socket: socket.socket
     mac: str
     channel: int
+
+    def read_rssi(
+        self,
+        adapter: int,
+        *,
+        timeout: float = READ_RSSI_TIMEOUT,
+        hci_socket_factory: HciSocketFactory = hci_socket,
+        monotonic: Callable[[], float] = time.monotonic,
+    ) -> int | None:
+        """Read the link's Bluetooth link strength. Never raises.
+
+        The adapter's HCI ``Read RSSI`` for this link, in relative dB (0 =
+        inside the controller's comfortable range, negative = dB below it),
+        or None when there's no reading. See :func:`hci_link_info.read_rssi`.
+
+        Args:
+            adapter: The index of the adapter the link runs over (0 for
+                ``hci0``).
+            timeout: The longest to wait for the adapter, in seconds.
+            hci_socket_factory: Opens a raw HCI socket bound to the adapter.
+            monotonic: The clock the timeout is measured on.
+        """
+        return read_rssi(
+            self.socket,
+            adapter,
+            timeout=timeout,
+            socket_factory=hci_socket_factory,
+            monotonic=monotonic,
+        )
 
     def close(self) -> None:
         """Tear the link down in sp-rtk-base ADR 0002's order. Never raises.

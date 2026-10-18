@@ -73,6 +73,13 @@ class InputSource(ABC):
         """Check if input source is connected and ready to read data."""
         return self._connected
 
+    def link_rssi(self) -> int | None:
+        """The Bluetooth link strength in relative dB, read now; None if none.
+
+        Only a Bluetooth input has a reading; every other input has None.
+        """
+        return None
+
     @property
     def last_error(self) -> Exception | None:
         """Get the last error that occurred, if any."""

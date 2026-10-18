@@ -102,6 +102,12 @@ class InputStatus:
         connected_since: Epoch timestamp of current connection, or None.
         last_error: The input's last connection error as text, or None once
             it has (re)connected.
+        link_rssi: Bluetooth link strength: the adapter's HCI ``Read RSSI``
+            for a Bluetooth input's link, read when the status was built.
+            Relative dB on a classic link (0 = inside the controller's
+            comfortable range, negative = that many dB below it), never
+            dBm. None when the input isn't Bluetooth, the link is down, or
+            the adapter gave no reading.
     """
 
     connected: bool
@@ -113,6 +119,7 @@ class InputStatus:
     reconnect_successes: int
     connected_since: float | None
     last_error: str | None = None
+    link_rssi: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +242,17 @@ def build_input_status(
         reconnect_successes=hub_stats.input_reconnect_successes if hub_stats else 0,
         connected_since=stats.connected_since,
         last_error=hub_stats.input_last_error if hub_stats else None,
+        link_rssi=_read_link_rssi(input_source),
     )
+
+
+def _read_link_rssi(input_source: InputSource) -> int | None:
+    """The input's link strength reading; never raises, whatever the source."""
+    try:
+        rssi = input_source.link_rssi()
+    except Exception:
+        return None
+    return rssi if isinstance(rssi, int) and not isinstance(rssi, bool) else None
 
 
 def build_relay_status(

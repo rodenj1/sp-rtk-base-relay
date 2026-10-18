@@ -7,17 +7,21 @@ Uses native BlueZ D-Bus API via dbus-fast and native Python Bluetooth sockets.
 
 import logging
 import socket
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from ...exceptions import InputSourceError
 from ..bluetooth_manager import BluetoothError, BluetoothManager
+from ..hci_link_info import HciSocketFactory, adapter_index, hci_socket
 from ..rfcomm_link import (
     AF_BLUETOOTH,
     BTPROTO_RFCOMM,
     RfcommConnectError,
     RfcommLink,
     open_rfcomm_link,
+    rfcomm_socket,
 )
 from .base_input import InputSource
 
@@ -63,11 +67,23 @@ class BluetoothInputSource(InputSource):
     Uses native BlueZ D-Bus API and AF_BLUETOOTH sockets - no rfcomm required.
     """
 
-    def __init__(self, config: BluetoothConfig):
+    def __init__(
+        self,
+        config: BluetoothConfig,
+        *,
+        rfcomm_socket_factory: Callable[[], socket.socket] = rfcomm_socket,
+        hci_socket_factory: HciSocketFactory = hci_socket,
+        monotonic: Callable[[], float] = time.monotonic,
+    ):
         """Initialize Bluetooth input source.
 
         Args:
             config: Bluetooth configuration
+            rfcomm_socket_factory: Creates the unconnected RFCOMM socket.
+            hci_socket_factory: Opens a raw HCI socket bound to an adapter,
+                for the link strength reading.
+            monotonic: The clock the link strength reading's timeout is
+                measured on.
 
         Raises:
             InputSourceError: If configuration is invalid
@@ -79,6 +95,9 @@ class BluetoothInputSource(InputSource):
         self.connected_mac: str | None = None
         self.rfcomm_channel: int | None = None
         self._link: RfcommLink | None = None
+        self._rfcomm_socket_factory = rfcomm_socket_factory
+        self._hci_socket_factory = hci_socket_factory
+        self._monotonic = monotonic
 
         # Validate configuration
         self._validate_config()
@@ -128,7 +147,11 @@ class BluetoothInputSource(InputSource):
             # ``scan_timeout`` bounds how long we'll wait for BlueZ to
             # populate ``org.bluez.Device1`` on the device path.
             try:
-                link = open_rfcomm_link(self.bt_manager, self.config)
+                link = open_rfcomm_link(
+                    self.bt_manager,
+                    self.config,
+                    socket_factory=self._rfcomm_socket_factory,
+                )
             except BluetoothError as e:
                 raise InputSourceError(f"Failed to prepare Bluetooth device: {e}")
             except RfcommConnectError as e:
@@ -227,6 +250,23 @@ class BluetoothInputSource(InputSource):
         self._connected = False
         self.stats.connected_since = None
         logger.info("Bluetooth device disconnected")
+
+    def link_rssi(self) -> int | None:
+        """Read the link's Bluetooth link strength now. Never raises.
+
+        The adapter's HCI ``Read RSSI`` for the connected link, in relative
+        dB, bounded by a short timeout. None when the link is down or the
+        adapter gives no reading.
+        """
+        link = self._link  # read once: disconnect() may clear it meanwhile
+        adapter = adapter_index(self.config.adapter_name)
+        if link is None or not self.is_connected or adapter is None:
+            return None
+        return link.read_rssi(
+            adapter,
+            hci_socket_factory=self._hci_socket_factory,
+            monotonic=self._monotonic,
+        )
 
     def get_connection_info(self) -> dict[str, Any]:
         """Get Bluetooth connection information.

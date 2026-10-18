@@ -102,7 +102,11 @@ class FakeHciSocket:
         self.wait_per_reply = 0.0
 
     def setsockopt(self, level: int, option: int, value: bytes) -> None:
-        pass
+        # Like the kernel (6.x copy_safe_from_sockptr): an HCI_FILTER shorter
+        # than struct hci_ufilter, 16 bytes with its tail padding, is EINVAL.
+        if (level, option) == (0, 2) and len(value) < 16:
+            raise OSError(errno.EINVAL, "Invalid argument")
+        self.filter = value
 
     def settimeout(self, value: float | None) -> None:
         if value is not None and value < 0:
@@ -200,6 +204,21 @@ class TestConnectedLink:
         status = build_input_status(connected_source(hci, clock))
 
         assert status.link_rssi == -4
+
+    def test_filters_the_hci_socket_to_the_read_rssi_reply(self):
+        clock = FakeClock()
+        hci = FakeHciSocketFactory(clock, [command_complete(0)])
+
+        build_input_status(connected_source(hci, clock))
+
+        # struct hci_ufilter: u32 type_mask, u32 event_mask[2], le16 opcode,
+        # then 2 bytes of tail padding, as the kernel and hcitool lay it out.
+        assert struct.unpack("<IIIH2x", hci.made[0].filter) == (
+            1 << 0x04,  # HCI event packets
+            (1 << 0x0E) | (1 << 0x0F),  # Command Complete, Command Status
+            0,
+            OP_READ_RSSI,
+        )
 
     def test_skips_packets_that_dont_answer_the_read(self):
         clock = FakeClock()

@@ -122,19 +122,19 @@ def adapter_index(adapter_name: str) -> int | None:
 
 def read_rssi(
     rfcomm_socket: socket.socket,
-    adapter: int,
+    adapter_index: int,
     *,
     timeout: float = READ_RSSI_TIMEOUT,
-    socket_factory: HciSocketFactory = hci_socket,
+    hci_socket_factory: HciSocketFactory = hci_socket,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> int | None:
     """Read the link's RSSI from the adapter. Never raises.
 
     Args:
         rfcomm_socket: The connected RFCOMM socket whose link to read.
-        adapter: The index of the adapter the link runs over.
+        adapter_index: The index of the adapter the link runs over.
         timeout: The longest to wait for the adapter's reply, in seconds.
-        socket_factory: Opens the raw HCI socket bound to the adapter.
+        hci_socket_factory: Opens the raw HCI socket bound to the adapter.
         monotonic: The clock the timeout is measured on.
 
     Returns:
@@ -146,7 +146,7 @@ def read_rssi(
         deadline = monotonic() + timeout
         conninfo = rfcomm_socket.getsockopt(SOL_RFCOMM, RFCOMM_CONNINFO, 6)
         handle: int = struct.unpack_from("<H", conninfo)[0]
-        sock = socket_factory(adapter)
+        sock = hci_socket_factory(adapter_index)
         try:
             return _ask_rssi(sock, handle, deadline, monotonic)
         finally:

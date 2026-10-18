@@ -354,7 +354,10 @@ class TestBindHci:
         def bind(self, address: object) -> None:
             self.bound = address
 
-    @pytest.mark.parametrize("version", [(3, 10, 14), (3, 11, 2), (3, 12, 9)])
+    @pytest.mark.parametrize(
+        "version",
+        [(3, 10, 14), (3, 11, 2), (3, 12, 9), (3, 13, 0), (3, 13, 1), (3, 13, 2)],
+    )
     def test_binds_a_zeroed_address_through_libc_without_the_fix(
         self, version: tuple[int, int, int]
     ):

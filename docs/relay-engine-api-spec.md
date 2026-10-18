@@ -645,7 +645,17 @@ class InputStatus:
     connected_since: float | None              # Epoch timestamp or None
     last_error: str | None = None              # Last failed connection's error as text; None once (re)connected
                                                # (a dropped connection that reconnects at once never sets it)
+    link_rssi: int | None = None               # Bluetooth link strength: the adapter's HCI Read RSSI for a
+                                               # Bluetooth input's link, read when the status is built (≤ 0.5 s,
+                                               # never raises). Relative dB, never dBm: 0 = inside the controller's
+                                               # comfortable range, negative = dB below it. None when the input
+                                               # isn't Bluetooth, the link is down, or the adapter gave no reading
+                                               # (127, an HCI error, any OSError, or no reply in time).
 ```
+
+Reading `link_rssi` needs no capability or group, but Bluetooth sockets are
+refused in a separate network namespace: never run the service with systemd's
+`PrivateNetwork=yes`.
 
 ### 5.3 DestinationStatus
 

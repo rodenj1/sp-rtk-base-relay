@@ -1,3 +1,12 @@
+## v4.2.1 (2026-10-18)
+
+- fix(bluetooth): send the full HCI filter so link strength reads on newer kernels
+4.2.0 packed the raw HCI socket's `HCI_FILTER` as 14 bytes, but the kernel's
+`struct hci_ufilter` is 16 with its tail padding. Newer kernels (seen on
+6.18, Raspberry Pi OS / Debian 13) refuse the short option with `EINVAL`, so
+`InputStatus.link_rssi` was always `None` there. The filter now carries the
+padding, as `hcitool` sends it.
+
 ## v4.2.0 (2026-10-18)
 
 - feat(bluetooth): report Bluetooth link strength in Input status

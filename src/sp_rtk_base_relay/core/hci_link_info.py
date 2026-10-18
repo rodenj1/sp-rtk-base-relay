@@ -161,9 +161,11 @@ def _ask_rssi(
     deadline: float,
     monotonic: Callable[[], float],
 ) -> int | None:
-    # struct hci_filter { u32 type_mask; u32 event_mask[2]; u16 opcode; }
+    # struct hci_ufilter { u32 type_mask; u32 event_mask[2]; le16 opcode; },
+    # 16 bytes with its tail padding. Newer kernels refuse a shorter option
+    # with EINVAL, so the padding must be sent too.
     event_mask = (1 << EVT_CMD_COMPLETE) | (1 << EVT_CMD_STATUS)
-    hci_filter = struct.pack("<IIIH", 1 << HCI_EVENT_PKT, event_mask, 0, OP_READ_RSSI)
+    hci_filter = struct.pack("<IIIH2x", 1 << HCI_EVENT_PKT, event_mask, 0, OP_READ_RSSI)
     sock.setsockopt(SOL_HCI, HCI_FILTER, hci_filter)
     sock.send(struct.pack("<BHBH", HCI_COMMAND_PKT, OP_READ_RSSI, 2, handle))
     while True:

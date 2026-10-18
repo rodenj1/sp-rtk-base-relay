@@ -201,6 +201,18 @@ class TestConnectedLink:
 
         assert status.link_rssi == -4
 
+    def test_skips_packets_that_dont_answer_the_read(self):
+        clock = FakeClock()
+        acl_data = b"\x02\x42\x00\x00\x00"
+        disconnection_complete = struct.pack(
+            "<BBBBHB", 0x04, 0x05, 4, 0, ACL_HANDLE, 0x13
+        )
+        hci = FakeHciSocketFactory(
+            clock, [acl_data, disconnection_complete, command_complete(-3)]
+        )
+
+        assert build_input_status(connected_source(hci, clock)).link_rssi == -3
+
     def test_reads_the_adapter_named_in_the_config(self):
         clock = FakeClock()
         hci = FakeHciSocketFactory(clock, [command_complete(0)])
@@ -274,6 +286,26 @@ class TestNoReading:
         assert status.link_rssi is None
         assert 0.4 <= clock.now <= 0.5
 
+    def test_unrelated_events_that_use_up_the_time_end_the_read(self):
+        clock = FakeClock()
+        other = struct.pack("<BBBBHB", 0x04, 0x0E, 4, 1, 0x0C14, 0)
+        hci = FakeHciSocketFactory(clock, [other] * 100)
+        hci.wait_per_reply = 0.25
+        source = connected_source(hci, clock)
+
+        status = build_input_status(source)
+
+        assert status.link_rssi is None
+        assert clock.now == 0.5
+
+    def test_a_truncated_reply_is_no_reading(self):
+        clock = FakeClock()
+        # Command Complete for Read RSSI, status 0, but no handle or reading
+        truncated = struct.pack("<BBBBHB", 0x04, 0x0E, 4, 1, OP_READ_RSSI, 0)
+        hci = FakeHciSocketFactory(clock, [truncated, command_complete(-3)])
+
+        assert build_input_status(connected_source(hci, clock)).link_rssi is None
+
     def test_a_link_torn_down_mid_read_is_no_reading(self):
         clock = FakeClock()
         rfcomm = FakeRfcommSocket()
@@ -321,6 +353,15 @@ class TestNoReading:
 
     def test_a_non_bluetooth_input_has_no_reading(self):
         source = TCPInputSource(TCPConfig(host="127.0.0.1", port=2101))
+
+        assert build_input_status(source).link_rssi is None
+
+    def test_an_input_whose_reading_raises_still_builds_a_status(self):
+        class BrokenReading(TCPInputSource):
+            def link_rssi(self) -> int | None:
+                raise RuntimeError("adapter exploded")
+
+        source = BrokenReading(TCPConfig(host="127.0.0.1", port=2101))
 
         assert build_input_status(source).link_rssi is None
 

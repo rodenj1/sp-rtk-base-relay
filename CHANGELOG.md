@@ -1,3 +1,19 @@
+## v4.2.0 (2026-10-18)
+
+- feat(bluetooth): report Bluetooth link strength in Input status
+`InputStatus.link_rssi` is the Bluetooth link strength of a Bluetooth
+input's link: the adapter's HCI `Read RSSI` for the connected classic link,
+read each time the status is built. It is relative dB, never dBm: 0 =
+inside the controller's comfortable range, negative = that many dB below
+it. The read is bounded at 0.5 s and never raises. It is `None` when the
+input isn't Bluetooth, the link is down, or the adapter gives no reading
+(127, an HCI error status, any `OSError`, or no reply in time). It defaults
+to `None`, so code that builds an `InputStatus` without it keeps working.
+Reading it needs no capability or group, but Bluetooth sockets are refused
+in a separate network namespace: never run the service with systemd's
+`PrivateNetwork=yes`. `BluetoothInputSource.link_rssi()` and
+`RfcommLink.read_rssi(adapter_index)` take the same reading directly.
+
 ## v4.1.0 (2026-10-06)
 
 - feat(bluetooth): add a shared RFCOMM link helper

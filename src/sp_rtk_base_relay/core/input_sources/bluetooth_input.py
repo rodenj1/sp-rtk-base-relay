@@ -57,6 +57,9 @@ class BluetoothConfig:
     scan_timeout: int = 30
     read_timeout: float = 1.0  # Socket read timeout
     connect_timeout: float = 10.0  # Connection timeout
+    # No bytes for this long drops the link so the hub reconnects it: an
+    # RFCOMM socket can stay open while the device stops sending (issue #75).
+    data_timeout: float = 60.0
 
 
 class BluetoothInputSource(InputSource):
@@ -98,6 +101,7 @@ class BluetoothInputSource(InputSource):
         self._rfcomm_socket_factory = rfcomm_socket_factory
         self._hci_socket_factory = hci_socket_factory
         self._monotonic = monotonic
+        self._last_bytes_at = 0.0
 
         # Validate configuration
         self._validate_config()
@@ -165,6 +169,7 @@ class BluetoothInputSource(InputSource):
                 f"Bluetooth socket connected to {link.mac} on channel {link.channel}"
             )
 
+            self._last_bytes_at = self._monotonic()
             self._update_connection_stats(True)
             return True
 
@@ -197,6 +202,7 @@ class BluetoothInputSource(InputSource):
             data = self.bt_socket.recv(8192)
 
             if data:
+                self._last_bytes_at = self._monotonic()
                 self._update_read_stats(data)
                 logger.debug(f"Read {len(data)} bytes from Bluetooth")
                 return data
@@ -207,8 +213,11 @@ class BluetoothInputSource(InputSource):
                 return None
 
         except TimeoutError:
-            # Timeout is normal - no data available
+            # A short gap is normal; a long one means the link is open but dead
             self._update_read_stats(None)
+            quiet_for = self._monotonic() - self._last_bytes_at
+            if quiet_for >= self.config.data_timeout:
+                self._drop_silent_link(quiet_for)
             return None
         except OSError as e:
             error = InputSourceError(f"Bluetooth read error: {e}")
@@ -220,6 +229,16 @@ class BluetoothInputSource(InputSource):
             self._update_read_stats(None, error)
             self._set_error_state(error)
             return None
+
+    def _drop_silent_link(self, quiet_for: float) -> None:
+        """Tear down a link that has sent nothing for ``data_timeout``.
+
+        The hub sees the input disconnected and reconnects it as usual.
+        """
+        message = f"Bluetooth input: no data for {quiet_for:.0f}s, forcing reconnect"
+        logger.warning(message)
+        self.disconnect()
+        self._last_error = InputSourceError(message)
 
     def disconnect(self) -> None:
         """Disconnect from Bluetooth device and cleanup resources.
@@ -312,6 +331,9 @@ class BluetoothInputSource(InputSource):
             raise InputSourceError(
                 f"Invalid connect timeout: {self.config.connect_timeout}"
             )
+
+        if self.config.data_timeout <= 0:
+            raise InputSourceError(f"Invalid data timeout: {self.config.data_timeout}")
 
     def _cleanup_on_error(self) -> None:
         """Reset link state after a failed connect.

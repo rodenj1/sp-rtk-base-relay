@@ -24,6 +24,7 @@ input:
     # Connection timeouts
     read_timeout: 1.0      # Socket read timeout
     connect_timeout: 10.0  # Connection timeout
+    data_timeout: 60.0     # No bytes for this long forces a reconnect
 
 # RTCM server configuration
 rtcm_server:

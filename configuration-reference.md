@@ -119,9 +119,18 @@ input:
 input:
   source: "bluetooth"
   config:
-    device_address: "AA:BB:CC:DD:EE:FF"
-    channel: 1
+    mac_address: "AA:BB:CC:DD:EE:FF"  # Or device_name: "RTK_GPS_BASE" to discover by name
+    pin: "0000"             # PIN for pairing
+    adapter_name: "hci0"    # Bluetooth adapter
+    scan_timeout: 30        # Device discovery timeout in seconds (>0)
+    read_timeout: 1.0       # Socket read timeout in seconds (>0)
+    connect_timeout: 10.0   # Connection timeout in seconds (>0)
+    data_timeout: 60.0      # Seconds without bytes before the link is dropped and reconnected (>0)
 ```
+
+`data_timeout` covers a link that stays open while the device stops sending.
+When it fires, the relay logs `Bluetooth input: no data for <N>s, forcing reconnect`
+at WARNING and reconnects with the input's usual backoff.
 
 ---
 

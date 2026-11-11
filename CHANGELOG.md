@@ -1,3 +1,16 @@
+## v4.2.2 (2026-11-11)
+
+- fix(bluetooth): reconnect a Bluetooth input that stays open but goes silent
+An RFCOMM link can stay up while the device stops sending. `recv()` then
+only ever timed out, which `read_data()` treated as "no data yet", so the
+input never reported itself down and the hub never reconnected it (#75).
+`BluetoothConfig.data_timeout` (default 60 s, must be > 0) bounds that
+silence: the clock starts at connect and resets on every chunk, and a read
+timeout past the limit logs `Bluetooth input: no data for <N>s, forcing
+reconnect` at WARNING, disconnects through the normal teardown and records
+the reason as the input's last error, so the hub reconnects with its usual
+backoff.
+
 ## v4.2.1 (2026-10-18)
 
 - fix(bluetooth): send the full HCI filter so link strength reads on newer kernels

@@ -134,7 +134,7 @@ class BluetoothInputSource(InputSource):
                 try:
                     # The relay is the process that should hold BlueZ's
                     # default pairing agent on its own machine, so a
-                    # caller-less pairing (see CONTEXT.md) still reaches
+                    # caller-less pairing (see GLOSSARY.md) still reaches
                     # someone who knows the PIN -- unlike a throwaway
                     # BluetoothManager an integrator (e.g. sp-rtk-base)
                     # might construct for a UI scan.

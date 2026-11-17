@@ -93,7 +93,7 @@ try:
                     # on this manager, so this request could only have
                     # reached us as BlueZ's default agent answering for a
                     # pairing this process did not initiate -- see
-                    # "Caller-less pairing" in CONTEXT.md. Distinct from a
+                    # "Caller-less pairing" in GLOSSARY.md. Distinct from a
                     # wrong PIN: named explicitly so an operator reading
                     # the logs doesn't mistake it for one.
                     raise DBusError(
@@ -206,7 +206,7 @@ class BluetoothManager:
             claim_default_agent: Whether to issue ``RequestDefaultAgent``
                 after registering this manager's pairing agent, making it
                 BlueZ's system-wide default -- the agent that answers a
-                caller-less pairing (see CONTEXT.md). Defaults to
+                caller-less pairing (see GLOSSARY.md). Defaults to
                 ``False``: registering an agent already makes it the
                 default when nobody else holds one (BlueZ >= 5.51), so
                 the common single-manager case is unaffected; this flag
@@ -802,7 +802,7 @@ class BluetoothManager:
                 triggers security elevation on a device that isn't yet
                 bonded -- BlueZ routes that PIN request to the default
                 agent, since it wasn't raised by a local ``Pair()`` call
-                (a "caller-less pairing"; see CONTEXT.md). Recorded only
+                (a "caller-less pairing"; see GLOSSARY.md). Recorded only
                 for the duration of this call and never retained. Honoured
                 only when this manager was constructed with
                 ``claim_default_agent=True`` -- a caller-less PIN request

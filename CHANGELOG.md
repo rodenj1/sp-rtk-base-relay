@@ -1,3 +1,18 @@
+## v4.2.3 (2026-11-18)
+
+- fix(hub): keep the input reconnect backoff until the input delivers data
+A reconnect that succeeded ended the backoff, so an input whose peer
+accepts and then closes at once (a TCP server whose upstream is down, a
+caster that accepts and drops) was reconnected with no wait: thousands of
+times a second, each logging and emitting `input.disconnected`,
+`input.reconnecting` and `input.reconnected` (rtk_development#218). The
+hub now keeps the backoff across reconnects until the input delivers data.
+A connection that drops before any data waits the policy's next step
+before reconnecting, as a failed attempt would; the first data resets it,
+so a healthy link's next drop still reconnects at once. A quiet read
+neither resets nor grows it, the persistent-failure wait is unchanged, and
+every input type gets it.
+
 ## v4.2.2 (2026-11-11)
 
 - fix(bluetooth): reconnect a Bluetooth input that stays open but goes silent

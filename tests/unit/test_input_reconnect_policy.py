@@ -161,3 +161,100 @@ def test_stopping_during_a_wait_counts_no_further_attempt() -> None:
     assert stop_at_first_wait.delays == [2.0]
     assert hub.stats.input_reconnect_attempts == source.connect_calls == 1
     assert hub.stats.input_reconnect_successes == 0
+
+
+# --- A connection that drops before delivering data (rtk_development#218) ---
+#
+# A peer that accepts and closes at once makes every connect() succeed. The
+# backoff must keep growing until the input delivers data, or the hub
+# reconnects thousands of times a second.
+
+
+class ScriptedInput(FakeInput):
+    """An input whose connect() always succeeds and whose reads follow a script.
+
+    Each read takes the next step: ``"data"`` returns bytes, ``"quiet"`` returns
+    None (a read timeout on a healthy link), ``"drop"`` disconnects (the peer
+    closed) and returns None. When the script runs out, the hub is stopped.
+    """
+
+    def __init__(self, script: list[str]) -> None:
+        super().__init__(fail_times=0)
+        self.script = list(script)
+        self.hub: BroadcastHub | None = None
+        self._connected = True  # connected when the hub's input thread starts
+
+    def read_data(self, timeout: float | None = None) -> bytes | None:
+        if not self.script:
+            assert self.hub is not None
+            self.hub._running = False  # pyright: ignore[reportPrivateUsage]
+            return None
+        step = self.script.pop(0)
+        if step == "data":
+            return b"\xd3\x00\x00"
+        if step == "drop":
+            self._connected = False
+        return None
+
+
+def _run_input_thread(script: list[str], wait: WaitRecorder) -> BroadcastHub:
+    source = ScriptedInput(script)
+    hub = BroadcastHub(source, [], reconnect_wait=wait)
+    source.hub = hub
+    hub._running = True  # pyright: ignore[reportPrivateUsage]  # as after start()
+    hub._input_thread_worker()  # pyright: ignore[reportPrivateUsage]
+    return hub
+
+
+def test_a_connection_that_drops_before_any_data_keeps_the_backoff_growing(
+    wait: WaitRecorder,
+) -> None:
+    hub = _run_input_thread(["drop"] * 8, wait)
+
+    # The first drop reconnects at once; each reconnect that delivers nothing
+    # makes the next one wait the policy's next step.
+    assert wait.delays == [2.0, 4.0, 8.0, 16.0, 32.0, 60.0, 60.0]
+    assert hub.stats.input_reconnect_attempts == 8
+    assert hub.stats.input_reconnect_successes == 8
+
+
+def test_data_after_a_reconnect_resets_the_backoff(wait: WaitRecorder) -> None:
+    _run_input_thread(["drop", "drop", "data", "drop", "drop"], wait)
+
+    # 2 s before the second reconnect; after data, the next drop reconnects
+    # at once and the one after waits the initial delay again.
+    assert wait.delays == [2.0, 2.0]
+
+
+def test_a_quiet_read_neither_resets_nor_grows_the_backoff(
+    wait: WaitRecorder,
+) -> None:
+    _run_input_thread(["drop", "drop", "quiet", "quiet", "drop"], wait)
+
+    assert wait.delays == [2.0, 4.0]
+
+
+class StopHubWait(WaitRecorder):
+    """A wait during which the hub is stopped, as ``stop()`` does: it sets the
+    stop event, and the wait returns True."""
+
+    hub: BroadcastHub | None = None
+
+    def __call__(self, timeout: float) -> bool:
+        super().__call__(timeout)
+        assert self.hub is not None
+        self.hub._stop_event.set()  # pyright: ignore[reportPrivateUsage]
+        return True
+
+
+def test_stopping_during_a_carried_over_wait_counts_no_further_attempt() -> None:
+    stop_at_first_wait = StopHubWait()
+    source = ScriptedInput(["drop", "drop", "drop"])
+    hub = BroadcastHub(source, [], reconnect_wait=stop_at_first_wait)
+    source.hub = stop_at_first_wait.hub = hub
+    hub._running = True  # pyright: ignore[reportPrivateUsage]  # as after start()
+
+    hub._input_thread_worker()  # pyright: ignore[reportPrivateUsage]
+
+    assert stop_at_first_wait.delays == [2.0]
+    assert hub.stats.input_reconnect_attempts == 1

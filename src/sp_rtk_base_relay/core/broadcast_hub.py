@@ -118,6 +118,11 @@ class BroadcastHub:
         self._running = False
         self._stop_event = threading.Event()
         self._reconnect_wait = reconnect_wait or self._stop_event.wait
+        # The wait before the next input reconnect attempt; None: try at once.
+        # A reconnect that succeeds carries it forward, and only data from the
+        # input clears it, so a peer that accepts and closes at once can't
+        # make the hub spin (rtk_development#218).
+        self._reconnect_delay: float | None = None
         self._input_thread: threading.Thread | None = None
         self._broadcast_thread: threading.Thread | None = None
 
@@ -404,6 +409,7 @@ class BroadcastHub:
         # Reset state
         self._running = True
         self._stop_event.clear()
+        self._reconnect_delay = None
         self.stats.started_at = time.time()
         with self._frame_buffer_lock:
             self._frame_buffer = b""
@@ -526,6 +532,8 @@ class BroadcastHub:
             if data is None:
                 # No data available within timeout — loop back
                 continue
+            # The input delivers: its next drop reconnects at once.
+            self._reconnect_delay = None
 
             # Push into internal queue (non-blocking to avoid stalling
             # the input source if broadcast is slow)
@@ -545,11 +553,24 @@ class BroadcastHub:
         The waits follow the input's :attr:`InputSource.reconnect_policy`. After
         a failure that the input reports as persistent, the wait jumps to the
         policy's maximum and stays there until the input reconnects.
+
+        A reconnect that succeeds keeps the backoff: until the input delivers
+        data, its next drop waits the policy's next step before reconnecting,
+        as if this attempt had failed.
         """
         policy = self._input_source.reconnect_policy
-        delay = policy.initial_delay
 
+        def next_delay(delay: float | None) -> float:
+            if delay is None:
+                return policy.initial_delay
+            return min(delay * policy.multiplier, policy.max_delay)
+
+        delay = self._reconnect_delay
         while self._running and not self._stop_event.is_set():
+            if delay is not None:
+                logger.info("Waiting %.1fs before next reconnect attempt", delay)
+                if self._reconnect_wait(delay):
+                    return  # Stop requested
             self.stats.input_reconnect_attempts += 1
             logger.info(
                 "Attempting input reconnect (#%d)…",
@@ -578,16 +599,15 @@ class BroadcastHub:
                         attempt=self.stats.input_reconnect_attempts,
                     )
                     logger.info("Input source reconnected")
+                    self._reconnect_delay = next_delay(delay)
                     return
                 self._record_input_failure(None)
 
             # Backoff
             if self._input_source.last_failure_persistent:
                 delay = policy.max_delay
-            logger.info("Waiting %.1fs before next reconnect attempt", delay)
-            if self._reconnect_wait(delay):
-                return  # Stop requested
-            delay = min(delay * policy.multiplier, policy.max_delay)
+            else:
+                delay = next_delay(delay)
 
     def _record_input_failure(self, error: Exception | None) -> None:
         """Count a failed input connection by reason and keep its error text.

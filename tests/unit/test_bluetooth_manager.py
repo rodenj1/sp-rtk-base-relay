@@ -18,6 +18,7 @@ from src.sp_rtk_base_relay.core.bluetooth_manager import (
     _AGENT_OBJECT_PATH,
     BluetoothError,
     BluetoothManager,
+    DiscoveredDevice,
 )
 from tests.fixtures.mock_bluetooth import (
     MockBlueZ,
@@ -1514,3 +1515,103 @@ class TestPairingIsBounded:
             manager.pair_device(self.MAC, pin="1234")
 
         assert manager._pending_pins == {}
+
+
+class TestGetModuleName:
+    """``get_module_name()``: the advertised name BlueZ holds for a MAC."""
+
+    def test_returns_the_name_bluez_holds_for_the_mac(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("00:1A:7D:DA:71:13", "RTK_GPS_BASE")
+        mock_bus.add_device("00:11:22:33:44:55", "Other Module")
+        manager = _build_manager(mock_bus)
+
+        assert manager.get_module_name("00:1A:7D:DA:71:13") == "RTK_GPS_BASE"
+
+    def test_returns_none_for_a_device_bluez_does_not_know(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("00:11:22:33:44:55", "Other Module")
+        manager = _build_manager(mock_bus)
+
+        assert manager.get_module_name("00:1A:7D:DA:71:13") is None
+
+    def test_returns_none_for_a_device_with_no_name(self):
+        """BlueZ omits ``Name`` until it has heard the device's name."""
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("00:1A:7D:DA:71:13", name=None)
+        manager = _build_manager(mock_bus)
+
+        assert manager.get_module_name("00:1A:7D:DA:71:13") is None
+
+    def test_returns_none_for_an_empty_name(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("00:1A:7D:DA:71:13", name="")
+        manager = _build_manager(mock_bus)
+
+        assert manager.get_module_name("00:1A:7D:DA:71:13") is None
+
+    def test_matches_the_mac_case_insensitively(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("00:1A:7D:DA:71:13", "RTK_GPS_BASE")
+        manager = _build_manager(mock_bus)
+
+        assert manager.get_module_name("00:1a:7d:da:71:13") == "RTK_GPS_BASE"
+
+
+class TestDiscoverDevices:
+    """``discover_devices()``: scan, then list what BlueZ knows."""
+
+    def test_lists_each_device_with_name_mac_and_paired(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("00:1A:7D:DA:71:13", "RTK_GPS_BASE", paired=True)
+        mock_bus.add_device("00:11:22:33:44:55", name=None)
+        manager = _build_manager(mock_bus)
+
+        with patch("asyncio.sleep"):
+            devices = manager.discover_devices(scan_seconds=1)
+
+        assert sorted(devices, key=lambda d: d.mac_address) == [
+            DiscoveredDevice(mac_address="00:11:22:33:44:55", name=None, paired=False),
+            DiscoveredDevice(
+                mac_address="00:1A:7D:DA:71:13", name="RTK_GPS_BASE", paired=True
+            ),
+        ]
+
+    def test_scans_for_the_requested_duration(self):
+        mock_bus = create_mock_message_bus()
+        manager = _build_manager(mock_bus)
+
+        with patch("asyncio.sleep") as sleep:
+            manager.discover_devices(scan_seconds=45)
+
+        sleep.assert_called_once_with(45)
+
+    def test_lists_known_devices_when_discovery_cannot_start(self):
+        """BlueZ refuses StartDiscovery while another client is scanning."""
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("00:1A:7D:DA:71:13", "RTK_GPS_BASE", paired=True)
+        manager = _build_manager(mock_bus)
+        manager._adapter.set_should_fail("start_discovery")
+
+        with patch("asyncio.sleep") as sleep:
+            devices = manager.discover_devices(scan_seconds=20)
+
+        sleep.assert_not_called()
+        assert devices == [
+            DiscoveredDevice(
+                mac_address="00:1A:7D:DA:71:13", name="RTK_GPS_BASE", paired=True
+            )
+        ]
+
+    def test_omits_devices_on_another_adapter(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("00:1A:7D:DA:71:13", "RTK_GPS_BASE")
+        mock_bus.add_device(
+            "00:11:22:33:44:55", "Elsewhere", adapter_path="/org/bluez/hci1"
+        )
+        manager = _build_manager(mock_bus)
+
+        with patch("asyncio.sleep"):
+            devices = manager.discover_devices(scan_seconds=1)
+
+        assert [d.mac_address for d in devices] == ["00:1A:7D:DA:71:13"]

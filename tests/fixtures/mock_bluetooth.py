@@ -666,15 +666,16 @@ class MockMessageBus:
         """Get all managed objects for ObjectManager."""
         objects: dict[str, dict[str, Any]] = {}
         for device_path, device_data in self._devices.items():
-            objects[device_path] = {
-                "org.bluez.Device1": {
-                    "Address": device_data.get("Address", ""),
-                    "Name": device_data.get("Name", "Unknown"),
-                    "Paired": device_data.get("Paired", False),
-                    "Trusted": device_data.get("Trusted", False),
-                    "Connected": device_data.get("Connected", False),
-                }
+            props: dict[str, Any] = {
+                "Address": device_data.get("Address", ""),
+                "Paired": device_data.get("Paired", False),
+                "Trusted": device_data.get("Trusted", False),
+                "Connected": device_data.get("Connected", False),
             }
+            # BlueZ omits Name until it has heard the device's name.
+            if "Name" in device_data:
+                props["Name"] = device_data["Name"]
+            objects[device_path] = {"org.bluez.Device1": props}
         return objects
 
     def set_device_fault(
@@ -706,7 +707,7 @@ class MockMessageBus:
     def add_device(
         self,
         mac_address: str,
-        name: str = "Test Device",
+        name: str | None = "Test Device",
         adapter_path: str = "/org/bluez/hci0",
         paired: bool = False,
         trusted: bool = False,
@@ -716,6 +717,9 @@ class MockMessageBus:
         """Add a mock device to the bus.
 
         Args:
+            name: The device's advertised name, or ``None`` for a device
+                BlueZ holds no name for (``Name`` is then absent, as
+                BlueZ leaves it).
             requires_pin: If set, marks this device as needing legacy PIN
                 pairing -- ``call_pair`` will simulate BlueZ asking the
                 registered default agent for the PIN and only succeed if
@@ -725,13 +729,14 @@ class MockMessageBus:
         device_path = device_path_for(mac_address, adapter_path)
         self._devices[device_path] = {
             "Address": mac_address,
-            "Name": name,
             "Paired": paired,
             "Trusted": trusted,
             "Connected": connected,
             "_device_path": device_path,
             "_device_faults": self._device_faults,
         }
+        if name is not None:
+            self._devices[device_path]["Name"] = name
         if requires_pin is not None:
             self._devices[device_path]["_requires_pin"] = requires_pin
 

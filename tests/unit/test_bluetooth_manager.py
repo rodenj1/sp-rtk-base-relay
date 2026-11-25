@@ -8,7 +8,7 @@ Updated for dbus-fast migration.
 
 import logging
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from dbus_fast import DBusError as RealDBusError
@@ -1615,3 +1615,36 @@ class TestDiscoverDevices:
             devices = manager.discover_devices(scan_seconds=1)
 
         assert [d.mac_address for d in devices] == ["00:1A:7D:DA:71:13"]
+
+    def test_lists_devices_when_discovery_cannot_be_stopped(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("00:1A:7D:DA:71:13", "RTK_GPS_BASE")
+        manager = _build_manager(mock_bus)
+        manager._adapter.call_stop_discovery = AsyncMock(
+            side_effect=Exception("Not discovering")
+        )
+
+        with patch("asyncio.sleep"):
+            devices = manager.discover_devices(scan_seconds=1)
+
+        assert [d.mac_address for d in devices] == ["00:1A:7D:DA:71:13"]
+
+    def test_skips_a_device_without_an_address(self):
+        mock_bus = create_mock_message_bus()
+        mock_bus.add_device("00:1A:7D:DA:71:13", "RTK_GPS_BASE")
+        mock_bus.add_device("00:11:22:33:44:55", "No Address")
+        mock_bus.get_device_data("00:11:22:33:44:55")["Address"] = ""
+        manager = _build_manager(mock_bus)
+
+        with patch("asyncio.sleep"):
+            devices = manager.discover_devices(scan_seconds=1)
+
+        assert [d.mac_address for d in devices] == ["00:1A:7D:DA:71:13"]
+
+    def test_raises_when_the_bus_is_gone(self):
+        mock_bus = create_mock_message_bus()
+        manager = _build_manager(mock_bus)
+        manager._bus = None
+
+        with pytest.raises(BluetoothError, match="Bus not initialized"):
+            manager.get_module_name("00:1A:7D:DA:71:13")

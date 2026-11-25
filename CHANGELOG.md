@@ -1,3 +1,14 @@
+## v4.3.0 (2026-11-25)
+
+- feat(bluetooth): read a device's Module name and list devices for a scan
+`BluetoothManager` gains two public, read-only queries, so callers no
+longer reach into its private D-Bus helpers (rtk_development#224).
+`get_module_name(mac)` returns the name BlueZ holds for a device
+(`Device1.Name`), or `None` when BlueZ has no device or no name for it.
+`discover_devices(scan_seconds)` runs adapter discovery, then lists the
+devices under this manager's adapter as `DiscoveredDevice` (MAC, Module
+name, paired). A refused StartDiscovery still lists the known devices.
+
 ## v4.2.3 (2026-11-18)
 
 - fix(hub): keep the input reconnect backoff until the input delivers data

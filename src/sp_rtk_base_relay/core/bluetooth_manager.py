@@ -12,6 +12,7 @@ import asyncio
 import logging
 import threading
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any, cast
 
 if TYPE_CHECKING:
@@ -173,6 +174,22 @@ class BluetoothError(Exception):
     """Bluetooth-specific errors."""
 
     pass
+
+
+@dataclass(frozen=True)
+class DiscoveredDevice:
+    """A Bluetooth device BlueZ knows about, as a scan lists it.
+
+    Attributes:
+        mac_address: The device's address, as BlueZ reports it.
+        name: The Module name (advertised name), or ``None`` when BlueZ
+            holds none.
+        paired: Whether BlueZ reports the device as paired.
+    """
+
+    mac_address: str
+    name: str | None
+    paired: bool
 
 
 class BluetoothManager:
@@ -634,6 +651,112 @@ class BluetoothManager:
             return True
         except Exception:
             return False
+
+    def get_module_name(self, mac_address: str) -> str | None:
+        """Read the Module name BlueZ holds for a device.
+
+        The Module name is the device's advertised name as BlueZ last
+        heard it (``org.bluez.Device1.Name``). It is display-only: never
+        use it to look a device up, since two modules can advertise the
+        same name. ``Alias`` is deliberately not read -- BlueZ fills it
+        with a MAC-derived string when no name is known, and it can carry
+        a locally set name the module never advertised.
+
+        Read-only: starts no scan and changes nothing in BlueZ.
+
+        Args:
+            mac_address: Device MAC address (e.g., "00:11:22:33:44:55");
+                case-insensitive.
+
+        Returns:
+            The Module name, or ``None`` when BlueZ has no device for the
+            MAC on this manager's adapter, or holds no name for it.
+
+        Raises:
+            BluetoothError: If BlueZ's device list cannot be read.
+        """
+        wanted = mac_address.upper()
+        for device in self._run_async(self._async_list_devices()):
+            if device.mac_address.upper() == wanted:
+                return device.name
+        return None
+
+    def discover_devices(self, scan_seconds: float) -> list[DiscoveredDevice]:
+        """Scan for nearby devices, then list every device BlueZ knows.
+
+        Runs adapter discovery for ``scan_seconds`` so advertising
+        devices register with BlueZ, then lists the devices under this
+        manager's adapter: newly discovered ones and already paired or
+        cached ones alike. A failure to start discovery (BlueZ refuses
+        while another client is already scanning) is not an error: the
+        wait is skipped and the devices BlueZ already knows are listed.
+
+        Args:
+            scan_seconds: How long to scan. Slow-advertising devices may
+                need 30-60 s.
+
+        Returns:
+            One :class:`DiscoveredDevice` per device, in BlueZ's order.
+
+        Raises:
+            BluetoothError: If BlueZ's device list cannot be read.
+        """
+        return self._run_async(
+            self._async_discover_devices(scan_seconds),
+            timeout=max(scan_seconds + 30, _DEFAULT_ASYNC_TIMEOUT),
+        )
+
+    async def _async_discover_devices(
+        self, scan_seconds: float
+    ) -> list[DiscoveredDevice]:
+        """Async implementation of discover_devices."""
+        if self._adapter is not None:
+            try:
+                await self._adapter.call_start_discovery()  # type: ignore[attr-defined]
+                await asyncio.sleep(scan_seconds)
+            except Exception as exc:
+                logger.debug("Could not start discovery: %s", exc)
+            try:
+                await self._adapter.call_stop_discovery()  # type: ignore[attr-defined]
+            except Exception:
+                pass
+        return await self._async_list_devices()
+
+    async def _async_list_devices(self) -> list[DiscoveredDevice]:
+        """List the ``org.bluez.Device1`` objects under this adapter.
+
+        One ``GetManagedObjects`` call: covers paired, cached and
+        recently discovered devices, without the per-device introspection
+        cache (whose entries go stale when BlueZ re-creates a device).
+        """
+        if self._bus is None:
+            raise BluetoothError("Bus not initialized")
+
+        root_intro = await self._get_introspection("/")
+        manager_proxy = self._bus.get_proxy_object("org.bluez", "/", root_intro)
+        manager = manager_proxy.get_interface("org.freedesktop.DBus.ObjectManager")
+        raw_objects: Any = await manager.call_get_managed_objects()  # type: ignore[attr-defined]
+        objects = cast(dict[str, dict[str, dict[str, Any]]], raw_objects)
+
+        prefix = f"{self.adapter_path}/"
+        devices: list[DiscoveredDevice] = []
+        for path, interfaces in objects.items():
+            props = interfaces.get("org.bluez.Device1")
+            if props is None or not path.startswith(prefix):
+                continue
+            address = self._unwrap_variant(props.get("Address"))
+            if not isinstance(address, str) or not address:
+                continue
+            name = self._unwrap_variant(props.get("Name"))
+            paired = self._unwrap_variant(props.get("Paired", False))
+            devices.append(
+                DiscoveredDevice(
+                    mac_address=address,
+                    name=name if isinstance(name, str) and name else None,
+                    paired=paired is True,
+                )
+            )
+        return devices
 
     def pair_device(self, mac_address: str, pin: str = "0000") -> bool:
         """Create a bond with a Bluetooth device, if one does not exist.

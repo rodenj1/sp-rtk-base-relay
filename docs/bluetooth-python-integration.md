@@ -17,6 +17,11 @@ SP-Base-Relay now supports **native Python Bluetooth** via the BlueZ D-Bus API. 
 - D-Bus API wrapper for BlueZ
 - Handles device discovery, pairing, trusting, connection
 - RFCOMM channel discovery
+- Read-only queries: `discover_devices(scan_seconds)` scans and lists the
+  devices BlueZ knows (`DiscoveredDevice`: MAC, Module name, paired), and
+  `get_module_name(mac)` reads one device's Module name (`None` when BlueZ
+  has no device or no name for it). The Module name is display-only; look
+  devices up by MAC.
 - **Coverage: 92%** (24 unit tests)
 
 #### 2. BluetoothInputSource (`bluetooth_input.py`)
@@ -228,8 +233,9 @@ These packages are needed to build PyGObject from source. PyGObject provides the
 ```python
 from src.sp_rtk_base_relay.core.bluetooth_manager import BluetoothManager
 manager = BluetoothManager()
-devices = manager.discover_devices(timeout=10)
-print(devices)
+for device in manager.discover_devices(scan_seconds=10):
+    print(device.mac_address, device.name or "Unnamed module", device.paired)
+print(manager.get_module_name("AA:BB:CC:DD:EE:FF"))  # None if unknown or unnamed
 ```
 
 ### Check Available Input Types

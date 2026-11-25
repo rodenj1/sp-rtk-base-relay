@@ -27,3 +27,7 @@ _Avoid_: packet, message chunk, chunk (a chunk is whatever the input read return
 **Frame subscriber**:
 An in-process consumer that receives a copy of every Frame the Relay reads from its input, before any destination filtering. It never affects relaying, and it is not a destination: nothing is delivered to it on the operator's behalf, it is not configured, and it does not appear in the destination list.
 _Avoid_: tap, listener, destination, sink
+
+**Module name**:
+The name a Bluetooth device advertises, as BlueZ last heard it (`org.bluez.Device1.Name`). Display-only: the Relay always finds a device by its MAC, because two modules can advertise the same name. Absent until BlueZ has heard it. Not `Alias`, which BlueZ fills with a MAC-derived string when no name is known.
+_Avoid_: friendly name, device name, alias
